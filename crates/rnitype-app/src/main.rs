@@ -481,8 +481,13 @@ fn build_session(config: &Value) -> Session {
     let enabled = enabled_languages(config);
     let (px, py) = primary_monitor_center();
 
-    // pivot และ pointer เริ่มที่กลางจอหลัก (RS click ใน Mouse/Nav = กลับมาที่นี่)
-    Session::with_homes(engine, make_injector(), enabled, (px, py), (px, py))
+    // pivot/pointer home = กลางจอหลัก (RS click ใน Mouse/Nav = กลับมาที่นี่)
+    let mut session = Session::with_homes(engine, make_injector(), enabled, (px, py), (px, py));
+    // HUD เริ่มที่ตำแหน่ง pointer จริง ไม่ใช่กลางจอ (กันจุด pointer เพี้ยนทั้ง session)
+    if let Some(position) = rnitype_win::cursor_position() {
+        session.set_pointer(position);
+    }
+    session
 }
 
 /// ภาษาที่เปิดใน config (`languages[].enabled`) — ว่าง = EN/TH

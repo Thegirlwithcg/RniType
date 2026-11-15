@@ -14,7 +14,15 @@ pub mod plan;
 mod sendinput;
 
 #[cfg(windows)]
-pub use sendinput::SendInputInjector;
+pub use sendinput::{SendInputInjector, cursor_position};
+
+/// ตำแหน่ง pointer ปัจจุบัน (พิกัดหน้าจอ) — ใช้ตั้งจุดเริ่มของ HUD ในโหมด Mouse
+///
+/// ฝั่ง Windows อยู่ที่ [`sendinput`]; ที่อื่นไม่มี pointer ของระบบ → `None`
+#[cfg(not(windows))]
+pub fn cursor_position() -> Option<(f32, f32)> {
+    None
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InjectError(pub String);

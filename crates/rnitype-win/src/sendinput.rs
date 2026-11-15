@@ -15,8 +15,10 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
     MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
 };
+use windows_sys::Win32::Foundation::POINT;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+    GetCursorPos, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+    SM_YVIRTUALSCREEN,
 };
 
 use crate::plan::{self, HeldState, Input, ScreenRect};
@@ -41,6 +43,14 @@ impl ScreenRect {
             height,
         }
     }
+}
+
+/// ตำแหน่ง pointer ปัจจุบันของ Windows (พิกัดหน้าจอ/physical px)
+pub fn cursor_position() -> Option<(f32, f32)> {
+    let mut point = POINT { x: 0, y: 0 };
+    // SAFETY: GetCursorPos เขียนลง struct ที่เราถืออยู่เท่านั้น
+    let ok = unsafe { GetCursorPos(&mut point) };
+    (ok != 0).then_some((point.x as f32, point.y as f32))
 }
 
 /// injector จริงบน Windows

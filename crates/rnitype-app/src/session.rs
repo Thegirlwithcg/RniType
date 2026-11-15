@@ -92,6 +92,11 @@ impl Session {
         self.sent
     }
 
+    /// ตั้งตำแหน่ง pointer ที่ HUD ใช้ (ตอนเริ่มแอป = ตำแหน่งจริงของ OS)
+    pub fn set_pointer(&mut self, pointer: (f32, f32)) {
+        self.pointer = pointer;
+    }
+
     /// 1 เฟรมของ engine — คืน action ที่ "ส่งออกจริง" (สำหรับ log/ทดสอบ)
     pub fn step(&mut self, pad: &PadState, dt_ms: u32) -> Vec<Action> {
         let mut out = Vec::new();
