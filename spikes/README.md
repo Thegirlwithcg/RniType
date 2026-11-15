@@ -58,66 +58,65 @@ cargo run --release --manifest-path spikes/sendinput/Cargo.toml
 
 ## บันทึกผล
 
-| Gate | วันที่ | ผล | หมายเหตุ |
+| Gate | วันที่ | ผล | หลักฐาน / หมายเหตุ |
 | --- | --- | --- | --- |
-| A — จอย | 2026-11-15 | 🟡 เห็น `Xbox 360 Controller for Windows` แต่ axes/buttons = 0 ทั้งหมด | ต้องขยับ LS/RS + กดปุ่มระหว่าง 20 วิ; ยังไม่ได้ทดสอบ DualSense |
-| B — overlay | 2026-11-15 | ❌ ใส ✅ · ย้ายจอ ✅ · click-through ❌ · focus ❌ | แก้ harness เป็น target window + log แล้ว รอรอบ 2 |
-| C — SendInput | 2026-11-15 | 🟡 ส่งออกได้ 18 units แต่ไปลง PowerShell (ไม่ได้โฟกัส Notepad) | เปลี่ยนเป็นกด F8 หลังคลิก Notepad แล้ว รอรอบ 2 |
+| **A — จอย** | 2026-11-15 | 🟡 **ยังไม่ผ่าน** | เห็น `Xbox 360 Controller for Windows` แต่ axes/buttons = 0 ทั้งหมด · ยังไม่ได้ทดสอบ DualSense |
+| **B — overlay** | 2026-11-15 | ❌ **ไม่ผ่าน** | ใส ✅ · ย้ายจอ ✅ · click-through ❌ · focus ❌ |
+| **C — SendInput** | 2026-11-15 | ✅ **ผ่าน** | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูกทุกตัว |
 
+**สรุป P0: 1/3 ผ่าน (C)** → ยังไม่เปิด P2–P5 ตามแผน
 
+### หลักฐาน C — พิมพ์ไทยลง Notepad
 
-ผลของ A
+![[spikes/attachments/Pasted image 20261115-101154.png]]
 
-\--- สรุป (20.001585 s) ---
+### ผลดิบ A (รอบแรก)
 
-\[0\] Xbox 360 Controller for Windows
-
+```text
+--- สรุป (20.001535 s) ---
+[0] Xbox 360 Controller for Windows
   LSx  range +0.00 .. +0.00
-
   LSy  range +0.00 .. +0.00
-
   RSx  range +0.00 .. +0.00
-
   RSy  range +0.00 .. +0.00
-
   LZ   range +0.00 .. +0.00
-
   RZ   range +0.00 .. +0.00
-
-  idle\_peak=0.000 (deadzone 0.15 OK)  max\_magnitude=0.00
-
+  idle_peak=0.000 (deadzone 0.15 OK)  max_magnitude=0.00
   buttons: -
-
   sectors: -
-
   expected buttons: A/South, B/East, X/West, Y/North, LB, RB, LT, RT, LS, RS, D-Up, D-Down, D-Left, D-Right, View, Menu
+```
 
-OK: probe รันจบ — ส่ง log นี้ให้ agent เพื่อปิด spike A
+**ตีความ A:** gilrs เห็นจอย (ชั้น WGI ทำงาน) แต่ไม่ได้รับ input เลย
+ยัง **ไม่ใช่** ข้อสรุปว่า gilrs ใช้ไม่ได้ — ต้องรันใหม่แล้วขยับ LS/RS + กดปุ่มจริง
+ถ้ายังเป็น 0: ปิด Steam Input/DS4Windows → ต่อ USB → ลอง DualSense
 
+### ผลดิบ B
 
+1. พื้นหลังใส ✅
+2. click-through ❌
+3. ไม่เป็น foreground ❌
+4. ย้ายจอได้ ✅
 
-ผลของ B  
-1.พื้นหลังใส  
-2.คลิ๊กทะลุ ไม่ได้ พิมพ์ Note pad ไม่ได้  
-3\. Notepad ไม่เป็น Foreground   
-4.ย้ายจอได้
+**ตีความ B:** transparency + multi-monitor ผ่าน; ที่เหลือคือ click-through/focus ซึ่งเป็นเกณฑ์ตัดสิน Tauri
+→ รัน `run.ps1` แล้วกด “ทดสอบคลิกทะลุ 10 วิ” + คลิกปุ่มใน **target window** แล้วดูว่า PASS หรือไม่
+ถ้ายัง fail → ตามแผนถอยไป **egui** หรือทำ click-through ด้วย Win32 เอง แล้วเขียน ADR
 
+## ขั้นถัดไป
 
+1. **A — รันใหม่** แล้วขยับ LS/RS 8 ทิศ + กดปุ่มให้ครบ; ต้องเห็น `OK: ได้รับ input แล้ว`
+   ```powershell
+   cargo run -p rnitype-probe -- --seconds 20 --raw
+   ```
+2. **B — รัน target harness** แล้วเก็บ log
+   ```powershell
+   powershell -File spikes/overlay/run.ps1
+   ```
+   ต้องเห็น `PASS — ได้รับคลิก` และ `target click: ... match=true`
+3. **C — ปิดได้ ✅**
 
-C.ข้อความ: "กขคง Hello ไทย 123" (18 UTF-16 units)
+## เกณฑ์เปิด P2–P5
 
-สลับไป Notepad แล้วคลิกวาง cursor — เริ่มใน 3 วินาที...
-
-  3...
-
-  2...
-
-  1...
-
-ส่งแล้ว 18 units — ตรวจ Notepad:
-
-  ผ่าน = ข้อความตรงทุกตัว
-
-  ไม่ผ่าน = จดสิ่งที่ได้ + เวอร์ชัน Windows/Notepad ไว้ใน HANDOFF
-
-PS D:\\Erin's Works\\Programming\\RniType> กขคง Hello ไทย 123
+- [ ] A ผ่าน: Xbox + DualSense, input ครบ 16 ปุ่ม + แกน 8 ทิศ
+- [ ] B ผ่าน: click-through ได้ + target เป็น foreground
+- [x] C ผ่าน: SendInput ไทยลง Notepad ถูกต้อง

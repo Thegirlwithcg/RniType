@@ -65,9 +65,9 @@ tags: [plan, execution, parallel, agents]
 | contracts (HUD/config/IPC) | `node tools/contracts/validate.mjs` → **10/10** | ✅ P1 |
 | workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
 | state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
-| probe จอย (Spike A) | `crates/rnitype-probe` มีโค้ด | 🟡 ยังไม่รันกับจอยจริง |
-| Spike B (Tauri overlay) | `spikes/overlay` · รันได้ โปร่งใส + เห็น 2 จอ | 🟡 รอทดสอบ click-through/ไม่แย่ง focus/DPI |
-| Spike C (SendInput ไทย) | `spikes/sendinput` · build ผ่าน | 🟡 ยังไม่รันจริง |
+| probe จอย (Spike A) | เห็น Xbox 360 Controller แต่ axes/buttons = 0 | 🟡 ยังไม่ผ่าน (รอทดสอบซ้ำ + DualSense) |
+| Spike B (Tauri overlay) | ใส ✅ · ย้ายจอ ✅ · click-through ❌ · focus ❌ | ❌ ไม่ผ่าน (รอ target harness) |
+| Spike C (SendInput ไทย) | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูก | ✅ ผ่าน 2026-11-15 |
 | injector / mouse / app shell | — | ❌ |
 | HUD overlay จริง | มีแต่ HTML mockup | ❌ |
 | Settings window + config | — | ❌ |
@@ -314,7 +314,7 @@ P1 Contracts + workspace  ←── owner เคาะ Q1/Q2/Q5
 ## 9. 5 อย่างที่ต้องทำก่อนเปิด subagent
 
 1. ✅ **Commit baseline** — commit `00a6668` (`.nznote/`, `.opencode/`, `target/` ถูก ignore)
-2. ⏳ **Owner รัน A/B/C** — โค้ดพร้อมที่ `spikes/` (A มีแล้ว, B/C compile ผ่าน) → กรอกตารางใน `spikes/README.md`
+2. ⏳ **Owner รัน A/B** — C ผ่านแล้ว; A ต้องขยับจอยจริง + ทดสอบ DualSense, B ต้องผ่าน target harness → กรอก `spikes/README.md`
 3. ✅ **P1 contracts** — `project menager/Design/03-engineering/contracts/` + `tools/contracts/validate.mjs`
 4. ✅ **แยก workspace** — core / win / app / probe + `ui/hud` / `ui/shared` + `NullInjector`
 5. ⏳ **แตก brief 4 track** พร้อมไฟล์ที่ถือ + เกณฑ์ผ่าน + คำสั่งตรวจ แล้วค่อย spawn
