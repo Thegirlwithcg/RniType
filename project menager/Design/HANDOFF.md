@@ -16,7 +16,7 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0 ผ่าน 3/3 · P1 ปิด · P2 slice 1 merged (วงคำสั่ง/วงภาษา/mode, 39 tests) — ยังไม่มีแอปจริง** |
+| สถานะ | **P0 ผ่าน 3/3 · P1 ปิด · P2 slice 1–2 merged (wheels/mode/shift/face buttons, 50 tests) — ยังไม่มีแอปจริง** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, fallback `sdl3`) + `SendInput` |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
 | งานถัดไป | Owner รัน spike A/B/C → เปิด P2–P5 ขนาน (4 track) |

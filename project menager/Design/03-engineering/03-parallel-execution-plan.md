@@ -1,6 +1,6 @@
 ---
 title: แผนทำงานหลังม็อกอัป — M0–M5 และ P0–P6
-status: active v0.5 — P0/P1 ปิด · P2 slice 1 merged
+status: active v0.6 — P0/P1 ปิด · P2 slice 1–2 merged
 updated: 2026-11-15
 tags: [plan, execution, parallel, agents]
 ---
@@ -61,7 +61,7 @@ tags: [plan, execution, parallel, agents]
 | --- | --- | --- |
 | เอกสารออกแบบ + ADR 14 ฉบับ | `Design/` | ✅ |
 | ม็อกอัป HUD v0.11 | `node tools/tests/hud-smoke.mjs` → **54/54** | ✅ |
-| core + win crate | `cargo test --workspace` → **40 passed** (core 39 + win 1) | ✅ P2 slice 1 |
+| core + win crate | `cargo test --workspace` → **51 passed** (core 50 + win 1) | ✅ P2 slice 2 |
 | contracts (HUD/config/IPC) | `node tools/contracts/validate.mjs` → **10/10** | ✅ P1 |
 | workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
 | state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
@@ -126,8 +126,9 @@ tags: [plan, execution, parallel, agents]
 
 ### P2 — Core behaviors (Track A) · 5–7 วัน · ขนานได้
 
-> **slice 1 ✅ merged `ce7d027`** — วงคำสั่ง · วงภาษา · mode arbiter · emergency (39 core tests)
-> เหลือ: repeat, layer 2, shift toggle, quickbar, caret nav, mouse math, Nav pivot, face buttons
+> **slice 1 ✅ `ce7d027`** — วงคำสั่ง · วงภาษา · mode arbiter · emergency
+> **slice 2 ✅ `2084e26`** — Shift toggle (LT) · ปุ่มหน้า A/B/X/Y แตะ · B ยกเลิก gesture (50 core tests)
+> เหลือ: double-tap/hold face buttons, repeat, layer 2, quickbar, caret nav, mouse math, Nav pivot
 
 | งาน | เกณฑ์ผ่าน |
 | --- | --- |
