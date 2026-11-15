@@ -52,6 +52,8 @@ struct Options {
     settings: bool,
     /// ใช้จอยปลอม (สคริปต์) แทนจอยจริง — ตรวจ runtime โดยไม่ต้องมีจอย
     fake_pad: bool,
+    /// log ค่าจอยทุก 250 ms (ใช้หาสาเหตุว่าจอยส่งค่าอะไรเข้ามา)
+    pad_log: bool,
 }
 
 impl Default for Options {
@@ -61,6 +63,7 @@ impl Default for Options {
             seconds: None,
             settings: false,
             fake_pad: false,
+            pad_log: false,
         }
     }
 }
@@ -103,8 +106,8 @@ fn main() {
     let options = parse_options();
     println!("[app] rnitype-app — RniType overlay (P4 slice 2)");
     println!(
-        "[app] options: demo={} seconds={:?} settings={} fake_pad={}",
-        options.demo, options.seconds, options.settings, options.fake_pad
+        "[app] options: demo={} seconds={:?} settings={} fake_pad={} pad_log={}",
+        options.demo, options.seconds, options.settings, options.fake_pad, options.pad_log
     );
 
     let demo_states = load_demo_states();
@@ -145,6 +148,7 @@ fn parse_options() -> Options {
             "--demo" => options.demo = true,
             "--settings" => options.settings = true,
             "--fake-pad" => options.fake_pad = true,
+            "--pad-log" => options.pad_log = true,
             "--seconds" => {
                 if let Some(value) = args.next() {
                     match value.parse::<u64>() {
@@ -163,7 +167,9 @@ fn parse_options() -> Options {
                 }
             }
             "--help" | "-h" => {
-                println!("[app] usage: rnitype-app [--demo] [--fake-pad] [--settings] [--seconds N]");
+                println!(
+                    "[app] usage: rnitype-app [--demo] [--fake-pad] [--pad-log] [--settings] [--seconds N]"
+                );
             }
             other => eprintln!("[app] ไม่รู้จักตัวเลือก: {other:?}"),
         }
@@ -361,7 +367,7 @@ fn setup_overlay(
         }
     } else {
         // ---- runtime จริง: จอย → core → injector → hud:state ----
-        spawn_runtime(app.handle(), options.fake_pad, (vx, vy));
+        spawn_runtime(app.handle(), options, (vx, vy));
     }
 
     // ---- ปิดแอปอัตโนมัติ ----
@@ -383,8 +389,10 @@ fn setup_overlay(
    ============================================================ */
 
 /// เริ่ม thread ที่อ่านจอย 250 Hz และส่ง `hud:state` ≤ 60 Hz (เฉพาะเมื่อเปลี่ยน)
-fn spawn_runtime(app: &tauri::AppHandle, fake_pad: bool, origin: (i32, i32)) {
+fn spawn_runtime(app: &tauri::AppHandle, options: &Options, origin: (i32, i32)) {
     let handle = app.clone();
+    let fake_pad = options.fake_pad;
+    let pad_log = options.pad_log;
     std::thread::spawn(move || {
         let source: Box<dyn PadSource> = if fake_pad {
             println!("[pad] ใช้จอยปลอม (--fake-pad) — ⚠ จะพิมพ์ลงหน้าต่างที่ focus อยู่ตอนนี้");
@@ -414,7 +422,7 @@ fn spawn_runtime(app: &tauri::AppHandle, fake_pad: bool, origin: (i32, i32)) {
             session.engine().languages().len()
         );
 
-        run_loop(&handle, source, &mut session, origin);
+        run_loop(&handle, source, &mut session, origin, pad_log);
     });
 }
 
@@ -483,10 +491,13 @@ fn run_loop(
     mut source: Box<dyn PadSource>,
     session: &mut Session,
     origin: (i32, i32),
+    pad_log: bool,
 ) {
     let start = Instant::now();
     let mut last_ms = 0u64;
     let mut last_emit_ms = 0u64;
+    let mut last_heartbeat_ms = 0u64;
+    let mut last_pad_log_ms = 0u64;
     let mut last_json = String::new();
     let mut had_pad = false;
     let mut was_paused = false;
@@ -526,11 +537,40 @@ fn run_loop(
             last_emit_ms = 0; // บังคับ emit รอบถัดไป
         }
 
+        // ไม่มีจอย = บอกทุก 5 วิ (ให้รู้ว่าโปรเซสยังมีชีวิต ไม่ใช่ค้าง)
+        if !has_pad && now.saturating_sub(last_heartbeat_ms) >= 5000 {
+            last_heartbeat_ms = now;
+            println!("[pad] ยังไม่พบจอย — กดปุ่มที่จอยเพื่อปลุก (หรือรัน rnitype-probe ดูค่าดิบ)");
+        }
+
         let pad = if paused {
             PadState::default()
         } else {
             sample.unwrap_or_default()
         };
+
+        // --pad-log: ค่าดิบที่เข้ามา + สถานะ engine (ใช้หาว่าปุ่ม/แกนถูกอ่านหรือไม่)
+        if pad_log && now.saturating_sub(last_pad_log_ms) >= 250 {
+            last_pad_log_ms = now;
+            let buttons: Vec<&str> = pad.buttons.names().collect();
+            let names = if buttons.is_empty() {
+                "-".to_string()
+            } else {
+                buttons.join(",")
+            };
+            println!(
+                "[pad-log] LS=({:+.2},{:+.2}) RS=({:+.2},{:+.2}) [{}] mode={:?} state={:?} lang={:?} sent={}",
+                pad.ls.x,
+                pad.ls.y,
+                pad.rs.x,
+                pad.rs.y,
+                names,
+                session.engine().mode(),
+                session.engine().gesture_state(),
+                session.engine().lang(),
+                session.sent()
+            );
+        }
 
         for action in session.step(&pad, dt) {
             log_action(&action);

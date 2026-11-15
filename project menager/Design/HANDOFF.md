@@ -244,6 +244,8 @@ crates\rnitype-app\run.ps1 --demo --settings --seconds 30
 - **เทอร์มินัลเป็น cp874** → log/ข้อความไทยใน console อาจเป็น `???` (ไม่ใช่บั๊ก) · ไฟล์ยังเป็น UTF-8
 - **PowerShell กิน `--` ตัวแรกเอง** → `run.ps1` เติม `--` ให้ cargo แล้ว ใช้ `run.ps1 --seconds 30` ได้เลย
   (แบบเดิม `run.ps1 -- --seconds 30` ก็ยังใช้ได้)
+- `ERROR ... Chrome_WidgetWin_0 ... Error = 1412` ตอนปิดแอป = WebView2 ถอน window class ไม่ทัน (ไม่มีผล) — ละไว้ได้
+- เวลาหาสาเหตุเรื่องจอย: `run.ps1 --pad-log --seconds 60` จะ log `[pad-log] LS/RS/buttons/mode/state` ทุก 250 ms
 - **Chrome headless**: `C:\Users\User\AppData\Local\ms-playwright\chromium-1208\chrome-win64\chrome.exe`
   (ตั้ง `CHROME_PATH` ถ้าย้าย) · เครื่องนี้มี 2 จอ virtual desktop = 3840×1080 เริ่มที่ x = -1920
 
