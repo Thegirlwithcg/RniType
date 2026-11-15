@@ -1,0 +1,11 @@
+[package]
+name = "rnitype-probe"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Spike A: ตรวจว่าจอย (Xbox / DualSense) ส่งแกนและปุ่มครบตามที่ core ต้องการ"
+
+[dependencies]
+gilrs = "0.11"
+rnitype-core = { path = "../rnitype-core" }

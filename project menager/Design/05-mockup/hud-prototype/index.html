@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RniType — HUD Interactive Mockup (Ticket 01 · v0.11)</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body data-mode="type-en" data-layer="1">
+
+<main class="scene" id="scene">
+  <div class="glow glow--a" aria-hidden="true"></div>
+  <div class="glow glow--b" aria-hidden="true"></div>
+
+  <article class="window" aria-label="หน้าต่างตัวอย่าง (จำลอง)">
+    <header class="window__bar">
+      <span class="dot dot--r"></span><span class="dot dot--y"></span><span class="dot dot--g"></span>
+      <span class="window__title">spike-c-sendinput.md</span>
+      <span class="window__meta">RniType · Notepad</span>
+    </header>
+    <div class="window__body">
+      <div class="doc" id="doc"></div>
+    </div>
+  </article>
+
+  <button class="gear" id="btnSettings" type="button" aria-label="Settings">
+    <span class="gear__icon">&#9881;</span>
+  </button>
+
+  <div class="settings" id="settings" hidden aria-label="RniType Settings">
+    <header class="settings__bar">
+      <span class="dot dot--r"></span><span class="dot dot--y"></span><span class="dot dot--g"></span>
+      <span class="settings__title">RniType Settings</span>
+      <span class="settings__sub">English UI &middot; v0.11</span>
+      <button class="settings__x" id="btnSettingsClose" type="button" aria-label="Close">&times;</button>
+    </header>
+
+    <nav class="settings__tabs" id="settingsTabs">
+      <button type="button" data-tab="general" class="is-on">General</button>
+      <button type="button" data-tab="languages">Languages</button>
+      <button type="button" data-tab="keymap">Keymap</button>
+      <button type="button" data-tab="hud">HUD</button>
+    </nav>
+
+    <div class="settings__body">
+      <section class="settings__pane" data-panel="general">
+        <div class="field">
+          <span class="field__label">Mode</span>
+          <div class="segmented" id="segMode">
+            <button type="button" data-mode="type-th">Thai</button>
+            <button type="button" data-mode="type-en" class="is-on">English</button>
+            <button type="button" data-mode="mouse">Mouse</button>
+            <button type="button" data-mode="nav">Place UI</button>
+          </div>
+        </div>
+
+        <p class="settings__hint">Inner ring = left stick (groups) &middot; Outer ring = right stick (characters) &middot; Release to type.</p>
+        <p class="settings__hint">Command wheel: <b>D-pad &larr;</b> or <kbd>M</kbd>/<kbd>C</kbd> &middot; choose with <b>RS</b> &middot; release to confirm.</p>
+        <p class="settings__hint">The HUD is anchored to a <b>pivot</b>. Use <b>Place UI</b> to move it; it no longer follows the mouse.</p>
+
+        <label class="field field--range">
+          <span class="field__label">Opacity <b id="outOpacity">92%</b></span>
+          <input id="inOpacity" type="range" min="25" max="100" value="92" step="1" />
+        </label>
+        <label class="field field--range">
+          <span class="field__label">Ring size <b id="outScale">100%</b></span>
+          <input id="inScale" type="range" min="70" max="140" value="100" step="1" />
+        </label>
+
+        <label class="check"><input id="inAutohide" type="checkbox" checked /><span>Hide HUD after 0.9 s</span></label>
+
+        <div class="settings__row">
+          <button class="btn btn--primary" id="btnDemo" type="button">&#9654; Play demo</button>
+          <button class="btn" id="btnClear" type="button">Clear text</button>
+        </div>
+
+        <div class="stats" aria-live="polite">
+          <div><b id="statChars">0</b><span>chars</span></div>
+          <div><b id="statWpm">0</b><span>WPM</span></div>
+          <div><b id="statPad">&mdash;</b><span>pad</span></div>
+        </div>
+
+        <button class="btn btn--ghost" data-reset="general" type="button">Reset general settings</button>
+      </section>
+
+      <section class="settings__pane" data-panel="languages" hidden>
+        <p class="settings__hint">Detected on this PC: <b>English</b>, <b>Thai</b> (simulated). In production, RniType reads Windows installed keyboard layouts at startup; if no second layout exists, only English is shown.</p>
+        <div class="langlist" id="langList"></div>
+        <p class="settings__hint">Languages appear in the Language wheel (D-pad &larr; &rarr; Language). Up to 8 enabled layouts. IME languages pass keys through and let Windows compose.</p>
+        <div class="settings__row">
+          <button class="btn" id="btnRescanLangs" type="button">Rescan languages</button>
+          <button class="btn btn--ghost" data-reset="languages" type="button">Reset languages</button>
+        </div>
+      </section>
+
+      <section class="settings__pane" data-panel="keymap" hidden>
+        <div class="field">
+          <span class="field__label">Language</span>
+          <select id="mapLang" class="select"></select>
+        </div>
+
+        <div class="padmap" aria-label="Controller map reference">
+          <header class="padmap__head">
+            <span class="padmap__title">Controller map</span>
+            <div class="padswitch" id="padSwitch" role="group" aria-label="Controller layout">
+              <button type="button" data-pad="xbox" class="is-on">Xbox</button>
+              <button type="button" data-pad="ps">DualSense</button>
+            </div>
+          </header>
+
+          <div class="padmap__shoulders">
+            <span class="padkey padkey--lt"><b>LT</b>Shift toggle</span>
+            <span class="padkey padkey--lb"><b>LB</b>Ctrl</span>
+            <span class="padkey padkey--rb"><b>RB</b>Layer 2</span>
+            <span class="padkey padkey--rt"><b>RT</b>Layer 2</span>
+          </div>
+
+          <div class="padmap__body">
+            <figure class="padmap__stage">
+              <img id="padImg" class="padmap__img" src="assets/pad-xbox-front.png" alt="Xbox controller front" />
+              <div class="padmap__pins" id="padPins"></div>
+            </figure>
+            <ul class="padmap__legend" id="padLegend"></ul>
+          </div>
+          <p class="padmap__note" id="padNote"></p>
+        </div>
+
+        <p class="settings__hint" id="mapHint"></p>
+        <div class="mapgrid" id="mapGrid"></div>
+        <div class="settings__row">
+          <button class="btn" id="btnResetLang" type="button">Reset this language</button>
+          <button class="btn" id="btnResetMaps" type="button">Reset all mappings</button>
+        </div>
+      </section>
+
+      <section class="settings__pane" data-panel="hud" hidden>
+        <label class="check"><input id="inRing" type="checkbox" /><span>Always show ring (learning mode)</span></label>
+        <label class="check"><input id="inIndex" type="checkbox" /><span>Show slot numbers 1&ndash;8</span></label>
+        <label class="check"><input id="inAim" type="checkbox" /><span>Show stick direction wedges</span></label>
+        <p class="settings__hint">Pivot: <b>Place UI</b> mode &middot; <kbd>LS</kbd> coarse &middot; <kbd>RS</kbd> fine &middot; <kbd>R3</kbd> resets.</p>
+        <button class="btn btn--ghost" data-reset="hud" type="button">Reset HUD settings</button>
+      </section>
+    </div>
+
+    <footer class="settings__foot">
+      <button class="btn btn--danger" id="btnResetAll" type="button">Reset all to defaults</button>
+      <span class="settings__footnote">Settings window is separate from the HUD overlay.</span>
+    </footer>
+  </div>
+
+  <div class="hud" id="hud" aria-hidden="true">
+    <div class="hud__glass"></div>
+    <svg class="hud__ring" viewBox="-170 -170 340 340" aria-hidden="true">
+      <defs>
+        <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#7cc5ff" stop-opacity="0.55" />
+          <stop offset="100%" stop-color="#7cc5ff" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+      <g id="charRing"></g>
+      <g id="groupRing"></g>
+      <g id="cmdRing" class="cmd-ring"></g>
+      <g id="langRing" class="lang-ring"></g>
+      <g class="aim" id="aimRS"><path id="aimRSWedge" /></g>
+      <g class="aim" id="aimLS"><path id="aimLSWedge" /></g>
+      <g class="center">
+        <circle class="center__track" r="27" />
+        <circle class="center__progress" id="commitRing" r="27" />
+        <circle class="center__halo" r="6" />
+      </g>
+      <text class="cmd-center" id="cmdCenter" y="15" text-anchor="middle" dominant-baseline="central"></text>
+      <text class="hud__hint" id="hudHint" y="-186" text-anchor="middle">ดัน LS</text>
+    </svg>
+    <div class="hud__status" id="hudStatus">
+      <span class="chip chip--status">
+        <b id="chipMode">Type EN</b><span id="chipSel"></span><span id="chipMod"></span>
+      </span>
+    </div>
+  </div>
+
+  <div class="pointer" id="pointer" aria-hidden="true"><i></i></div>
+  <div class="pivot" id="pivot" aria-hidden="true"></div>
+  <div class="toast" id="toast" aria-live="polite"></div>
+</main>
+
+<script src="hud.js"></script>
+</body>
+</html>

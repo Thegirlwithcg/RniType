@@ -23,3 +23,18 @@ mono_crash.*.json
 *.exe
 # Uncomment if your project does not version PCK files as runtime dependencies.
 # *.pck
+
+# Rust
+/target/
+**/*.rs.bk
+
+# Node
+node_modules/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Personal vault metadata + machine-specific agent config
+.nznote/
+.opencode/
