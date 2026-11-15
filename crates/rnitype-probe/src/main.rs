@@ -372,7 +372,7 @@ fn print_summary(pads: &[(GamepadId, String)], stats: &[PadStats]) {
             if s.idle_peak < 0.15 {
                 "OK"
             } else {
-                "สูงเกิน — ต้องขยับ deadzone"
+                "ต่ำเกิน — ควรเพิ่ม deadzone หรือ calibrate"
             },
             s.max_magnitude
         );

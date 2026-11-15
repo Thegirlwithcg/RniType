@@ -31,7 +31,7 @@ ADR-01/[[01-architecture]] เลือก C# .NET 8 ไว้ก่อนหน
 | งาน | Rust | C# .NET 8 |
 | --- | --- | --- |
 | `SendInput` / `VkKeyScanEx` | `windows` crate (unsafe แต่ตรง) | เรียกได้เลย |
-| อ่านจอย Xbox | `gilrs` (บน Windows ใช้ WGI) หรือ `sdl3` | SDL3 ตรง |
+| อ่านจอย Xbox | `gilrs` — บนเครื่อง owner WGI ไม่ส่ง event จึงใช้ **XInput backend** ([[15-gilrs-xinput-backend]]); `sdl3` เป็นทางถอย | SDL3 ตรง |
 | อ่านจอย DualSense | **ต้องทดสอบ** — ถ้าต้องการ gyro/adaptive trigger ต้องใช้ `hidapi` เพิ่ม | SDL3 จัดการให้ |
 | Tray | Tauri v2 tray (built-in) | มีในตัว |
 | Autostart / single instance / updater | Tauri plugin ครบ | ทำเองบางส่วน |

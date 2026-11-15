@@ -67,7 +67,7 @@ cargo run --release --manifest-path spikes/sendinput/Cargo.toml
 
 | Gate | ผล | หลักฐาน / หมายเหตุ |
 | --- | --- | --- |
-| **A — จอย** | 🟡 **รอทดสอบ XInput** | `joy.cpl` ผ่านทุกปุ่ม ✅ · gilrs/WGI event = 0 ❌ → สลับเป็น XInput แล้ว · **DualSense เลื่อน** |
+| **A — จอย** | 🟡 **เกือบผ่าน (XInput)** | แกน LS/RS เต็ม ±1.0 ✅ · 8 sectors ✅ · ปุ่ม 14/16 (เหลือ **LS/RS click**) · idle drift 0.194 · **DualSense เลื่อน** |
 | **B — Tauri overlay** | ✅ **ผ่าน** | โปร่งใส ✅ · ย้ายจอ ✅ · click-through ✅ · target เป็น foreground ✅ (`match=true` 4/4) |
 | **C — SendInput ไทย** | ✅ **ผ่าน** | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูกทุกตัว |
 
@@ -115,13 +115,36 @@ click_through=false exstyle=0x40118
   sectors: -
 ```
 
-**ตีความ A:** `joy.cpl` แสดงค่าครบทุกปุ่ม → **ตัดสาเหตุฮาร์ดแวร์ออก**
-เหลือสาเหตุเดียวคือ gilrs/WGI ไม่ส่ง event บนเครื่องนี้ → เปลี่ยน backend เป็น **XInput** แล้ว
+**ตีความ A:** `joy.cpl` แสดงค่าครบทุกปุ่ม → ตัดสาเหตุฮาร์ดแวร์ออก
+และ XInput ให้ค่าครบ ยืนยันว่า **WGI backend คือปัญหา** ไม่ใช่จอย
+
+### ผลดิบ A — XInput (2026-11-15)
+
+```text
+--- สรุป (20.00214 s) ---
+[0] Xbox Controller
+  LSx  range -1.00 .. +0.99
+  LSy  range -0.99 .. +1.00
+  RSx  range -0.99 .. +0.95
+  RSy  range -0.98 .. +0.94
+  LZ   range +0.00 .. +0.00
+  RZ   range +0.00 .. +0.00
+  idle_peak=0.194  max_magnitude=1.00
+  buttons: A/South, B/East, D-Down, D-Left, D-Right, D-Up, LB, LT, Menu, RB, RT, View, X/West, Y/North
+  sectors: ← ↑ → ↓ ↖ ↗ ↘ ↙
+```
+
+**สิ่งที่ผ่าน:** แกนทั้ง 4 เต็มช่วง, 8 sectors ครบ, trigger/ปุ่มหน้า/D-pad/View/Menu ครบ
+**สิ่งที่เหลือ:**
+1. **LS/RS click (L3/R3)** ยังไม่โผล่ — probe ยังไม่ได้รับตอนกด (ปุ่มฝังในก้านAnalog กดแรงหน่อย)
+2. `LZ/RZ = 0` เป็นเรื่องปกติของ XInput (trigger เป็น digital ที่ LT/RT) — เพียงพอสำหรับ Shift/คลิกขวา
+3. `idle_peak=0.194` สูงกว่า deadzone 0.15 — หลัง normalize เหลือ ~0.05 ซึ่งต่ำกว่า `ls_release` 0.25
+   แต่ควรเพิ่ม **per-device deadzone calibration** ใน P3 (ห้ามขยับ `ls_activate` หนีปัญหา)
 
 **ลำดับตรวจต่อ:**
-1. รัน probe (default = XInput) → ต้องเห็น `OK: ได้รับ input แล้ว` + ค่าแกน/ปุ่มครบ
-2. ถ้า XInput ยัง 0 → รันแบบ WGI เพื่อยืนยันว่าเป็นที่ backend
-3. ถ้าทั้งคู่ 0 → ทำ spike `sdl3` ตามทางถอย
+1. รัน XInput อีกครั้ง แล้ว **กด LS/RS click ให้ครบ** → ต้องเห็น `LS`, `RS` ใน `buttons:`
+2. ถ้าครบ → ปิด Spike A
+3. ถ้าไม่ครบ → ตรวจว่า XInput เห็น L3/R3 ไหมใน `joy.cpl`; ถ้าเห็นแต่ probe ไม่เห็น → บันทึกเป็นข้อจำกัดของ backend
 
 ## ขั้นถัดไป
 
@@ -131,6 +154,6 @@ click_through=false exstyle=0x40118
 
 ## เกณฑ์เปิด P2–P5
 
-- [ ] A ผ่าน: Xbox ครบ 16 ปุ่ม + แกน 8 ทิศ (DualSense เลื่อนไปก่อน release)
+- [ ] A ผ่าน: Xbox ครบ 16 ปุ่ม (เหลือ LS/RS click) + แกน 8 ทิศ (DualSense เลื่อนไปก่อน release)
 - [x] B ผ่าน: click-through ได้ + target เป็น foreground
 - [x] C ผ่าน: SendInput ไทยลง Notepad ถูกต้อง

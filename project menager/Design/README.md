@@ -56,6 +56,7 @@ updated: 2026-11-15
 | [[12-thai-tone-and-below-vowel]] | ADR: รวมวรรณยุกต์กลุ่มเดียว + ขีดกำกับสระ ุ ู |
 | [[13-shift-toggle]] | ADR: Shift/LT กดครั้งเดียวล็อกตัวพิมพ์ใหญ่ + UI แสดง |
 | [[14-universal-languages]] | ADR: รองรับทุกภาษา (layout + IME), Settings window แยก, English UI, Reset |
+| [[15-gilrs-xinput-backend]] | ADR: WGI ไม่ส่ง event บนเครื่อง owner → ใช้ gilrs XInput backend |
 | [[hud-v0.9]] | บันทึก HUD: ภาพเทียบ A/B (v0.9) + สรุป v0.10 |
 | `05-mockup/hud-prototype/` | ม็อกอัป HUD v0.11 (เน้น EN+TH, หลายภาษา, Settings window, Keymap editor, pivot) |
 | [[HANDOFF]] | สรุปสำหรับส่งต่อ session: สถานะ, งานถัดไป, ข้อจำกัด |
