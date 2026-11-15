@@ -71,7 +71,7 @@ tags: [decision, hud, typography, thai, animation, settings]
 ### 6. เปิด Settings ได้จาก 2 ทาง
 
 - **คลิกซ้ายที่ไอคอน tray** (ใหม่) หรือคลิกขวา → Settings… (ไอคอนอาจอยู่ในถาดซ่อน `^`)
-- `run.ps1 -- --demo --settings` เปิดหน้าต่างมาพร้อมกัน
+- `run.ps1 --demo --settings` เปิดหน้าต่างมาพร้อมกัน
 - เพิ่ม **Ring size slider** (0.8–1.6) ใน Settings → HUD เพื่อปรับวงได้เองโดยไม่ต้องรอ build
 - หน้าต่าง Settings ยกตัวเองขึ้นมา (`focused` + `set_focus`) หลังสร้าง
 

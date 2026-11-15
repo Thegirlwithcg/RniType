@@ -146,20 +146,20 @@ project menager/
 | `--fake-pad` = จอยปลอมพิมพ์ซ้ำ (ตรวจทั้งท่อ) | ✅ ใช้ตรวจแล้ว |
 | **จอยจริง** | ⏳ เครื่องพัฒนาไม่พบจอย — ต้องรบกวน owner เสียบจอยแล้วรัน `run.ps1` |
 
-**สิ่งที่ owner ต้องลอง:** เสียบจอย Xbox → `crates\rnitype-app\run.ps1 -- --seconds 60` → เปิด Notepad
+**สิ่งที่ owner ต้องลอง:** เสียบจอย Xbox → `crates\rnitype-app\run.ps1 --seconds 60` → เปิด Notepad
 แล้วลอง LS ขึ้น + RS ขึ้น (ควรได้ `a`) / A (Space) / D-pad ← + RS ลง (Copy) · tray → Pause
 
 ### 4.4 รัน overlay ตอนนี้
 
 ```powershell
 # จอยจริง (XInput) — HUD + พิมพ์/คลิกได้จริง
-crates\rnitype-app\run.ps1 -- --seconds 60
+crates\rnitype-app\run.ps1 --seconds 60
 
 # ไม่มีจอย? ตรวจทั้งท่อด้วยจอยปลอม (จะพิมพ์ลงหน้าต่างที่ focus)
-crates\rnitype-app\run.ps1 -- --fake-pad --seconds 20
+crates\rnitype-app\run.ps1 --fake-pad --seconds 20
 
 # ดู HUD จาก state ตัวอย่าง (ไม่มี injector)
-crates\rnitype-app\run.ps1 -- --demo --settings --seconds 30
+crates\rnitype-app\run.ps1 --demo --settings --seconds 30
 ```
 
 - Tray → **คลิกซ้าย** = Settings · คลิกขวา = เมนู (Settings… / Quit) · หรือ `Ctrl+C` ใน terminal
@@ -201,7 +201,7 @@ crates\rnitype-app\run.ps1 -- --demo --settings --seconds 30
 2. งานหลัก: **runtime wiring** (จอย → core → injector → `hud:state`) — typography ปิดแล้ว
 3. ถ้าทำ Settings ต่อ: เริ่มจากแท็บ General แล้ว Languages/Keymap (contract อยู่ใน [[ipc]] §3)
 4. รัน checks: `cargo test --workspace` · `node tools/contracts/validate.mjs` · `node tools/tests/hud-smoke.mjs` · `node tools/tests/hud-typography.mjs`
-5. ถ้าแตะ overlay: รัน `crates\rnitype-app\run.ps1 -- --demo --settings --seconds 30` แล้วเก็บ screenshot/log
+5. ถ้าแตะ overlay: รัน `crates\rnitype-app\run.ps1 --demo --settings --seconds 30` แล้วเก็บ screenshot/log
 
 ## 5. คำถามที่ยังค้าง (เจ้าของต้องตอบก่อนเขียนโค้ดเยอะ)
 
@@ -227,6 +227,8 @@ crates\rnitype-app\run.ps1 -- --demo --settings --seconds 30
 - **Git**: commit ล่าสุด `062f700` (docs) — งานรอบนี้ยังไม่ commit
   (`.nznote/`, `.opencode/` อยู่ใน `.gitignore` แล้ว)
 - **เทอร์มินัลเป็น cp874** → log/ข้อความไทยใน console อาจเป็น `???` (ไม่ใช่บั๊ก) · ไฟล์ยังเป็น UTF-8
+- **PowerShell กิน `--` ตัวแรกเอง** → `run.ps1` เติม `--` ให้ cargo แล้ว ใช้ `run.ps1 --seconds 30` ได้เลย
+  (แบบเดิม `run.ps1 -- --seconds 30` ก็ยังใช้ได้)
 - **Chrome headless**: `C:\Users\User\AppData\Local\ms-playwright\chromium-1208\chrome-win64\chrome.exe`
   (ตั้ง `CHROME_PATH` ถ้าย้าย) · เครื่องนี้มี 2 จอ virtual desktop = 3840×1080 เริ่มที่ x = -1920
 
@@ -234,7 +236,7 @@ crates\rnitype-app\run.ps1 -- --demo --settings --seconds 30
 
 1. ทุก check ผ่านและมีตัวเลขแนบ (ไม่ใช่ "น่าจะได้"):
    `cargo test --workspace` · `node tools/contracts/validate.mjs` · `node tools/tests/hud-smoke.mjs` · `node tools/tests/hud-typography.mjs`
-2. งานที่แตะ runtime ต้องมี log จริงจาก `run.ps1 -- --demo --settings --seconds N` + screenshot
+2. งานที่แตะ runtime ต้องมี log จริงจาก `run.ps1 --demo --settings --seconds N` + screenshot
 3. อัปเดตตารางวัดผลใน [[02-roadmap-and-smoke-tests]] (คอลัมน์ build/WPM/latency)
 4. ถ้าเปลี่ยนการตัดสินใจใด → เขียน ADR ใหม่ใน `04-decisions/` (อย่าแก้ ADR เก่า)
 

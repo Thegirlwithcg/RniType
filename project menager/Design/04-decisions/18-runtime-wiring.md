@@ -98,7 +98,7 @@ mode (`type-en/type-th/cmd/lang/mouse/nav/disabled`), state (`idle/group/char/co
   `wheel_highlight_dir` ใช้ได้ทั้งสองวง (`wheel_dir`), `keymap::group_names/label_of`
 - win: `plan` ส่ง VK เมื่อ Ctrl+ASCII · `vk_for_ctrl_char`
 - tray: `Pause / Resume typing`
-- ทางรัน: `run.ps1` (ไม่มี flag) = จอยจริง · `run.ps1 -- --fake-pad` = จอยปลอม
+- ทางรัน: `run.ps1` (ไม่มี flag) = จอยจริง · `run.ps1 --fake-pad` = จอยปลอม
 
 ## หลักฐาน (2026-11-15)
 

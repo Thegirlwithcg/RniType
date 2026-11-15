@@ -14,7 +14,7 @@
 //! ```
 //! cargo run -p rnitype-app -- --demo --seconds 8
 //! ```
-//! หรือผ่าน `crates/rnitype-app/run.ps1 -- --demo --seconds 8`
+//! หรือผ่าน `crates/rnitype-app/run.ps1 --demo --seconds 8`
 //! (run.ps1 แก้ปัญหา path ที่มี apostrophe ให้ RC.EXE อ่าน icon ได้)
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
