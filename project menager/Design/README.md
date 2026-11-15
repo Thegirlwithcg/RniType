@@ -61,6 +61,7 @@ updated: 2026-11-15
 | [[17-hud-ring-geometry-and-active-animation]] | ADR: วง 340px/ตัวอักษร 16px, วงในกว้างขึ้น, ป้าย 2 บรรทัด, ขีดสระล่าง, active animation, Ring size slider |
 | [[18-runtime-wiring]] | ADR: จอย → core → injector → HUD จริง, tray Pause, `--fake-pad` |
 | [[19-revert-sector-scaling-and-shift-labels]] | ADR: ยกเลิก transform บน sector (วงเพี้ยน) + Shift เปลี่ยนตัวอักษรบนวงเป็นตัวใหญ่ |
+| [[20-hud-state-delivery]] | ADR: HUD ต้องได้ state เสมอ (resend ตอน handshake + heartbeat 2 วิ) + ห้ามเปิดแอปซ้ำ |
 | [[hud-v0.9]] | บันทึก HUD: ภาพเทียบ A/B (v0.9) + สรุป v0.10 |
 | `05-mockup/hud-prototype/` | ม็อกอัป HUD v0.11 (เน้น EN+TH, หลายภาษา, Settings window, Keymap editor, pivot) |
 | `05-mockup/hud-shots/` | screenshot ตรวจรับ typography (100%/150% DPI), overlay จริง, Settings |

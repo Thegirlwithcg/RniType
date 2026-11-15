@@ -82,7 +82,8 @@ project menager/
    │  └─ 16-hud-typography-and-fonts.md ← ADR-16 (ขนาดตัวหนังสือ + ฟอนต์ไม่มีหัว)
    │  ├─ 17-hud-ring-geometry-and-active-animation.md ← ADR-17 (วงเล็กลง/ชัดขึ้น + animation + ขีดสระล่าง)
    │  ├─ 18-runtime-wiring.md ← ADR-18 (จอย → core → injector → HUD + tray Pause)
-   │  └─ 19-revert-sector-scaling-and-shift-labels.md ← ADR-19 (ยกเลิก scale sector + Shift→ตัวใหญ่)
+   │  ├─ 19-revert-sector-scaling-and-shift-labels.md ← ADR-19 (ยกเลิก scale sector + Shift→ตัวใหญ่)
+   │  └─ 20-hud-state-delivery.md ← ADR-20 (HUD ต้องได้ state เสมอ: resend + heartbeat + single instance)
    └─ 05-mockup/
       ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (index.html + hud.js + styles.css)
       └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings)
@@ -200,12 +201,13 @@ crates\rnitype-app\run.ps1 --demo --settings --seconds 30
 **owner ยืนยันแล้ว (2026-11-15): Graphics default = Text size 1.4 · Ring size 1.0**
 (ไม่ต้องแก้อะไร — `config.rs`, `config.schema.json`, `hud.css` และ Settings ใช้ค่านี้อยู่แล้ว)
 
-### 4.5c UI feedback รอบ 3 (2026-11-15) — ✅ ปิดแล้ว (ADR-19)
+### 4.5c UI feedback รอบ 3 (2026-11-15) — ✅ ปิดแล้ว (ADR-19 · ADR-20)
 
 | สิ่งที่ owner แจ้ง | ผล |
 | --- | --- |
 | **"Animation ทำให้วงล้อเพี้ยน"** | ยกเลิก `transform: scale` ของ sector ทั้งหมด (wedge 45° ขยายเป็น ~48° → ชิ้นทับกัน) · active ใช้ **สี + stroke + ขนาดฟอนต์** แทน · เพิ่ม check กัน regression `ไม่มี transform บน sector` |
-| **"กด Shift แล้วตัวอักษร EN ไม่เป็นตัวใหญ่"** | ฝั่งแอปแปลง label `a–z → A–Z` ตาม `shiftLock` (กฎเดียวกับตอนส่งคีย์จริง) ใช้กับวงตัวอักษร + preview กลางวง + `status.text = "ตัวใหญ่"` · sample/demo ปรับให้ตรงกฎ |
+| **"กด Shift แล้วตัวอักษร EN ไม่เป็นตัวใหญ่"** | ฝั่งแอปแปลง label `a–z → A–Z` ตาม `shiftLock` · sample/demo ปรับให้ตรงกฎ |
+| **"UI ค้างจอตลอดเวลา"** | state ไม่ถึง HUD (ส่งครั้งเดียวก่อน HUD พร้อม + dedupe) → **resend ตอน handshake + heartbeat 2 วิ** · กันเปิดแอปซ้ำด้วย named mutex ([[20-hud-state-delivery]]) |
 
 > ถ้าอยากได้ motion กลับมาแบบไม่เพี้ยน: ขยาย glow/shadow · ขยายทั้ง `<g>` ของ ring ·
 > หรือทำ outer ring โหว่ (clip) — ดูท้าย [[19-revert-sector-scaling-and-shift-labels]]

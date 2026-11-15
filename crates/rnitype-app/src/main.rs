@@ -80,6 +80,8 @@ struct AppState {
     origin: std::sync::Mutex<(i32, i32)>,
     /// ผู้ใช้สั่งพักการพิมพ์จาก tray (จอยยังอ่านอยู่ แต่ไม่ส่งคีย์)
     paused: AtomicBool,
+    /// HUD เพิ่ง handshake/รีโหลด → รอบถัดไปต้องส่ง state ซ้ำ แม้ payload ไม่เปลี่ยน
+    hud_need_resend: AtomicBool,
 }
 
 impl AppState {
@@ -90,6 +92,7 @@ impl AppState {
             config: std::sync::Mutex::new(config),
             origin: std::sync::Mutex::new((0, 0)),
             paused: AtomicBool::new(false),
+            hud_need_resend: AtomicBool::new(false),
         }
     }
 }
@@ -103,6 +106,11 @@ struct DemoSource {
 }
 
 fn main() {
+    if already_running() {
+        eprintln!("[app] RniType รันอยู่แล้ว — ปิดตัวเก่าก่อน (ไอคอนในถาดระบบ → Quit)");
+        std::process::exit(1);
+    }
+
     let options = parse_options();
     println!("[app] rnitype-app — RniType overlay (P4 slice 2)");
     println!(
@@ -138,6 +146,30 @@ fn main() {
 /* ============================================================
    ตัวเลือกบรรทัดคำสั่ง
    ============================================================ */
+
+/// มี RniType รันอยู่แล้วหรือไม่ (named mutex ต่อ session)
+///
+/// กันสอง instance: overlay จะซ้อนกัน + injector สองตัวพิมพ์ชนกัน
+#[cfg(windows)]
+fn already_running() -> bool {
+    use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError};
+    use windows_sys::Win32::System::Threading::CreateMutexW;
+
+    let name: Vec<u16> = "Local\\RniType.SingleInstance\0".encode_utf16().collect();
+    // SAFETY: ชื่อเป็น wide string ที่ null-terminate; handle ถูกปล่อยตอนโปรเซสจบ
+    unsafe {
+        let handle = CreateMutexW(std::ptr::null(), 1, name.as_ptr());
+        if handle.is_null() {
+            return false;
+        }
+        GetLastError() == ERROR_ALREADY_EXISTS
+    }
+}
+
+#[cfg(not(windows))]
+fn already_running() -> bool {
+    false
+}
 
 fn parse_options() -> Options {
     let mut options = Options::default();
@@ -485,6 +517,9 @@ fn make_injector() -> Box<dyn Injector + Send> {
     Box::new(rnitype_win::NullInjector::default())
 }
 
+/// ส่ง state ซ้ำทุก N ms แม้ไม่เปลี่ยน — กัน HUD ที่หลุด event หรือถูก throttle
+const HUD_RESEND_MS: u64 = 2_000;
+
 /// loop หลัก: อ่านจอย → tick → inject → emit HUD
 fn run_loop(
     handle: &tauri::AppHandle,
@@ -498,6 +533,7 @@ fn run_loop(
     let mut last_emit_ms = 0u64;
     let mut last_heartbeat_ms = 0u64;
     let mut last_pad_log_ms = 0u64;
+    let mut last_resend_ms = 0u64;
     let mut last_json = String::new();
     let mut had_pad = false;
     let mut was_paused = false;
@@ -580,6 +616,18 @@ fn run_loop(
         if now.saturating_sub(last_emit_ms) >= 16 {
             last_emit_ms = now;
             let app_state = handle.state::<AppState>();
+
+            // HUD เพิ่ง handshake/รีโหลด → ล้าง cache ให้ส่งซ้ำรอบนี้
+            if app_state.hud_need_resend.swap(false, Ordering::Relaxed) {
+                last_json.clear();
+            }
+
+            // heartbeat: ส่งซ้ำทุก 2 วิ (1 KB/2 วิ) — HUD ไม่มีทางค้างสถานะเก่าค้างจอ
+            if now.saturating_sub(last_resend_ms) >= HUD_RESEND_MS {
+                last_resend_ms = now;
+                last_json.clear();
+            }
+
             let style = {
                 let config = app_state.config.lock().unwrap();
                 HudStyle {
@@ -732,6 +780,12 @@ fn hud_ready(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Value 
         "[hud] hud_ready{} — HUD โหลดแล้วและมี window.__TAURI__ (handshake สำเร็จ)",
         if first { " (ครั้งแรก)" } else { "" }
     );
+
+    // ipc.md §4 — หลัง handshake ต้องได้ state ทันที แม้ค่าจะไม่เปลี่ยนจากรอบก่อน
+    // (HUD อาจบูตช้ากว่าที่แอปเริ่มส่ง หรือเพิ่งรีโหลด)
+    state
+        .hud_need_resend
+        .store(true, std::sync::atomic::Ordering::SeqCst);
 
     // ipc.md §4 — หลัง handshake แอปส่ง state ให้ HUD ทันที (state ปัจจุบัน + scale จาก config)
     let scale = {
