@@ -169,8 +169,8 @@ crates\rnitype-app\run.ps1 -- --demo --settings --seconds 60
 พร้อมแก้บั๊กตัววัด: `getBBox()` ไม่ serialize ผ่าน CDP → test เดิมรายงาน "ไม่ชนกัน" ทั้งที่ **วรรณยุกต์/กลาง ชนกัน 6%**
 ตอนนี้ใช้ **ink box** (ความกว้างจริง + ความสูงตามฟอนต์) และเพิ่ม 5 checks
 
-**ยังค้างให้ owner ยืนยัน:** เปิด Settings → เลื่อน Text size 1.2/1.4/1.6 และ Ring size 0.9/1.0/1.1 บนจอจริง
-แล้วบอกว่าเริ่มต้นที่ 1.4/1.0 พอดีไหม
+**owner ยืนยันแล้ว (2026-11-15): Graphics default = Text size 1.4 · Ring size 1.0**
+(ไม่ต้องแก้อะไร — `config.rs`, `config.schema.json`, `hud.css` และ Settings ใช้ค่านี้อยู่แล้ว)
 
 ### 4.6 เริ่ม session หน้า
 

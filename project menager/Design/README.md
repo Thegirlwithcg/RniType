@@ -76,7 +76,7 @@ updated: 2026-11-15
 | ภาษา | ทุก layout ที่ติดตั้งใน Windows — EN/TH ใช้ตารางออกแบบ, อื่นๆ map จาก QWERTY แล้วแก้ได้; IME ส่งคีย์ให้ OS ประกอบ · **ช่องภาษาอื่น**: 1 ภาษา = สลับทันที, หลายภาษา = `Lang`, ไม่มีภาษา = ซ่อน |
 | ตั้งค่า | หน้าต่างแยก ภาษาอังกฤษ (General · Languages · Keymap · HUD) + Reset all to defaults |
 | HUD | ตรึงที่ **pivot** (ไม่ตามเมาส์) — Nav = โหมดจัดตำแหน่ง UI |
-| Typography | ฟอนต์ไทย **ไม่มีหัว** = IBM Plex Sans Thai (fallback Noto Sans Thai) · **text size 0.8–2.0 (default 1.4)** และ **ring size 0.8–1.6 (default 1.0 = 340px)** แยกจากกัน · ช่องที่ active ขยาย ([[17-hud-ring-geometry-and-active-animation]]) |
+| Typography | ฟอนต์ไทย **ไม่มีหัว** = IBM Plex Sans Thai (fallback Noto Sans Thai) · **text size 1.4** และ **ring size 1.0 (340px)** = ค่าเริ่มต้นที่ owner ยืนยัน · ช่องที่ active ขยาย ([[17-hud-ring-geometry-and-active-animation]]) |
 | ภาษาไทย | วรรณยุกต์ ่ ้ ๊ ๋ อยู่กลุ่ม ↘ เดียวกัน · สระล่าง ุ ู มีขีดกำกับใน HUD |
 | หลักการ HUD | วงใน = สิ่งที่ LS เลือก · วงนอก = สิ่งที่ RS เลือก · idle เหลือ pill สถานะ (เปิดวงตลอดได้) |
 | เทคโนโลยี | Rust + Tauri v2 + gilrs/SDL3 + SendInput (แผนสำรอง: C# .NET 8) — ดู [[03-stack-rust]] |
