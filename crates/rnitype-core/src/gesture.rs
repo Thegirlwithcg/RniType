@@ -185,8 +185,15 @@ impl GestureEngine {
     }
 
     /// ยกเลิกกลาง gesture → ต้องปล่อย LS ก่อนจึงเริ่มใหม่ (กันพิมพ์ค้าง)
-    fn cancel(&mut self) {
+    /// เรียกจาก [`crate::runtime::RuntimeEngine`] เมื่อมี event ที่สำคัญกว่า
+    /// (เปิดวงคำสั่ง / สลับ mode / ปิดฉุกเฉิน) ตาม spec §3
+    pub fn cancel(&mut self) {
         self.reset(true);
+    }
+
+    /// `true` = ถูกยกเลิกและยังรอ LS กลับเข้าใกล้ศูนย์ก่อนเริ่ม gesture ใหม่
+    pub fn locked(&self) -> bool {
+        self.locked
     }
 
     fn reset(&mut self, lock: bool) {

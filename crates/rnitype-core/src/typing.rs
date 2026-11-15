@@ -31,6 +31,17 @@ impl TypingPipeline {
         self.engine.state()
     }
 
+    /// ยกเลิก gesture ที่ค้าง (สลับ mode / เปิดวงคำสั่ง / ปิดฉุกเฉิน)
+    /// หลังเรียก ต้องปล่อย LS กลับก่อนจึงจะเริ่ม gesture ใหม่ได้
+    pub fn cancel(&mut self) {
+        self.engine.cancel();
+    }
+
+    /// `true` = gesture ถูกยกเลิกและยังรอ LS กลับเข้าใกล้ศูนย์
+    pub fn locked(&self) -> bool {
+        self.engine.locked()
+    }
+
     /// `LT` ค้าง = Shift, `LB` ค้าง = Ctrl (ตาม spec ข้อ 2.3)
     pub fn tick(&mut self, pad: &PadState, dt_ms: u32) -> Option<Action> {
         let Commit { group, sector } = self.engine.tick(pad, dt_ms)?;
