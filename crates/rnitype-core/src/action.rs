@@ -20,6 +20,7 @@ pub enum NamedKey {
     Down,
     Left,
     Right,
+    PrintScreen,
     F(u8),
 }
 
@@ -105,6 +106,14 @@ pub enum Action {
     MouseWheel {
         delta: i32,
     },
+    /// เมาส์แนวนอน (Mouse mode: LS ← / →) — `delta` บวก = เลื่อนขวา
+    MouseHWheel {
+        delta: i32,
+    },
+    /// Mouse mode: กด RS = pointer กลับกลางจอหลัก (แอปเป็นคนรู้พิกัด)
+    RecenterPointer,
+    /// Nav mode: กด RS = pivot กลับตำแหน่งเริ่มต้น
+    ResetPivot,
     /// คำสั่งจากวงคำสั่ง (Copy/Paste/Undo/Redo/สลับโหมด)
     Command(Command),
     SetMode(Mode),

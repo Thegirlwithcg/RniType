@@ -28,6 +28,7 @@ pub mod vk {
     pub const DOWN: u16 = 0x28;
     pub const INSERT: u16 = 0x2D;
     pub const DELETE: u16 = 0x2E;
+    pub const SNAPSHOT: u16 = 0x2C;
     pub const SPACE: u16 = 0x20;
     pub const F1: u16 = 0x70;
     pub const F24: u16 = 0x87;
@@ -66,6 +67,10 @@ pub enum Input {
     Wheel {
         delta: i32,
     },
+    /// ล้อแนวนอน (บวก = ขวา)
+    HWheel {
+        delta: i32,
+    },
 }
 
 impl Input {
@@ -78,7 +83,10 @@ impl Input {
                 button,
                 down: false,
             }),
-            Input::MouseMove { .. } | Input::MouseMoveAbs { .. } | Input::Wheel { .. } => None,
+            Input::MouseMove { .. }
+            | Input::MouseMoveAbs { .. }
+            | Input::Wheel { .. }
+            | Input::HWheel { .. } => None,
         }
     }
 }
@@ -146,11 +154,14 @@ pub fn plan(action: Action, screen: ScreenRect) -> Vec<Input> {
         }
         Action::MouseButton { button, down } => out.push(Input::MouseButton { button, down }),
         Action::MouseWheel { delta } => out.push(Input::Wheel { delta }),
+        Action::MouseHWheel { delta } => out.push(Input::HWheel { delta }),
         Action::Command(_)
         | Action::SetMode(_)
         | Action::SetLang { .. }
         | Action::SetLayer(_)
         | Action::MovePivot { .. }
+        | Action::RecenterPointer
+        | Action::ResetPivot
         | Action::Noop => {}
     }
     out
@@ -279,6 +290,7 @@ pub fn vk_for(named: NamedKey) -> Option<u16> {
         NamedKey::Down => vk::DOWN,
         NamedKey::Left => vk::LEFT,
         NamedKey::Right => vk::RIGHT,
+        NamedKey::PrintScreen => vk::SNAPSHOT,
         NamedKey::F(n) if (1..=24).contains(&n) => vk::F1 + u16::from(n - 1),
         NamedKey::F(_) => return None,
     };
@@ -319,7 +331,10 @@ impl HeldState {
                         self.buttons.retain(|held| *held != button);
                     }
                 }
-                Input::MouseMove { .. } | Input::MouseMoveAbs { .. } | Input::Wheel { .. } => {}
+                Input::MouseMove { .. }
+                | Input::MouseMoveAbs { .. }
+                | Input::Wheel { .. }
+                | Input::HWheel { .. } => {}
             }
         }
     }
@@ -455,6 +470,7 @@ mod tests {
             (NamedKey::Down, 0x28),
             (NamedKey::Left, 0x25),
             (NamedKey::Right, 0x27),
+            (NamedKey::PrintScreen, 0x2C),
             (NamedKey::F(1), 0x70),
             (NamedKey::F(12), 0x7B),
             (NamedKey::F(24), 0x87),
@@ -497,7 +513,10 @@ mod tests {
                     up: false
                 },
                 // Ctrl + ตัวอักษร ASCII = VK (แอปปลายทางเห็นเป็น Ctrl+C)
-                Input::VirtualKey { vk: 0x43, up: false },
+                Input::VirtualKey {
+                    vk: 0x43,
+                    up: false
+                },
                 Input::VirtualKey { vk: 0x43, up: true },
                 Input::VirtualKey {
                     vk: vk::CONTROL,
@@ -634,7 +653,10 @@ mod tests {
                     vk: vk::CONTROL,
                     up: false
                 },
-                Input::VirtualKey { vk: 0x56, up: false },
+                Input::VirtualKey {
+                    vk: 0x56,
+                    up: false
+                },
             ]
         );
     }
@@ -773,6 +795,10 @@ mod tests {
             plan(Action::MouseWheel { delta: -120 }, full_hd()),
             vec![Input::Wheel { delta: -120 }]
         );
+        assert_eq!(
+            plan(Action::MouseHWheel { delta: 120 }, full_hd()),
+            vec![Input::HWheel { delta: 120 }]
+        );
     }
 
     #[test]
@@ -792,6 +818,8 @@ mod tests {
             Action::SetLang { index: 1 },
             Action::SetLayer(2),
             Action::MovePivot { dx: 12.5, dy: -4.0 },
+            Action::RecenterPointer,
+            Action::ResetPivot,
             Action::Noop,
         ];
         for action in actions {

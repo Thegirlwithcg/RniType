@@ -9,14 +9,14 @@
 //! ลำดับ `Action` ที่ไม่เข้ากล่อง injector:
 //! - `Command::Copy/Paste/Undo/Redo` → คีย์ลัด Ctrl+C/V/Z/Y (plan แปลงเป็น VK)
 //! - `Command::Mouse/TypeEn/PlaceUi` · `SetMode` · `SetLang` → engine เปลี่ยนเองแล้ว
-//! - `MovePivot` → ขยับ pivot ของ HUD (ยังไม่มี Nav math ใน core)
+//! - `MovePivot` / `ResetPivot` / `RecenterPointer` → ขยับ pivot/pointer ของ HUD (Nav/Mouse math อยู่ใน core)
 
-use rnitype_core::keymap::{group_names, label_of, lookup, table};
+use rnitype_core::keymap::{group_names_for, label_of, lookup_layer};
 use rnitype_core::normalizer::Dir8;
 use rnitype_core::runtime::{LangSlot, RuntimeEngine, WheelKind};
 use rnitype_core::{Action, Command, GestureState, Key, KeyPress, Lang, Mode, PadState};
 use rnitype_win::Injector;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// ค่าที่ HUD ต้องใช้แต่ไม่ใช่ state ของ engine (มาจาก config)
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -41,26 +41,43 @@ pub struct Session {
     enabled: Vec<Lang>,
     /// ตำแหน่ง HUD (พิกัดหน้าจอจริง; แปลงเป็นพิกัดหน้าต่างตอนสร้าง HudState)
     pivot: (f32, f32),
+    /// ตำแหน่ง pivot เริ่มต้น (RS click ในโหมด Nav = กลับมาที่นี่)
+    pivot_home: (f32, f32),
     pointer: (f32, f32),
-    pointer_visible: bool,
+    /// กลางจอหลัก (RS click ในโหมด Mouse = pointer กลับมาที่นี่)
+    pointer_home: (f32, f32),
     /// จำนวนคีย์ที่ส่งออกแล้ว (log/สถิติ)
     sent: u32,
 }
 
 impl Session {
+    /// ทางลัดสำหรับ test/dev: pivot และ pointer เริ่มที่จุดเดียวกัน
+    #[allow(dead_code)] // runtime ใช้ `with_homes` (bin crate ไม่เห็นการเรียกจาก test)
     pub fn new(
         engine: RuntimeEngine,
         injector: Box<dyn Injector + Send>,
         enabled: Vec<Lang>,
         pivot: (f32, f32),
     ) -> Self {
+        Self::with_homes(engine, injector, enabled, pivot, pivot)
+    }
+
+    /// สร้าง session พร้อมจุดกลับบ้านของ pivot และ pointer (ปกติ = กลางจอหลัก)
+    pub fn with_homes(
+        engine: RuntimeEngine,
+        injector: Box<dyn Injector + Send>,
+        enabled: Vec<Lang>,
+        pivot: (f32, f32),
+        pointer_home: (f32, f32),
+    ) -> Self {
         let mut session = Self {
             engine,
             injector,
             enabled,
             pivot,
-            pointer: (0.0, 0.0),
-            pointer_visible: false,
+            pivot_home: pivot,
+            pointer: pointer_home,
+            pointer_home,
             sent: 0,
         };
         session.refresh_languages();
@@ -95,7 +112,6 @@ impl Session {
     pub fn on_pad_lost(&mut self) {
         self.release_all();
         self.engine.set_mode(Mode::Disabled);
-        self.pointer_visible = false;
     }
 
     /// จอยกลับมา: ออกจาก Disabled ที่เกิดจาก "จอยหลุด"
@@ -155,6 +171,21 @@ impl Session {
                 self.pivot = (self.pivot.0 + dx, self.pivot.1 + dy);
                 None
             }
+            Action::ResetPivot => {
+                self.pivot = self.pivot_home;
+                None
+            }
+            Action::RecenterPointer => {
+                self.pointer = self.pointer_home;
+                Some(Action::MouseMoveAbs {
+                    x: self.pointer_home.0 as i32,
+                    y: self.pointer_home.1 as i32,
+                })
+            }
+            Action::MouseMoveAbs { x, y } => {
+                self.pointer = (x as f32, y as f32);
+                Some(action)
+            }
             Action::MouseMove { dx, dy } => {
                 self.pointer = (self.pointer.0 + dx as f32, self.pointer.1 + dy as f32);
                 Some(action)
@@ -188,18 +219,27 @@ impl Session {
         let sector = engine.typing_sector();
         let typing = engine.mode() == Mode::Type && engine.wheel().is_none();
         let shift_lock = engine.shift_lock();
+        let layer = engine.layer();
+        let repeating = engine.gesture_state() == GestureState::Repeating;
 
-        let (inner, outer) = self.rings(mode, lang, group, sector, typing);
+        let (inner, outer) = self.rings(mode, lang, group, sector, typing, layer);
         let preview = if typing {
             match (group, sector) {
-                (Some(g), Some(s)) => shifted(label_of(lookup(lang, g, s)), shift_lock),
+                (Some(g), Some(s)) => lookup_layer(lang, layer, g, s)
+                    .map(|key| shifted(label_of(key), shift_lock))
+                    .unwrap_or_default(),
                 _ => String::new(),
             }
         } else {
             String::new()
         };
         // ADR-13: ล็อกตัวใหญ่แล้ว pill ต้องบอก (HUD แสดงเป็นข้อความใน pill)
-        let status_text = if shift_lock && typing { "ตัวใหญ่" } else { "" };
+        let status_text = if shift_lock && typing {
+            "ตัวใหญ่"
+        } else {
+            ""
+        };
+        let repeat_count = if repeating { engine.repeat_count() } else { 0 };
 
         json!({
             "version": 1,
@@ -213,7 +253,7 @@ impl Session {
                 "x": f64::from(self.pivot.0) - f64::from(origin.0),
                 "y": f64::from(self.pivot.1) - f64::from(origin.1),
             },
-            "layer": 1,
+            "layer": layer,
             "shiftLock": engine.shift_lock(),
             "state": hud_state_name(engine.gesture_state()),
             "group": group.map_or(-1, |dir| dir.index() as i32),
@@ -225,11 +265,11 @@ impl Session {
             },
             "inner": inner,
             "outer": outer,
-            "preview": { "char": preview, "count": 0 },
+            "preview": { "char": preview, "count": repeat_count },
             "pointer": {
                 "x": f64::from(self.pointer.0) - f64::from(origin.0),
                 "y": f64::from(self.pointer.1) - f64::from(origin.1),
-                "visible": self.pointer_visible,
+                "visible": engine.mode() == Mode::Mouse,
             },
             "status": { "text": status_text, "badges": Vec::<String>::new() },
         })
@@ -243,6 +283,7 @@ impl Session {
         group: Option<Dir8>,
         sector: Option<Dir8>,
         typing: bool,
+        layer: u8,
     ) -> (Value, Value) {
         let engine = &self.engine;
         let direction = engine
@@ -273,7 +314,7 @@ impl Session {
                 json!({ "kind": "language", "active": active, "labels": labels })
             }
             None if typing => {
-                let labels: Vec<Value> = group_names(lang)
+                let labels: Vec<Value> = group_names_for(lang, layer)
                     .iter()
                     .map(|name| json!({ "text": name }))
                     .collect();
@@ -286,9 +327,14 @@ impl Session {
         let outer = match (mode, typing, group) {
             (m, true, Some(group)) if m.starts_with("type-") => {
                 let shift_lock = engine.shift_lock();
-                let labels: Vec<Value> = table(lang)[group.index()]
+                let labels: Vec<Value> = Dir8::ALL
                     .iter()
-                    .map(|key| json!({ "text": shifted(label_of(*key), shift_lock) }))
+                    .map(|dir| {
+                        let text = lookup_layer(lang, layer, group, *dir)
+                            .map(|key| shifted(label_of(key), shift_lock))
+                            .unwrap_or_default();
+                        json!({ "text": text })
+                    })
                     .collect();
                 let active = sector.map_or(-1, |dir| dir.index() as i32);
                 json!({ "kind": "char", "active": active, "labels": labels })
@@ -315,7 +361,13 @@ fn shifted(text: String, shift_lock: bool) -> String {
         return text;
     }
     text.chars()
-        .map(|ch| if ch.is_ascii_lowercase() { ch.to_ascii_uppercase() } else { ch })
+        .map(|ch| {
+            if ch.is_ascii_lowercase() {
+                ch.to_ascii_uppercase()
+            } else {
+                ch
+            }
+        })
         .collect()
 }
 
@@ -339,6 +391,7 @@ fn hud_state_name(state: GestureState) -> &'static str {
         GestureState::GroupArmed => "group",
         GestureState::CharSelected => "char",
         GestureState::Committing => "commit",
+        GestureState::Repeating => "repeat",
     }
 }
 
@@ -560,8 +613,22 @@ mod tests {
         let (session, _) = session();
         let hud = session.hud_state(HudStyle::default(), (0, 0));
         for key in [
-            "version", "visible", "mode", "ringAlways", "scale", "opacity", "pivot", "layer",
-            "shiftLock", "state", "group", "sector", "language", "inner", "outer", "preview",
+            "version",
+            "visible",
+            "mode",
+            "ringAlways",
+            "scale",
+            "opacity",
+            "pivot",
+            "layer",
+            "shiftLock",
+            "state",
+            "group",
+            "sector",
+            "language",
+            "inner",
+            "outer",
+            "preview",
         ] {
             assert!(hud.get(key).is_some(), "ขาด field {key}");
         }
@@ -603,5 +670,105 @@ mod tests {
         let cfg = GestureConfig::default();
         assert_eq!(cfg.commit_dwell_ms, 60);
         assert!(Buttons::default().names().next().is_none());
+    }
+
+    /* ---------------- P2 slice 3 ---------------- */
+
+    fn switch_mode(session: &mut Session, rs: (f32, f32)) {
+        let mut open = pad((0.0, 0.0), (0.0, 0.0));
+        open.buttons.dpad_left = true;
+        session.step(&open, 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+        session.step(&pad((0.0, 0.0), rs), 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 80);
+    }
+
+    #[test]
+    fn hud_state_shows_layer_two_labels_and_preview() {
+        let (mut session, _) = session();
+        // แตะ RB = ล็อกชั้น 2
+        let mut rb = pad((0.0, 0.0), (0.0, 0.0));
+        rb.buttons.rb = true;
+        session.step(&rb, 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+
+        session.step(&pad((0.0, 0.9), (0.0, 0.0)), 4); // LS ↑
+        session.step(&pad((0.0, 0.9), (0.0, 0.9)), 4); // RS ↑
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+
+        assert_eq!(hud["layer"], 2);
+        assert_eq!(hud["mode"], "type-en");
+        assert_eq!(hud["inner"]["labels"][0]["text"], "A–H");
+        assert_eq!(hud["outer"]["labels"][0]["text"], "A");
+        assert_eq!(hud["preview"]["char"], "A");
+    }
+
+    #[test]
+    fn repeating_state_and_count_reach_the_hud() {
+        let (mut session, _) = session();
+        type_char(&mut session, (0.0, 0.9), (0.0, 0.9));
+        // ดัน RS กลับทิศเดิมแล้วค้าง 350 ms = repeat
+        session.step(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+        session.step(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+        let actions = session.step(&pad((0.0, 0.9), (0.0, 0.9)), 350);
+        assert_eq!(
+            actions,
+            vec![Action::Key(KeyPress {
+                key: Key::Char('a'),
+                shift: false,
+                ctrl: false
+            })]
+        );
+
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["state"], "repeat");
+        assert_eq!(hud["preview"]["count"], 1);
+        assert_eq!(hud["preview"]["char"], "a");
+    }
+
+    #[test]
+    fn mouse_recenter_moves_the_pointer_and_injects_an_absolute_move() {
+        let shared = SharedInjector::default();
+        let mut session = Session::with_homes(
+            engine(),
+            Box::new(shared.clone()),
+            vec![Lang::En, Lang::Th],
+            (960.0, 540.0),
+            (1000.0, 500.0),
+        );
+        switch_mode(&mut session, (0.9, 0.0));
+
+        let mut click = pad((0.0, 0.0), (0.0, 0.0));
+        click.buttons.rs_click = true;
+        let actions = session.step(&click, 4);
+        assert_eq!(actions, vec![Action::MouseMoveAbs { x: 1000, y: 500 }]);
+
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["mode"], "mouse");
+        assert_eq!(hud["pointer"]["x"], 1000.0);
+        assert_eq!(hud["pointer"]["visible"], true);
+        assert!(
+            shared
+                .0
+                .lock()
+                .unwrap()
+                .contains(&Action::MouseMoveAbs { x: 1000, y: 500 })
+        );
+    }
+
+    #[test]
+    fn nav_mode_moves_and_resets_the_pivot_in_the_hud() {
+        let (mut session, _) = session();
+        switch_mode(&mut session, (0.9, -0.9));
+        session.step(&pad((0.0, 0.9), (0.0, 0.0)), 100);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["mode"], "nav");
+        assert!(hud["pivot"]["y"].as_f64().unwrap() < 540.0);
+
+        let mut click = pad((0.0, 0.0), (0.0, 0.0));
+        click.buttons.rs_click = true;
+        session.step(&click, 4);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["pivot"]["y"], 540.0);
     }
 }

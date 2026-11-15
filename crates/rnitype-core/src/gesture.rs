@@ -15,6 +15,10 @@ pub struct GestureConfig {
     pub sector_hysteresis_deg: f32,
     pub commit_dwell_ms: u32,
     pub cancel_dwell_ms: u32,
+    /// auto-repeat: เริ่มซ้ำหลังค้างทิศเดิมนานเท่านี้ (spec: 350 ms)
+    pub repeat_delay_ms: u32,
+    /// auto-repeat: ระยะระหว่างครั้งถัดไป (spec: 90 ms)
+    pub repeat_rate_ms: u32,
 }
 
 impl Default for GestureConfig {
@@ -27,6 +31,8 @@ impl Default for GestureConfig {
             sector_hysteresis_deg: 9.0,
             commit_dwell_ms: 60,
             cancel_dwell_ms: 600,
+            repeat_delay_ms: 350,
+            repeat_rate_ms: 90,
         }
     }
 }
@@ -37,6 +43,8 @@ pub enum GestureState {
     GroupArmed,
     CharSelected,
     Committing,
+    /// ค้างทิศเดิมหลัง commit → พิมพ์ซ้ำ (REPEATING)
+    Repeating,
 }
 
 /// ผลลัพธ์เมื่อยืนยันตัวอักษรแล้ว (mapper แปลงเป็นคีย์ต่อ)
@@ -56,6 +64,10 @@ pub struct GestureEngine {
     rs: SectorTracker,
     selected_ms: u32,
     commit_ms: u32,
+    /// ช่องที่เพิ่ง commit — ถ้า LS ยังค้างและกลับไปค้างทิศเดิม = auto-repeat
+    repeat_pending: Option<(Dir8, Dir8)>,
+    repeat_ms: u32,
+    repeat_count: u32,
     /// หลัง "ยกเลิก" (ไม่ใช่หลัง commit) ต้องปล่อย LS กลับก่อนจึงเริ่ม gesture ใหม่ได้
     locked: bool,
 }
@@ -70,6 +82,9 @@ impl GestureEngine {
             rs: SectorTracker::new(cfg.sector_hysteresis_deg),
             selected_ms: 0,
             commit_ms: 0,
+            repeat_pending: None,
+            repeat_ms: 0,
+            repeat_count: 0,
             locked: false,
             cfg,
         }
@@ -91,6 +106,11 @@ impl GestureEngine {
         self.sector
     }
 
+    /// จำนวนครั้งที่พิมพ์ซ้ำในรอบ REPEATING ปัจจุบัน (`0` = ไม่ได้ repeat)
+    pub fn repeat_count(&self) -> u32 {
+        self.repeat_count
+    }
+
     /// เรียกทุก 4 ms (250 Hz) พร้อม `dt_ms` ที่ผ่านจริง
     /// คืน `Some(Commit)` เฉพาะเฟรมที่ยืนยันตัวอักษร
     pub fn tick(&mut self, pad: &PadState, dt_ms: u32) -> Option<Commit> {
@@ -98,6 +118,10 @@ impl GestureEngine {
 
         match self.state {
             GestureState::Idle => {
+                if lm < self.cfg.ls_release {
+                    // ปล่อย LS = จบรอบ auto-repeat
+                    self.repeat_pending = None;
+                }
                 if self.locked {
                     // หลังยกเลิก ต้องปล่อย LS กลับก่อน กัน "พิมพ์ค้าง" จากการกดค้าง
                     if lm < self.cfg.ls_release {
@@ -109,6 +133,9 @@ impl GestureEngine {
                 if lm >= self.cfg.ls_activate
                     && let Some(group) = self.ls.update(pad.ls, self.cfg.ls_activate)
                 {
+                    if self.repeat_pending.map(|(pending, _)| pending) != Some(group) {
+                        self.repeat_pending = None;
+                    }
                     self.group = Some(group);
                     self.sector = None;
                     self.rs.reset();
@@ -125,6 +152,9 @@ impl GestureEngine {
                 }
                 // ยังเปลี่ยนกลุ่มได้ก่อนเลือกตัวอักษร
                 if let Some(group) = self.ls.update(pad.ls, self.cfg.ls_release) {
+                    if self.repeat_pending.map(|(pending, _)| pending) != Some(group) {
+                        self.repeat_pending = None;
+                    }
                     self.group = Some(group);
                 }
                 if let Some(sector) = self.rs.update(pad.rs, self.cfg.rs_activate) {
@@ -148,6 +178,25 @@ impl GestureEngine {
                         self.selected_ms = 0;
                     }
                     self.selected_ms = self.selected_ms.saturating_add(dt_ms);
+
+                    // auto-repeat: ค้างทิศเดิมหลัง commit ครบ repeat_delay → พิมพ์ซ้ำ
+                    if let Some((pending_group, pending_sector)) = self.repeat_pending {
+                        if self.group == Some(pending_group) && self.sector == Some(pending_sector)
+                        {
+                            if self.selected_ms >= self.cfg.repeat_delay_ms {
+                                self.state = GestureState::Repeating;
+                                self.repeat_ms = 0;
+                                self.repeat_count = 1;
+                                return Some(Commit {
+                                    group: pending_group,
+                                    sector: pending_sector,
+                                });
+                            }
+                        } else {
+                            self.repeat_pending = None;
+                        }
+                    }
+
                     if self.selected_ms > self.cfg.cancel_dwell_ms {
                         // ค้างนานเกิน = ยกเลิก ไม่พิมพ์
                         self.cancel();
@@ -155,6 +204,56 @@ impl GestureEngine {
                 } else if rm < self.cfg.rs_release {
                     self.state = GestureState::Committing;
                     self.commit_ms = 0;
+                }
+            }
+
+            GestureState::Repeating => {
+                if lm < self.cfg.ls_release {
+                    self.cancel();
+                    return None;
+                }
+                // เปลี่ยนกลุ่ม = เริ่มเลือกใหม่ (ไม่ repeat ต่อ)
+                if let Some(group) = self.ls.update(pad.ls, self.cfg.ls_release)
+                    && Some(group) != self.group
+                {
+                    self.group = Some(group);
+                    self.sector = None;
+                    self.selected_ms = 0;
+                    self.repeat_pending = None;
+                    self.state = GestureState::GroupArmed;
+                    return None;
+                }
+
+                let rm = pad.rs.magnitude();
+                if rm < self.cfg.rs_release {
+                    // ปล่อย RS = หยุด repeat (ยังจำช่องไว้ให้ดันซ้ำได้)
+                    self.state = GestureState::Idle;
+                    self.sector = None;
+                    self.selected_ms = 0;
+                    self.repeat_ms = 0;
+                    self.repeat_count = 0;
+                    return None;
+                }
+                if rm >= self.cfg.rs_activate
+                    && let Some(sector) = self.rs.update(pad.rs, self.cfg.rs_activate)
+                    && Some(sector) != self.sector
+                {
+                    // เปลี่ยนช่องระหว่างค้าง = เลือกตัวใหม่ตามปกติ
+                    self.sector = Some(sector);
+                    self.selected_ms = 0;
+                    self.repeat_pending = None;
+                    self.state = GestureState::CharSelected;
+                    return None;
+                }
+
+                self.repeat_ms = self.repeat_ms.saturating_add(dt_ms);
+                if self.repeat_ms >= self.cfg.repeat_rate_ms {
+                    self.repeat_ms = 0;
+                    self.repeat_count = self.repeat_count.saturating_add(1);
+                    return self
+                        .group
+                        .zip(self.sector)
+                        .map(|(group, sector)| Commit { group, sector });
                 }
             }
 
@@ -176,6 +275,8 @@ impl GestureEngine {
                         .zip(self.sector)
                         .map(|(group, sector)| Commit { group, sector });
                     self.reset(false);
+                    // จำช่องไว้: ถ้า LS ยังค้างและดัน RS ทิศเดิมต่อ = auto-repeat
+                    self.repeat_pending = commit.map(|commit| (commit.group, commit.sector));
                     return commit;
                 }
             }
@@ -202,6 +303,9 @@ impl GestureEngine {
         self.sector = None;
         self.selected_ms = 0;
         self.commit_ms = 0;
+        self.repeat_pending = None;
+        self.repeat_ms = 0;
+        self.repeat_count = 0;
         self.locked = lock;
         self.rs.reset();
     }
@@ -329,5 +433,99 @@ mod tests {
                 sector: Dir8::N
             }
         );
+    }
+
+    /* ---------------- auto-repeat (REPEATING) ---------------- */
+
+    /// พิมพ์ 1 ตัวด้วยท่ามาตรฐาน แล้วคืน engine ที่ LS ยังค้างอยู่
+    fn commit_one(e: &mut GestureEngine) -> Commit {
+        e.tick(&pad((0.0, 0.9), (0.0, 0.0)), 4);
+        e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+        e.tick(&pad((0.0, 0.9), (0.0, 0.0)), 4);
+        e.tick(&pad((0.0, 0.9), (0.0, 0.0)), 64)
+            .expect("ต้อง commit ครั้งแรก")
+    }
+
+    #[test]
+    fn holding_the_same_sector_after_commit_repeats_at_spec_timings() {
+        let mut e = engine();
+        let first = commit_one(&mut e);
+        assert_eq!(e.state(), GestureState::Idle);
+
+        // ดัน RS กลับทิศเดิม
+        e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+        assert_eq!(e.state(), GestureState::GroupArmed);
+        e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+        assert_eq!(e.state(), GestureState::CharSelected);
+
+        // ยังไม่ครบ 350 ms → ไม่ repeat
+        assert!(e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 300).is_none());
+        // ครบ 350 ms → repeat ครั้งแรก
+        let repeat = e
+            .tick(&pad((0.0, 0.9), (0.0, 0.9)), 50)
+            .expect("ต้อง repeat");
+        assert_eq!(repeat, first);
+        assert_eq!(e.state(), GestureState::Repeating);
+        assert_eq!(e.repeat_count(), 1);
+
+        // 90 ms ต่อครั้ง
+        assert!(e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 89).is_none());
+        assert_eq!(
+            e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 1),
+            Some(first),
+            "ต้อง repeat ครั้งที่ 2"
+        );
+        assert_eq!(e.repeat_count(), 2);
+    }
+
+    #[test]
+    fn releasing_rs_stops_repeating_and_ls_release_clears_it() {
+        let mut e = engine();
+        commit_one(&mut e);
+        e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+        e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+        e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 350);
+        assert_eq!(e.state(), GestureState::Repeating);
+
+        // ปล่อย RS → หยุด (ไม่พิมพ์เพิ่ม)
+        e.tick(&pad((0.0, 0.9), (0.0, 0.0)), 4);
+        assert_eq!(e.state(), GestureState::Idle);
+        for _ in 0..50 {
+            assert!(e.tick(&pad((0.0, 0.9), (0.0, 0.0)), 4).is_none());
+        }
+        assert_eq!(e.repeat_count(), 0);
+
+        // ปล่อย LS → ล้าง pending: ดัน RS ทิศเดิมใหม่จะไม่ repeat อีก
+        e.tick(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+        assert!(e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 4).is_none());
+        e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+        assert!(e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 400).is_none());
+    }
+
+    #[test]
+    fn different_sector_after_commit_does_not_repeat() {
+        let mut e = engine();
+        commit_one(&mut e);
+        // ดัน RS ไป ↘ (ช่องอื่น) ค้าง 500 ms → ต้องไม่ repeat (แต่ยังไม่ครบ cancel 600)
+        e.tick(&pad((0.0, 0.9), (0.9, -0.9)), 4);
+        e.tick(&pad((0.0, 0.9), (0.9, -0.9)), 4);
+        assert!(e.tick(&pad((0.0, 0.9), (0.9, -0.9)), 500).is_none());
+        assert_eq!(e.state(), GestureState::CharSelected);
+        assert_eq!(e.sector(), Some(Dir8::SE));
+    }
+
+    #[test]
+    fn changing_group_while_repeating_starts_a_new_selection() {
+        let mut e = engine();
+        commit_one(&mut e);
+        e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+        e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+        e.tick(&pad((0.0, 0.9), (0.0, 0.9)), 350);
+        assert_eq!(e.state(), GestureState::Repeating);
+
+        // เลื่อน LS ไปกลุ่ม → ใหม่ = กลับ GroupArmed
+        e.tick(&pad((0.9, 0.0), (0.0, 0.9)), 4);
+        assert_eq!(e.state(), GestureState::GroupArmed);
+        assert_eq!(e.group(), Some(Dir8::E));
     }
 }

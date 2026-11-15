@@ -16,18 +16,27 @@
 //! - ปุ่มหน้าแบบแตะ ทุก mode ที่ไม่ใช่วง: A = Space · B = Backspace · X = Enter · Y = Tab
 //!   · ตัด gesture ที่ค้างก่อนส่งเสมอ · B ขณะมี gesture = ยกเลิกอย่างเดียว (spec §2)
 //!
+//! ขอบเขตของ slice 3 (P2 Track A — mouse/Nav/repeat/layer):
+//! - Mouse mode: RS → pointer (gamma/accel/smoothing) · RB/RT = คลิกซ้าย/ขวา ·
+//!   RS click = recenter · LS = scroll (แนวนอน/แนวตั้ง/↖ Home/↘ End)
+//! - Nav mode: LS หยาบ · RS ละเอียด · LT precision · RS click = pivot กลับจุดเริ่มต้น
+//! - auto-repeat: หลัง commit ถ้าดัน RS กลับทิศเดิมค้าง 350 ms → ซ้ำทุก 90 ms
+//! - layer 2: RB/RT (ค้าง = ชั่วคราว · แตะสั้นโดยไม่พิมพ์ = ล็อก)
+//! - ปุ่มหน้า: A double-tap = Enter · B hold 400 ms = Ctrl+Backspace · Y hold = Esc
+//!
 //! ยังไม่ทำใน slice นี้ (TODO ของ P2 รอบถัดไป):
-//! - pointer math/accel ของ Mouse mode · การเลื่อน pivot ของ Nav mode
-//! - auto-repeat (REPEATING) · layer 2 · quick bar (LB ค้าง) · caret nav
-//! - ปุ่มหน้าแบบผสม: A แตะเร็ว 2 ครั้ง = Enter · B ค้าง 400 ms = ลบทั้งคำ · Y ค้าง = Esc
-//! - LT/LB ตอน Mouse/Nav = precision hold (ADR-13 ยังไม่กำหนดค่า)
+//! - quick bar (LB ค้าง) · caret nav (R3) · sticky drag (RB 2 แตะ)
+//! - pivot clamp ตามขอบจอ + mixed-DPI
 //! - ตรวจ exclusion list / จอยหลุด (เป็นงานฝั่ง app–win ไม่ใช่ core)
 
-use crate::action::{Action, Command, Key, KeyPress, Mode, NamedKey};
+use crate::action::{Action, Command, Key, KeyPress, Mode, MouseButton, NamedKey};
 use crate::gesture::{GestureConfig, GestureState};
 use crate::keymap::Lang;
 use crate::normalizer::{Dir8, SectorTracker};
 use crate::pad::{PadState, Vec2};
+use crate::pointer::{
+    PivotConfig, PivotMover, PointerConfig, PointerMover, ScrollAxis, ScrollConfig, ScrollEngine,
+};
 use crate::typing::TypingPipeline;
 
 /// ภาษาที่สองสูงสุดที่วงภาษารองรับ (spec §3.2 — สูงสุด 8)
@@ -42,6 +51,16 @@ pub struct RuntimeConfig {
     pub emergency_hold_ms: u32,
     /// ระยะเวลาที่หยุดรับ input หลังกดปิดฉุกเฉิน (spec §4: `deadman` 3 s)
     pub deadman_ms: u32,
+    /// Mouse mode: สูตร pointer
+    pub pointer: PointerConfig,
+    /// Nav mode: ความเร็ว pivot
+    pub pivot: PivotConfig,
+    /// Mouse mode: LS → wheel
+    pub scroll: ScrollConfig,
+    /// A สองครั้งภายในเวลานี้ = Enter · RB/RT แตะ = ล็อกชั้น 2 (spec: 280 ms)
+    pub double_tap_ms: u32,
+    /// B ค้าง / Y ค้าง ต้องนานเท่านี้ (interaction model §4: 400 ms)
+    pub face_hold_ms: u32,
 }
 
 impl Default for RuntimeConfig {
@@ -50,6 +69,11 @@ impl Default for RuntimeConfig {
             gesture: GestureConfig::default(),
             emergency_hold_ms: 1500,
             deadman_ms: 3000,
+            pointer: PointerConfig::default(),
+            pivot: PivotConfig::default(),
+            scroll: ScrollConfig::default(),
+            double_tap_ms: 280,
+            face_hold_ms: 400,
         }
     }
 }
@@ -112,8 +136,30 @@ pub struct RuntimeEngine {
     prev_x: bool,
     prev_y: bool,
     prev_lt: bool,
+    prev_rb: bool,
+    prev_rt: bool,
+    prev_rs_click: bool,
     /// ADR-13: LT = สลับตัวพิมพ์ใหญ่ (toggle) — คงอยู่จนกดอีกครั้ง ไม่รีเซ็ตหลังพิมพ์
     shift_lock: bool,
+    /// ชั้น 2 (RB/RT): แตะ = ล็อก · ค้าง = ชั่วคราว
+    layer2_lock: bool,
+    layer2_held: bool,
+    rb_hold_ms: u32,
+    rt_hold_ms: u32,
+    /// มี gesture เกิดขึ้นระหว่างกด RB/RT → ไม่นับเป็นการแตะล็อก
+    layer2_used: bool,
+    prev_layer: u8,
+    /// A สองครั้งภายในหน้าต่างนี้ = Enter
+    a_window_ms: u32,
+    b_hold_ms: u32,
+    b_hold_fired: bool,
+    y_hold_ms: u32,
+    y_pending: bool,
+    y_hold_fired: bool,
+    pointer: PointerMover,
+    scroll: ScrollEngine,
+    pivot: PivotMover,
+    scroll_diag_fired: bool,
 }
 
 /// rising edge ของปุ่มที่ต้องนับครั้งเดียวต่อการกด (กัน auto-repeat ของจอย)
@@ -125,23 +171,9 @@ struct Edges {
     x: bool,
     y: bool,
     lt: bool,
-}
-
-/// ปุ่มหน้าที่ถูกแตะในเฟรมนี้ — สูงสุด 1 ปุ่มต่อเฟรม (spec ไม่ได้กำหนดกรณีชนกัน)
-///
-/// เรียง B ก่อนเพื่อให้ "ยกเลิก" ชนะปุ่มอื่น · X/Y ไม่ถูกใช้ในวงคำสั่ง
-fn face_key(edges: Edges) -> Option<NamedKey> {
-    if edges.b {
-        Some(NamedKey::Backspace)
-    } else if edges.a {
-        Some(NamedKey::Space)
-    } else if edges.x {
-        Some(NamedKey::Enter)
-    } else if edges.y {
-        Some(NamedKey::Tab)
-    } else {
-        None
-    }
+    rb: bool,
+    rt: bool,
+    rs_click: bool,
 }
 
 impl RuntimeEngine {
@@ -168,7 +200,26 @@ impl RuntimeEngine {
             prev_x: false,
             prev_y: false,
             prev_lt: false,
+            prev_rb: false,
+            prev_rt: false,
+            prev_rs_click: false,
             shift_lock: false,
+            layer2_lock: false,
+            layer2_held: false,
+            rb_hold_ms: 0,
+            rt_hold_ms: 0,
+            layer2_used: false,
+            prev_layer: 1,
+            a_window_ms: 0,
+            b_hold_ms: 0,
+            b_hold_fired: false,
+            y_hold_ms: 0,
+            y_pending: false,
+            y_hold_fired: false,
+            pointer: PointerMover::new(cfg.pointer),
+            scroll: ScrollEngine::new(cfg.scroll),
+            pivot: PivotMover::new(cfg.pivot),
+            scroll_diag_fired: false,
         }
     }
 
@@ -187,6 +238,25 @@ impl RuntimeEngine {
         self.shift_lock
     }
 
+    /// ชั้น keymap ที่ใช้อยู่ (1 = ปกติ · 2 = RB/RT)
+    pub fn layer(&self) -> u8 {
+        if self.layer2_lock || self.layer2_held {
+            2
+        } else {
+            1
+        }
+    }
+
+    /// `true` = ล็อกชั้น 2 อยู่ (แตะ RB/RT) — HUD ใช้บอกสถานะ
+    pub fn layer2_locked(&self) -> bool {
+        self.layer2_lock
+    }
+
+    /// จำนวนครั้งที่พิมพ์ซ้ำในรอบ REPEATING (HUD `preview.count`)
+    pub fn repeat_count(&self) -> u32 {
+        self.typing.repeat_count()
+    }
+
     /// เปลี่ยน mode จากภายนอก (profile / exclusion list / ตั้งค่า)
     /// — ตัด gesture การพิมพ์ที่ค้างและปิดวงทั้งหมด (spec §3 ข้อ 1: event ที่สำคัญกว่าตัด gesture)
     ///
@@ -198,6 +268,26 @@ impl RuntimeEngine {
         self.resume_mode = mode;
         self.typing.cancel();
         self.close_wheel();
+        self.reset_mode_state();
+    }
+
+    /// ล้างสถานะชั่วคราวของ mode (ชั้น 2 / pointer / scroll / ปุ่มหน้าค้าง)
+    fn reset_mode_state(&mut self) {
+        self.layer2_lock = false;
+        self.layer2_held = false;
+        self.rb_hold_ms = 0;
+        self.rt_hold_ms = 0;
+        self.layer2_used = false;
+        self.prev_layer = 1;
+        self.pointer.reset();
+        self.scroll.reset();
+        self.scroll_diag_fired = false;
+        self.a_window_ms = 0;
+        self.b_hold_ms = 0;
+        self.b_hold_fired = false;
+        self.y_hold_ms = 0;
+        self.y_pending = false;
+        self.y_hold_fired = false;
     }
 
     pub fn lang(&self) -> Lang {
@@ -290,6 +380,9 @@ impl RuntimeEngine {
             x: pad.buttons.x && !self.prev_x,
             y: pad.buttons.y && !self.prev_y,
             lt: pad.buttons.lt && !self.prev_lt,
+            rb: pad.buttons.rb && !self.prev_rb,
+            rt: pad.buttons.rt && !self.prev_rt,
+            rs_click: pad.buttons.rs_click && !self.prev_rs_click,
         };
 
         let action = self.step(pad, dt_ms, edges);
@@ -300,10 +393,16 @@ impl RuntimeEngine {
         self.prev_x = pad.buttons.x;
         self.prev_y = pad.buttons.y;
         self.prev_lt = pad.buttons.lt;
+        self.prev_rb = pad.buttons.rb;
+        self.prev_rt = pad.buttons.rt;
+        self.prev_rs_click = pad.buttons.rs_click;
         action
     }
 
     fn step(&mut self, pad: &PadState, dt_ms: u32, edges: Edges) -> Option<Action> {
+        // ตัวจับเวลา double-tap ของ A เดินตลอดเวลา (แม้อยู่ในวง/Disabled)
+        self.a_window_ms = self.a_window_ms.saturating_sub(dt_ms);
+
         // 1) ปุ่มปิดฉุกเฉิน (LB+RB ค้าง 1.5 s) — สำคัญที่สุด
         if self.mode != Mode::Disabled {
             self.emergency_hold_ms = if pad.buttons.lb && pad.buttons.rb {
@@ -332,54 +431,267 @@ impl RuntimeEngine {
             return self.tick_wheel(pad, dt_ms, edges.a, edges.b);
         }
 
-        // 5) Modifier: LT แตะ = สลับ Shift lock (ADR-13)
-        // เฉพาะ Type — Mouse/Nav ยังเป็น hold = precision (ยังไม่ทำใน slice นี้)
+        // 5) Modifier: LT แตะ = สลับ Shift lock (ADR-13) — เฉพาะ Type
         if edges.lt && self.mode == Mode::Type {
             self.shift_lock = !self.shift_lock;
         }
 
-        // 6) ปุ่มหน้า A/B/X/Y (spec §3 ข้อ 5) — ตัด gesture ก่อน แล้วจึงส่งคีย์
-        // slice นี้ทำเฉพาะ "แตะ" — auto-repeat / double-tap / hold ยังไม่ทำ (ดู press_face_button)
-        if let Some(key) = face_key(edges) {
-            return self.press_face_button(pad, key);
+        // 6) ชั้น 2 (RB/RT) เฉพาะ Type: แตะ = ล็อก · ค้าง = ชั่วคราว
+        if self.mode == Mode::Type {
+            self.tick_layer2(pad, dt_ms, edges.rb, edges.rt);
+            // ใช้ RB/RT ค้างระหว่างพิมพ์ = ชั่วคราว ไม่ใช่แตะเพื่อล็อก
+            if self.layer2_held && self.typing.state() != GestureState::Idle {
+                self.layer2_used = true;
+            }
+            // เปลี่ยนชั้นกลาง gesture = ยกเลิก (กันพิมพ์ผิดชุด)
+            let layer = self.layer();
+            if layer != self.prev_layer && self.typing.state() != GestureState::Idle {
+                self.typing.cancel();
+            }
+            self.prev_layer = layer;
+        } else {
+            self.layer2_held = false;
+            self.prev_layer = 1;
         }
 
-        // 7) gesture บนแกนตาม mode
+        // 7) ปุ่มหน้า A/B/X/Y + double-tap / hold (spec §4)
+        if let Some(action) = self.tick_face(pad, dt_ms, edges) {
+            return Some(action);
+        }
+        if self.face_busy(pad) {
+            return None;
+        }
+
+        // 8) gesture บนแกนตาม mode
         match self.mode {
-            Mode::Type => self
-                .typing
-                .tick(pad, dt_ms)
-                .map(|action| self.with_shift_lock(action)),
-            // TODO(P2 ถัดไป): pointer math/accel (Mouse) และ pivot movement (Nav)
-            Mode::Mouse | Mode::Nav => None,
+            Mode::Type => {
+                self.typing.set_layer(self.layer());
+                self.typing
+                    .tick(pad, dt_ms)
+                    .map(|action| self.with_shift_lock(action))
+            }
+            Mode::Mouse => self.tick_mouse(pad, dt_ms, edges),
+            Mode::Nav => self.tick_nav(pad, dt_ms, edges),
             Mode::Disabled => None,
         }
     }
 
-    /// ปุ่มหน้าแบบแตะ (spec §4): A = Space · B = Backspace · X = Enter · Y = Tab
+    /* ---------------- ชั้น 2 (RB/RT) ---------------- */
+
+    fn tick_layer2(&mut self, pad: &PadState, dt_ms: u32, rb_edge: bool, rt_edge: bool) {
+        if rb_edge {
+            self.rb_hold_ms = 0;
+            self.layer2_used = false;
+        }
+        if rt_edge {
+            self.rt_hold_ms = 0;
+            self.layer2_used = false;
+        }
+        if pad.buttons.rb {
+            self.rb_hold_ms = self.rb_hold_ms.saturating_add(dt_ms);
+        }
+        if pad.buttons.rt {
+            self.rt_hold_ms = self.rt_hold_ms.saturating_add(dt_ms);
+        }
+        self.layer2_held = pad.buttons.rb || pad.buttons.rt;
+
+        // แตะเร็วโดยไม่ได้พิมพ์ระหว่างกด = สลับล็อก
+        if self.prev_rb && !pad.buttons.rb && self.rb_hold_ms < self.cfg.double_tap_ms {
+            if !self.layer2_used {
+                self.layer2_lock = !self.layer2_lock;
+            }
+            self.rb_hold_ms = 0;
+        }
+        if self.prev_rt && !pad.buttons.rt && self.rt_hold_ms < self.cfg.double_tap_ms {
+            if !self.layer2_used {
+                self.layer2_lock = !self.layer2_lock;
+            }
+            self.rt_hold_ms = 0;
+        }
+    }
+
+    /* ---------------- ปุ่มหน้า (double-tap / hold) ---------------- */
+
+    fn face_busy(&self, pad: &PadState) -> bool {
+        pad.buttons.b || (pad.buttons.y && self.y_pending)
+    }
+
+    /// จัดการปุ่มหน้า — คืน action เดียวต่อเฟรม (ท่อ injector รับทีละ action)
     ///
-    /// ทำงานทุก mode ที่ไม่ใช่วง/Disabled · ปุ่มหน้าตัด gesture ที่ค้างก่อนเสมอ (spec §3)
-    /// - `B` ขณะมี gesture (GroupArmed/CharSelected/Committing): ยกเลิกอย่างเดียว ไม่ส่งคีย์ (spec §2)
-    ///
-    /// TODO(P2 ถัดไป — interaction model §4): A แตะเร็ว 2 ครั้ง = Enter ·
-    /// B ค้าง 400 ms = ลบทั้งคำ · Y ค้าง = Esc · auto-repeat ของปุ่มหน้า
-    fn press_face_button(&mut self, pad: &PadState, key: NamedKey) -> Option<Action> {
+    /// - A: Space · แตะเร็ว 2 ครั้ง = Enter (Space แรกออกไปแล้ว — ดู ADR-21)
+    /// - B: Backspace · ค้าง 400 ms = Ctrl+Backspace (ลบทั้งคำ)
+    /// - X: Enter
+    /// - Y: Tab on release · ค้าง 400 ms = Esc
+    fn tick_face(&mut self, pad: &PadState, dt_ms: u32, edges: Edges) -> Option<Action> {
         let typing_active = self.typing.state() != GestureState::Idle;
-        if typing_active {
-            self.typing.cancel();
+        if edges.a || edges.b || edges.x || edges.y {
+            if typing_active {
+                self.typing.cancel();
+            }
+            self.layer2_used = true;
         }
 
-        if typing_active && key == NamedKey::Backspace {
-            return None;
+        // B hold (ตัวจับเวลาเดินแม้ไม่มี edge)
+        if edges.b {
+            self.b_hold_ms = 0;
+            self.b_hold_fired = false;
+        } else if pad.buttons.b {
+            self.b_hold_ms = self.b_hold_ms.saturating_add(dt_ms);
+        } else {
+            self.b_hold_ms = 0;
+            self.b_hold_fired = false;
         }
 
-        Some(Action::Key(KeyPress {
+        // Y hold — Tab ตอนปล่อย, Esc เมื่อค้างครบ 400 ms
+        if edges.y {
+            self.y_pending = true;
+            self.y_hold_ms = 0;
+            self.y_hold_fired = false;
+        } else if pad.buttons.y && self.y_pending {
+            self.y_hold_ms = self.y_hold_ms.saturating_add(dt_ms);
+        }
+
+        // A double-tap ก่อน (สำคัญกว่าปุ่มอื่นในเฟรมเดียวกัน)
+        if edges.a {
+            if self.a_window_ms > 0 {
+                self.a_window_ms = 0;
+                return Some(self.named_key(NamedKey::Enter, false));
+            }
+            self.a_window_ms = self.cfg.double_tap_ms;
+            return Some(self.named_key(NamedKey::Space, false));
+        }
+
+        if edges.x {
+            return Some(self.named_key(NamedKey::Enter, false));
+        }
+
+        if edges.b {
+            // B ขณะมี gesture = ยกเลิกอย่างเดียว ไม่ลบ (spec §2)
+            if typing_active {
+                return None;
+            }
+            return Some(self.named_key(NamedKey::Backspace, pad.buttons.lb));
+        }
+
+        if pad.buttons.b && !self.b_hold_fired && self.b_hold_ms >= self.cfg.face_hold_ms {
+            self.b_hold_fired = true;
+            return Some(self.named_key(NamedKey::Backspace, true));
+        }
+
+        if self.y_pending {
+            if pad.buttons.y {
+                if !self.y_hold_fired && self.y_hold_ms >= self.cfg.face_hold_ms {
+                    self.y_hold_fired = true;
+                    self.y_pending = false;
+                    return Some(self.named_key(NamedKey::Escape, false));
+                }
+            } else {
+                self.y_pending = false;
+                return Some(self.named_key(NamedKey::Tab, pad.buttons.lb));
+            }
+        }
+
+        None
+    }
+
+    fn named_key(&self, key: NamedKey, ctrl: bool) -> Action {
+        Action::Key(KeyPress {
             key: Key::Named(key),
             // ADR-13: LT เป็น toggle ไม่ใช่ hold → ไม่ส่ง Shift ของ OS ออกไป
             shift: false,
-            // LB ยังเป็น Ctrl (spec §5) — เช่น Ctrl+Backspace (ลบทั้งคำ) ในอนาคต
-            ctrl: pad.buttons.lb,
-        }))
+            ctrl,
+        })
+    }
+
+    /* ---------------- Mouse mode ---------------- */
+
+    fn tick_mouse(&mut self, pad: &PadState, dt_ms: u32, edges: Edges) -> Option<Action> {
+        // RB = คลิกซ้าย (กดค้าง = ลาก) · RT = คลิกขวา
+        if edges.rb {
+            return Some(Action::MouseButton {
+                button: MouseButton::Left,
+                down: true,
+            });
+        }
+        if self.prev_rb && !pad.buttons.rb {
+            return Some(Action::MouseButton {
+                button: MouseButton::Left,
+                down: false,
+            });
+        }
+        if edges.rt {
+            return Some(Action::MouseButton {
+                button: MouseButton::Right,
+                down: true,
+            });
+        }
+        if self.prev_rt && !pad.buttons.rt {
+            return Some(Action::MouseButton {
+                button: MouseButton::Right,
+                down: false,
+            });
+        }
+
+        // กด RS = pointer กลับกลางจอหลัก
+        if edges.rs_click {
+            self.pointer.reset();
+            self.scroll.reset();
+            return Some(Action::RecenterPointer);
+        }
+
+        // RS → pointer (LT = precision · LB = turbo)
+        let (dx, dy) = self
+            .pointer
+            .tick(pad.rs, dt_ms, pad.buttons.lt, pad.buttons.lb);
+        if dx != 0 || dy != 0 {
+            return Some(Action::MouseMove { dx, dy });
+        }
+
+        // LS → scroll (↖ = Ctrl+Home · ↘ = Ctrl+End)
+        if pad.ls.x.abs() > 0.45 && pad.ls.y.abs() > 0.45 {
+            return self.scroll_diagonal(pad.ls);
+        }
+        self.scroll_diag_fired = false;
+        self.scroll
+            .tick(pad.ls, dt_ms, pad.buttons.lt)
+            .map(|(axis, delta)| match axis {
+                ScrollAxis::Vertical => Action::MouseWheel { delta },
+                ScrollAxis::Horizontal => Action::MouseHWheel { delta },
+            })
+    }
+
+    /// LS ↖ = ไปบนสุด · ↘ = ไปล่างสุด (ครั้งเดียวต่อการดัน)
+    fn scroll_diagonal(&mut self, ls: Vec2) -> Option<Action> {
+        let diagonal = ls.x.abs() > 0.45 && ls.y.abs() > 0.45;
+        if !diagonal {
+            self.scroll_diag_fired = false;
+            return None;
+        }
+        if self.scroll_diag_fired {
+            return None;
+        }
+        self.scroll_diag_fired = true;
+        let key = if ls.x < 0.0 && ls.y > 0.0 {
+            NamedKey::Home
+        } else if ls.x > 0.0 && ls.y < 0.0 {
+            NamedKey::End
+        } else {
+            return None;
+        };
+        Some(self.named_key(key, true))
+    }
+
+    /* ---------------- Nav mode (pivot) ---------------- */
+
+    fn tick_nav(&mut self, pad: &PadState, dt_ms: u32, edges: Edges) -> Option<Action> {
+        if edges.rs_click {
+            return Some(Action::ResetPivot);
+        }
+        let (dx, dy) = self.pivot.tick(pad.ls, pad.rs, dt_ms, pad.buttons.lt);
+        if dx.abs() < f32::EPSILON && dy.abs() < f32::EPSILON {
+            return None;
+        }
+        Some(Action::MovePivot { dx, dy })
     }
 
     /// ADR-13: แปลงคีย์ที่พิมพ์ตาม `shift_lock` แทนการส่ง Shift ของ OS
@@ -414,6 +726,7 @@ impl RuntimeEngine {
         // ครบ deadman → กลับ mode เดิม (spec §4: deadman 3 s)
         let resume = self.resume_mode;
         self.mode = resume;
+        self.reset_mode_state();
         Some(Action::SetMode(resume))
     }
 
@@ -428,6 +741,7 @@ impl RuntimeEngine {
         self.emergency_hold_ms = 0;
         self.close_wheel();
         self.typing.cancel();
+        self.reset_mode_state();
         Action::SetMode(Mode::Disabled)
     }
 
@@ -604,6 +918,7 @@ impl RuntimeEngine {
         self.mode = mode;
         self.typing.cancel();
         self.close_wheel();
+        self.reset_mode_state();
     }
 }
 
@@ -896,9 +1211,10 @@ mod tests {
         assert_eq!(e.mode(), Mode::Mouse);
         assert_eq!(e.wheel(), None);
 
-        // Mouse mode: LS/RS ไม่พิมพ์
+        // Mouse mode: LS/RS ไม่พิมพ์ (ขยับ pointer/wheel ได้)
         for _ in 0..30 {
-            assert_eq!(e.tick(&p((0.0, 0.9), (0.0, 0.9)), D), None);
+            let action = e.tick(&p((0.0, 0.9), (0.0, 0.9)), D);
+            assert!(!matches!(action, Some(Action::Key(_))), "ต้องไม่พิมพ์");
         }
 
         // กลับมาที่ Type EN ผ่านช่อง ↑ แล้วไป ↘ Place UI
@@ -1087,7 +1403,8 @@ mod tests {
 
         // แกนยังค้าง → ไม่มีคีย์
         for _ in 0..30 {
-            assert_eq!(e.tick(&p((0.0, 0.9), (0.0, 0.9)), D), None);
+            let action = e.tick(&p((0.0, 0.9), (0.0, 0.9)), D);
+            assert!(!matches!(action, Some(Action::Key(_))));
         }
 
         // กลับ Type แล้วพิมพ์ได้ตามปกติ
@@ -1196,10 +1513,15 @@ mod tests {
             b.lb = true;
             b.rb = true;
         });
-        assert_eq!(
-            hold(&mut e, both, 1500, 100),
-            Some(Action::SetMode(Mode::Disabled))
-        );
+        // Mouse mode: RB = left click → ระหว่างทางมีคลิกก่อนถึง 1.5 s
+        let mut disabled = false;
+        for _ in 0..20 {
+            if e.tick(&both, 100) == Some(Action::SetMode(Mode::Disabled)) {
+                disabled = true;
+                break;
+            }
+        }
+        assert!(disabled, "LB+RB 1.5 s ต้องเข้า Disabled");
         assert_eq!(e.mode(), Mode::Disabled);
 
         let action = hold(&mut e, p((0.0, 0.0), (0.0, 0.0)), 3000, 100).expect("ต้องกลับมา");
@@ -1209,12 +1531,14 @@ mod tests {
 
     /* ---------------- slice 2: Shift toggle (LT, ADR-13) ---------------- */
 
-    /// แตะปุ่ม 1 ครั้ง (rising edge) บนแกนที่ปล่อยอยู่ แล้วปล่อย — คืน action ของเฟรมที่กด
+    /// แตะปุ่ม 1 ครั้ง (rising edge) แล้วปล่อย — คืน action จากเฟรมกดหรือเฟรมปล่อย
+    ///
+    /// ปุ่ม Y ส่ง Tab ตอนปล่อย (เพื่อแยก hold = Esc) ปุ่มอื่นส่งตอนกด
     fn tap(e: &mut RuntimeEngine, f: fn(&mut Buttons)) -> Option<Action> {
         let pressed = with(p((0.0, 0.0), (0.0, 0.0)), f);
-        let action = e.tick(&pressed, D);
-        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
-        action
+        let down = e.tick(&pressed, D);
+        let up = e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        down.or(up)
     }
 
     /// พิมพ์ตัวอักษร 1 ตัว (arm → select → ปล่อย RS → dwell)
@@ -1488,5 +1812,264 @@ mod tests {
         // B = ยกเลิกวง ไม่ส่ง Backspace
         assert_eq!(tap(&mut e, |b| b.b = true), None);
         assert_eq!(e.wheel(), None);
+    }
+
+    /* ---------------- slice 3: Mouse mode ---------------- */
+
+    /// เปิดวงคำสั่งแล้วเลือกโหมดด้วย RS (ทิศ `dir`) + ปล่อย RS
+    fn switch_mode(e: &mut RuntimeEngine, dir: (f32, f32)) {
+        open_cmd(e, (0.0, 0.0));
+        e.tick(&p((0.0, 0.0), dir), D);
+        let action = release_rs(e).expect("ต้องยืนยันโหมด");
+        assert!(matches!(action, Action::Command(_)));
+    }
+
+    fn to_mouse(e: &mut RuntimeEngine) {
+        switch_mode(e, (0.9, 0.0));
+        assert_eq!(e.mode(), Mode::Mouse);
+    }
+
+    fn to_nav(e: &mut RuntimeEngine) {
+        switch_mode(e, (0.9, -0.9));
+        assert_eq!(e.mode(), Mode::Nav);
+    }
+
+    fn button_press(button: fn(&mut Buttons)) -> PadState {
+        with(p((0.0, 0.0), (0.0, 0.0)), button)
+    }
+
+    #[test]
+    fn mouse_mode_moves_the_pointer_with_rs() {
+        let mut e = engine();
+        to_mouse(&mut e);
+        let action = e.tick(&p((0.0, 0.0), (1.0, 0.0)), 100).expect("ต้องขยับ");
+        match action {
+            Action::MouseMove { dx, dy } => {
+                assert!(dx > 0, "ได้ dx={dx}");
+                assert_eq!(dy, 0);
+            }
+            other => panic!("ต้องเป็น MouseMove ไม่ใช่ {other:?}"),
+        }
+        // ดันขึ้น → dy ติดลบ (หน้าจอ y ลง)
+        let action = e.tick(&p((0.0, 0.0), (0.0, 1.0)), 100).expect("ต้องขยับ");
+        assert!(matches!(action, Action::MouseMove { dy, .. } if dy < 0));
+    }
+
+    #[test]
+    fn mouse_rb_and_rt_click_down_and_up() {
+        let mut e = engine();
+        to_mouse(&mut e);
+
+        // RB = คลิกซ้าย
+        assert_eq!(
+            e.tick(&button_press(|b| b.rb = true), D),
+            Some(Action::MouseButton {
+                button: MouseButton::Left,
+                down: true
+            })
+        );
+        assert_eq!(
+            e.tick(&p((0.0, 0.0), (0.0, 0.0)), D),
+            Some(Action::MouseButton {
+                button: MouseButton::Left,
+                down: false
+            })
+        );
+
+        // RT = คลิกขวา
+        assert_eq!(
+            e.tick(&button_press(|b| b.rt = true), D),
+            Some(Action::MouseButton {
+                button: MouseButton::Right,
+                down: true
+            })
+        );
+        assert_eq!(
+            e.tick(&p((0.0, 0.0), (0.0, 0.0)), D),
+            Some(Action::MouseButton {
+                button: MouseButton::Right,
+                down: false
+            })
+        );
+    }
+
+    #[test]
+    fn mouse_rs_click_asks_the_app_to_recenter() {
+        let mut e = engine();
+        to_mouse(&mut e);
+        assert_eq!(
+            e.tick(&button_press(|b| b.rs_click = true), D),
+            Some(Action::RecenterPointer)
+        );
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), D), None);
+    }
+
+    #[test]
+    fn mouse_ls_scrolls_vertically_horizontally_and_to_the_ends() {
+        let mut e = engine();
+        to_mouse(&mut e);
+
+        assert_eq!(
+            e.tick(&p((0.0, 0.9), (0.0, 0.0)), 40),
+            Some(Action::MouseWheel { delta: 120 })
+        );
+        assert_eq!(
+            e.tick(&p((0.9, 0.0), (0.0, 0.0)), 40),
+            Some(Action::MouseHWheel { delta: 120 })
+        );
+        // ↖ = Ctrl+Home
+        assert_eq!(
+            e.tick(&p((-0.9, 0.9), (0.0, 0.0)), 40),
+            Some(Action::Key(KeyPress {
+                key: Key::Named(NamedKey::Home),
+                shift: false,
+                ctrl: true
+            }))
+        );
+        // ค้างทิศเดิม = ไม่ยิงซ้ำ
+        assert_eq!(e.tick(&p((-0.9, 0.9), (0.0, 0.0)), 40), None);
+    }
+
+    /* ---------------- slice 3: Nav mode ---------------- */
+
+    #[test]
+    fn nav_mode_moves_the_pivot_with_ls_and_rs() {
+        let mut e = engine();
+        to_nav(&mut e);
+
+        let action = e.tick(&p((0.0, 1.0), (0.0, 0.0)), 100).expect("ต้องขยับ");
+        assert!(
+            matches!(action, Action::MovePivot { dx, dy } if dx == 0.0 && dy <= -80.0),
+            "ได้ {action:?}"
+        );
+
+        let action = e.tick(&p((0.0, 0.0), (1.0, 0.0)), 100).expect("ต้องขยับ");
+        assert!(
+            matches!(action, Action::MovePivot { dx, dy } if dx >= 20.0 && dy == 0.0),
+            "ได้ {action:?}"
+        );
+    }
+
+    #[test]
+    fn nav_rs_click_resets_the_pivot() {
+        let mut e = engine();
+        to_nav(&mut e);
+        assert_eq!(
+            e.tick(&button_press(|b| b.rs_click = true), D),
+            Some(Action::ResetPivot)
+        );
+    }
+
+    /* ---------------- slice 3: ชั้น 2 (RB/RT) ---------------- */
+
+    fn tap_rb(e: &mut RuntimeEngine) {
+        e.tick(&button_press(|b| b.rb = true), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+    }
+
+    #[test]
+    fn tapping_rb_locks_layer_two_and_tapping_again_unlocks_it() {
+        let mut e = engine();
+        assert_eq!(e.layer(), 1);
+        tap_rb(&mut e);
+        assert_eq!(e.layer(), 2);
+        assert!(e.layer2_locked());
+        // ล็อกอยู่ = ปล่อย RB แล้วยังพิมพ์ชั้น 2 ได้
+        assert_eq!(type_dir(&mut e, LS_N, LS_N), key(Key::Char('A')));
+        tap_rb(&mut e);
+        assert_eq!(e.layer(), 1);
+        assert!(!e.layer2_locked());
+        // กลับมาพิมพ์ตัวเล็กตามเดิม
+        assert_eq!(type_dir(&mut e, LS_N, LS_N), key(Key::Char('a')));
+    }
+
+    #[test]
+    fn holding_rb_is_temporary_and_does_not_lock() {
+        let mut e = engine();
+        let rb = |ls: (f32, f32), rs: (f32, f32)| with(p(ls, rs), |b| b.rb = true);
+
+        e.tick(&rb((0.0, 0.0), (0.0, 0.0)), D);
+        e.tick(&rb((0.0, 0.0), (0.0, 0.0)), 300);
+        assert_eq!(e.layer(), 2);
+        assert!(!e.layer2_locked());
+
+        // พิมพ์ระหว่างกดค้าง (gesture เกิดขึ้น = ไม่นับเป็นการแตะ)
+        e.tick(&rb(LS_N, (0.0, 0.0)), D);
+        e.tick(&rb(LS_N, LS_N), D);
+        e.tick(&rb(LS_N, (0.0, 0.0)), D);
+        assert_eq!(e.tick(&rb(LS_N, (0.0, 0.0)), 64), key(Key::Char('A')));
+
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        assert_eq!(e.layer(), 1);
+        assert!(!e.layer2_locked(), "ค้างเพื่อพิมพ์ต้องไม่ล็อกชั้น 2");
+    }
+
+    #[test]
+    fn changing_layer_mid_gesture_cancels_the_selection() {
+        let mut e = engine();
+        e.tick(&p(LS_N, (0.0, 0.0)), D);
+        e.tick(&p(LS_N, LS_N), D);
+        assert_eq!(e.gesture_state(), GestureState::CharSelected);
+
+        e.tick(&button_press(|b| b.rb = true), D);
+        assert_eq!(e.gesture_state(), GestureState::Idle);
+        assert_eq!(e.layer(), 2);
+        // ปล่อย RS แล้วรอ dwell → ต้องไม่พิมพ์
+        e.tick(&p(LS_N, (0.0, 0.0)), D);
+        assert_eq!(e.tick(&p(LS_N, (0.0, 0.0)), 100), None);
+    }
+
+    /* ---------------- slice 3: double-tap / hold ---------------- */
+
+    #[test]
+    fn a_double_tap_sends_enter_instead_of_a_second_space() {
+        let mut e = engine();
+        let press = button_press(|b| b.a = true);
+
+        assert_eq!(e.tick(&press, D), key(Key::Named(NamedKey::Space)));
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        assert_eq!(e.tick(&press, D), key(Key::Named(NamedKey::Enter)));
+
+        // ครั้งที่ 3 หลังจากหน้าต่างหมด = Space อีกครั้ง
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), 300); // หน้าต่าง double-tap หมด
+        assert_eq!(e.tick(&press, D), key(Key::Named(NamedKey::Space)));
+    }
+
+    #[test]
+    fn b_hold_400ms_sends_ctrl_backspace() {
+        let mut e = engine();
+        let held = button_press(|b| b.b = true);
+        assert_eq!(e.tick(&held, D), key(Key::Named(NamedKey::Backspace)));
+        assert_eq!(e.tick(&held, 300), None, "ยังไม่ครบ 400 ms");
+        assert_eq!(
+            e.tick(&held, 100),
+            Some(Action::Key(KeyPress {
+                key: Key::Named(NamedKey::Backspace),
+                shift: false,
+                ctrl: true
+            }))
+        );
+        assert_eq!(e.tick(&held, 400), None, "ยิงครั้งเดียวต่อการกด");
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), D), None);
+    }
+
+    #[test]
+    fn y_is_tab_on_tap_and_escape_on_hold() {
+        // แตะ = Tab (ส่งตอนปล่อย)
+        let mut e = engine();
+        let held = button_press(|b| b.y = true);
+        assert_eq!(e.tick(&held, D), None);
+        assert_eq!(
+            e.tick(&p((0.0, 0.0), (0.0, 0.0)), D),
+            key(Key::Named(NamedKey::Tab))
+        );
+
+        // ค้าง 400 ms = Esc (ไม่ส่ง Tab ตอนปล่อย)
+        let mut e = engine();
+        assert_eq!(e.tick(&held, D), None);
+        assert_eq!(e.tick(&held, 390), None);
+        assert_eq!(e.tick(&held, 10), key(Key::Named(NamedKey::Escape)));
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), D), None);
     }
 }

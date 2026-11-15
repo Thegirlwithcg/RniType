@@ -12,6 +12,7 @@ pub mod gesture;
 pub mod keymap;
 pub mod normalizer;
 pub mod pad;
+pub mod pointer;
 pub mod runtime;
 pub mod typing;
 
@@ -20,5 +21,8 @@ pub use gesture::{Commit, GestureConfig, GestureEngine, GestureState};
 pub use keymap::Lang;
 pub use normalizer::{Dir8, Normalizer, NormalizerConfig, SectorTracker};
 pub use pad::{Buttons, PadState, Vec2};
+pub use pointer::{
+    PivotConfig, PivotMover, PointerConfig, PointerMover, ScrollAxis, ScrollConfig, ScrollEngine,
+};
 pub use runtime::{LangSlot, MAX_LANGUAGES, RuntimeConfig, RuntimeEngine, WheelKind};
 pub use typing::TypingPipeline;

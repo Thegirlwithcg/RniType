@@ -481,7 +481,8 @@ fn build_session(config: &Value) -> Session {
     let enabled = enabled_languages(config);
     let (px, py) = primary_monitor_center();
 
-    Session::new(engine, make_injector(), enabled, (px, py))
+    // pivot และ pointer เริ่มที่กลางจอหลัก (RS click ใน Mouse/Nav = กลับมาที่นี่)
+    Session::with_homes(engine, make_injector(), enabled, (px, py), (px, py))
 }
 
 /// ภาษาที่เปิดใน config (`languages[].enabled`) — ว่าง = EN/TH
@@ -666,7 +667,11 @@ fn log_action(action: &rnitype_core::Action) {
         Action::MouseButton { button, down } => {
             println!("[mouse] {button:?} {}", if *down { "down" } else { "up" })
         }
-        Action::MouseMove { dx, dy } => println!("[mouse] move {dx},{dy}"),
+        Action::MouseMove { .. } | Action::MovePivot { .. } => {}
+        Action::MouseWheel { delta } => println!("[mouse] wheel {delta}"),
+        Action::MouseHWheel { delta } => println!("[mouse] hwheel {delta}"),
+        Action::RecenterPointer => println!("[mouse] recenter pointer"),
+        Action::ResetPivot => println!("[nav] reset pivot"),
         other => println!("[pad] {other:?}"),
     }
 }

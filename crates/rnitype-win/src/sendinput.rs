@@ -11,9 +11,9 @@ use std::mem::size_of;
 use rnitype_core::{Action, MouseButton};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
-    MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEDOWN,
-    MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
-    MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
+    MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+    MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
+    MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
@@ -171,6 +171,7 @@ fn to_win_input(input: &Input) -> INPUT {
         ),
         Input::MouseButton { button, down } => mouse_input(0, 0, 0, button_flags(button, down)),
         Input::Wheel { delta } => mouse_input(0, 0, delta as u32, MOUSEEVENTF_WHEEL),
+        Input::HWheel { delta } => mouse_input(0, 0, delta as u32, MOUSEEVENTF_HWHEEL),
     }
 }
 
@@ -299,6 +300,10 @@ mod tests {
         let input = mouse(&Input::Wheel { delta: -120 });
         assert_eq!(input.mouseData, (-120i32) as u32);
         assert_eq!(input.dwFlags, MOUSEEVENTF_WHEEL);
+
+        let input = mouse(&Input::HWheel { delta: 120 });
+        assert_eq!(input.mouseData, 120);
+        assert_eq!(input.dwFlags, MOUSEEVENTF_HWHEEL);
     }
 
     #[test]

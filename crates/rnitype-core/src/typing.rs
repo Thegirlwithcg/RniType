@@ -2,7 +2,7 @@
 
 use crate::action::{Action, KeyPress};
 use crate::gesture::{Commit, GestureConfig, GestureEngine, GestureState};
-use crate::keymap::{Lang, lookup};
+use crate::keymap::{Lang, lookup_layer};
 use crate::normalizer::Dir8;
 use crate::pad::PadState;
 
@@ -10,6 +10,7 @@ use crate::pad::PadState;
 pub struct TypingPipeline {
     engine: GestureEngine,
     lang: Lang,
+    layer: u8,
 }
 
 impl TypingPipeline {
@@ -17,6 +18,7 @@ impl TypingPipeline {
         Self {
             engine: GestureEngine::new(cfg),
             lang,
+            layer: 1,
         }
     }
 
@@ -28,8 +30,22 @@ impl TypingPipeline {
         self.lang = lang;
     }
 
+    /// ชั้นของ keymap (1 = ปกติ · 2 = RB/RT)
+    pub fn layer(&self) -> u8 {
+        self.layer
+    }
+
+    pub fn set_layer(&mut self, layer: u8) {
+        self.layer = layer.max(1);
+    }
+
     pub fn state(&self) -> GestureState {
         self.engine.state()
+    }
+
+    /// จำนวนครั้งที่พิมพ์ซ้ำรอบปัจจุบัน (HUD แสดง ×n)
+    pub fn repeat_count(&self) -> u32 {
+        self.engine.repeat_count()
     }
 
     /// กลุ่มที่ LS เลือกอยู่ (index ตรงกับ [`Dir8`]) — HUD ใช้ไฮไลต์วงใน
@@ -54,10 +70,13 @@ impl TypingPipeline {
     }
 
     /// `LT` ค้าง = Shift, `LB` ค้าง = Ctrl (ตาม spec ข้อ 2.3)
+    ///
+    /// ชั้น 2 มีช่องว่าง (ไทย) → คืน `None` = commit แล้วไม่ส่งคีย์
     pub fn tick(&mut self, pad: &PadState, dt_ms: u32) -> Option<Action> {
         let Commit { group, sector } = self.engine.tick(pad, dt_ms)?;
+        let key = lookup_layer(self.lang, self.layer, group, sector)?;
         Some(Action::Key(KeyPress {
-            key: lookup(self.lang, group, sector),
+            key,
             shift: pad.buttons.lt,
             ctrl: pad.buttons.lb,
         }))
@@ -117,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn LT_becomes_shift_on_commit() {
+    fn lt_becomes_shift_on_commit() {
         let mut pipe = TypingPipeline::default();
         let mut pad = p((0.0, 0.9), (0.0, 0.0));
         pad.buttons.lt = true;
@@ -133,5 +152,26 @@ mod tests {
                 ctrl: false
             })
         );
+    }
+
+    #[test]
+    fn layer_two_lookup_drives_the_commit_key() {
+        let mut pipe = TypingPipeline::default();
+        pipe.set_layer(2);
+        let action = press(&mut pipe, (0.0, 0.9), (0.0, 0.9)).expect("commit");
+        assert_eq!(
+            action,
+            Action::Key(KeyPress {
+                key: Key::Char('A'),
+                shift: false,
+                ctrl: false
+            })
+        );
+
+        // ชั้น 2 ไทยグループ ↓ ว่าง → commit เงียบ ไม่มีคีย์
+        let mut th = TypingPipeline::new(Lang::Th, GestureConfig::default());
+        th.set_layer(2);
+        assert_eq!(press(&mut th, (0.0, -0.9), (0.0, 0.9)), None);
+        assert_eq!(th.state(), GestureState::Idle);
     }
 }
