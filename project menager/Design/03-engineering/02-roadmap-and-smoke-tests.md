@@ -63,6 +63,7 @@ tags: [plan, testing]
 | 2026-11-15 | P4 slice 3 | — | — | — | — | Typography: group 13.8 / char 20.4–30 / pill 13.2 px · contrast 6.87:1 · 24/24 checks · ยังไม่มี WPM (รอ runtime) |
 | 2026-11-15 | P4 slice 4 | — | — | — | — | Ring 340px + text 16px (วงเล็กลง 17%) · active animation · ขีดสระล่าง · 29/29 checks |
 | 2026-11-15 | runtime | — | — | — | — | จอยจริง → core → injector → HUD · `--fake-pad` พิมพ์จริง 21 คีย์/9 วิ · 108 tests · ยังไม่ได้ทดสอบจอยจริง |
+| 2026-11-15 | probe A | — | — | — | — | Xbox Controller: LS/RS ±1.00 · idle_peak 0.000 · LT/RT **ดิจิทัล** (LZ/RZ = 0.00) → `lt_analog` ใช้ไม่ได้กับจอยนี้ |
 
 ## 5. ความเสี่ยงและทางถอย
 

@@ -119,4 +119,5 @@ mode (`type-en/type-th/cmd/lang/mouse/nav/disabled`), state (`idle/group/char/co
 | exclusion list / UIPI (เกมบางตัวบล็อก SendInput) | P3 ที่เหลือ — ตอนนี้ใช้ tray Pause แทน |
 | IME/scancode path | P3 ที่เหลือ (Unicode ยังใช้ได้กับ layout ไทย) |
 | จอยที่ต่อตอนแอปรันอยู่แล้วกดค้าง | `pump` เก็บ event ทุกเฟรม; ตรวจด้วยจอยจริงก่อน release |
+| **LT/RT ของจอยที่ทดสอบเป็นดิจิทัล** (probe: LZ/RZ = 0.00) | `pad.buttons.lt/rt` ยังใช้ได้ (Shift toggle / right-click) · `lt_analog`/`rt_analog` = 0 → precision hold ใน Mouse mode ต้องอ่านจากค่าดิจิทัล หรือรอจอยที่ส่ง analog |
 | 250 Hz ด้วย `sleep(3ms)` | Windows sleep ละเอียด ~15 ms ได้ → dt วัดจริงจึงยังถูก; ถ้าต้องการแม่นขึ้นใช้ `timeBeginPeriod` ใน P6 |

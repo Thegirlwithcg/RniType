@@ -112,6 +112,9 @@ project menager/
 ### 4.1 P0 + P1 — ✅ ปิดแล้ว
 
 - A: `gilrs` **XInput** อ่าน Xbox ครบ 16 ปุ่ม + 8 sectors ([15-gilrs-xinput-backend])
+  · **ยืนยันซ้ำ 2026-11-15** (probe 20 วิ, "Xbox Controller"): LSx ±0.99 · LSy ±1.00 · RSx ±0.99 · RSy ±1.00
+  · idle_peak 0.000 (ไม่มี drift) · buttons ที่กดทดสอบ: A/X/Y, LB/RB/LT, LS/RS, D-←↑→↓
+  · **LZ/RZ = 0.00** → จอยนี้ส่ง LT/RT เป็น **ดิจิทัล** (`LeftTrigger2`/`RightTrigger2`) ไม่ใช่ analog
 - B: Tauri overlay โปร่งใส คลิกทะลุ ไม่แย่ง focus (2 จอ)
 - C: `SendInput` Unicode พิมพ์ไทยลง Notepad ถูก
 - contracts + workspace + state player + 54/54 mockup checks
