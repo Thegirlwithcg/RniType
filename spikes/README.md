@@ -2,6 +2,9 @@
 
 > รันบนเครื่อง owner เท่านั้น (ต้องมีจอย + 2 จอ)
 > ผ่านครบ A/B/C → เปิด P2–P5 · ไม่ผ่าน → ดูทางถอยใน [[03-stack-rust]]
+>
+> **รันจาก repo root** (`D:\Erin's Works\Programming\RniType`) หรือใช้ absolute path
+> ถ้ารันจาก `crates/rnitype-probe` path ของ spikes จะหาไม่เจอ
 
 ## A — จอย (gilrs)
 
@@ -11,6 +14,9 @@ cargo run -p rnitype-probe -- --seconds 20 --raw
 
 ผ่านเมื่อ: เห็น LS/RS/trigger/ปุ่มครบทั้ง **Xbox** และ **DualSense**, deadzone/drift นิ่ง
 ผลที่ต้องจด: ชื่อจอย, ปุ่มที่ขาด, ค่า drift สูงสุด
+
+**ถ้าเจอ `pads: 0`** — probe จะรอจอย 15 วินาที ลองเปิดจอย/กดปุ่ม guide ระหว่างนั้น
+ถ้ายังไม่เจอ: ต่อ USB ก่อน → ปิด Steam Input/DS4Windows → ดู Device Manager → ค่อยลอง Bluetooth
 
 ## B — Tauri overlay
 

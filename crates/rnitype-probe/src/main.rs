@@ -133,16 +133,32 @@ fn main() -> ExitCode {
         args.seconds, args.print_hz, args.raw
     );
 
-    let detected: Vec<(GamepadId, String)> = gilrs
+    let mut detected: Vec<(GamepadId, String)> = gilrs
         .gamepads()
         .map(|(id, pad)| (id, pad.name().to_string()))
         .collect();
 
     if detected.is_empty() {
+        println!("pads: 0 — รอจอย 15 วินาที (เปิดจอย/กดปุ่ม guide ได้เลย)…");
+        let wait_until = Instant::now() + Duration::from_secs(15);
+        while detected.is_empty() && Instant::now() < wait_until {
+            while gilrs.next_event().is_some() {}
+            sleep(Duration::from_millis(250));
+            detected = gilrs
+                .gamepads()
+                .map(|(id, pad)| (id, pad.name().to_string()))
+                .collect();
+        }
+    }
+
+    if detected.is_empty() {
         println!("pads: 0");
-        println!(
-            "FAIL: ไม่พบจอย — ต่อจอยแล้วรันใหม่ (ดูคู่มือใน Design/03-engineering/02-roadmap-and-smoke-tests.md)"
-        );
+        println!("FAIL: ไม่พบจอย — ตรวจตามลำดับ:");
+        println!("  1) ต่อ USB ก่อน แล้วค่อยลอง Bluetooth");
+        println!("  2) กดปุ่ม Xbox/PS ให้จอยตื่น");
+        println!("  3) ปิด Steam Input / DS4Windows / โปรแกรมที่จับจอยอยู่");
+        println!("  4) ดู Device Manager ว่า Windows เห็นจอย");
+        println!("  5) รันจาก repo root: cargo run -p rnitype-probe -- --seconds 20 --raw");
         return ExitCode::from(2);
     }
 
