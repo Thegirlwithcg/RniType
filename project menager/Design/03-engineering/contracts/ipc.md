@@ -1,6 +1,7 @@
 # IPC contract — app ↔ HUD ↔ Settings
 
 > P1 freeze · version 1 · 2026-11-15
+> v1.1 (2026-11-15) — เพิ่ม `hud:style` (event) + `hud_style` (command) สำหรับ typography · additive ไม่แตะ payload เดิม (ADR-16)
 > ไฟล์นี้คือสัญญาที่ P3 (runtime), P4 (HUD), P5 (Settings) ต้องยึด
 > เปลี่ยนชื่อ/รูป payload = ต้อง bump `version` และแจ้ง lead
 
@@ -20,6 +21,7 @@
 | Event | Payload | ผู้รับ | ความถี่ |
 | --- | --- | --- | --- |
 | `hud:state` | [`hud-state.schema.json`](hud-state.schema.json) | HUD | ≤ 60 Hz, on change |
+| `hud:style` | `{ textScale: number (0.8–2), font: "ibm-plex-sans-thai"\|"noto-sans-thai"\|"system" }` | HUD | on change (typography · ADR-16) |
 | `hud:visibility` | `{ visible: bool, reason: "idle"\|"hotkey"\|"pause"\|"exclusion" }` | HUD | on change |
 | `settings:config` | [`config.schema.json`](config.schema.json) | Settings | on open + on external change |
 | `app:status` | `{ device: string\|null, connected: bool, paused: bool, admin: bool, version: string }` | Settings, tray | on change |
@@ -48,6 +50,7 @@
 | Command | Args | Returns |
 | --- | --- | --- |
 | `hud_ready` | — | `{ ok: true }` — HUD แจ้งว่าพร้อมรับ state; app จึงเริ่มส่ง |
+| `hud_style` | — | `{ textScale, font }` — typography ปัจจุบัน (HUD ดึงตอน boot กันหลุด event) |
 | `hud_set_scale` | `{ scale: number }` | `{ ok: true }` |
 | `hud_set_pivot` | `{ x: number, y: number }` | `{ ok: true }` — ใช้ตอน Nav ลากด้วยเมาส์ (ถ้ามี) |
 
@@ -62,6 +65,8 @@ app (250 Hz) ──coalesce 60 Hz──▶ hud:state ──▶ HUD overlay
 Settings ──invoke save_config──▶ app ──validate──▶ config.json
      ▲                              │
      └──── settings:config ─────────┘ (hot reload)
+                                    │
+                                    └──── hud:style ──▶ HUD (typography, ADR-16)
 ```
 
 ## 5. ตัวอย่าง payload

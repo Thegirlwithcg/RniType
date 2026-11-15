@@ -123,8 +123,20 @@
       "type": "object",
       "properties": {
         "language": { "const": "en" },
-        "hudScale": { "type": "number", "minimum": 0.5, "maximum": 3 },
-        "hudOpacity": { "type": "number", "minimum": 0.1, "maximum": 1 }
+        "hudScale": { "type": "number", "minimum": 0.5, "maximum": 3, "default": 1.2 },
+        "hudOpacity": { "type": "number", "minimum": 0.1, "maximum": 1 },
+        "hudTextScale": {
+          "type": "number",
+          "minimum": 0.8,
+          "maximum": 2,
+          "default": 1.2,
+          "description": "ตัวคูณขนาดตัวหนังสือของ HUD — แยกจาก hudScale (ขนาดวง) · ADR-16"
+        },
+        "hudFontFamily": {
+          "enum": ["ibm-plex-sans-thai", "noto-sans-thai", "system"],
+          "default": "ibm-plex-sans-thai",
+          "description": "ฟอนต์ของ HUD · ibm-plex-sans-thai = ฟอนต์ไทยไม่มีหัว (ค่าเริ่มต้น) · ADR-16"
+        }
       },
       "additionalProperties": false
     },

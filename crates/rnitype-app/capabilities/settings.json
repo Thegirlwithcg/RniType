@@ -1,0 +1,6 @@
+{
+  "identifier": "settings",
+  "description": "RniType Settings window — config read/write (ipc.md §3)",
+  "windows": ["settings"],
+  "permissions": ["core:default"]
+}

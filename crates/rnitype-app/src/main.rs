@@ -19,6 +19,8 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod config;
+
 use std::time::Duration;
 
 use serde_json::{json, Value};
@@ -36,6 +38,8 @@ struct Options {
     demo: bool,
     /// ปิดแอปเองหลัง N วินาที (สำหรับรันแบบ headless / ตรวจงาน)
     seconds: Option<u64>,
+    /// เปิดหน้าต่าง Settings ตั้งแต่เริ่ม (ใช้ตรวจ UI / ถ่าย screenshot)
+    settings: bool,
 }
 
 impl Default for Options {
@@ -43,17 +47,32 @@ impl Default for Options {
         Self {
             demo: false,
             seconds: None,
+            settings: false,
         }
     }
 }
 
 /// สถานะกลางของแอป (เก็บใน `App` เพื่อให้ command อ่านได้)
-#[derive(Default)]
 struct AppState {
     /// HUD ส่ง `hud_ready` มาแล้วหรือยัง
     hud_ready: std::sync::atomic::AtomicBool,
     /// แหล่ง state ของโหมด demo (ไม่มี = demo ปิด)
     demo: std::sync::Mutex<Option<DemoSource>>,
+    /// config ทั้งไฟล์ (ตอนนี้แอปใช้ `ui.*` — typography ของ HUD)
+    config: std::sync::Mutex<Value>,
+    /// origin ของหน้าต่าง overlay บน virtual desktop (ไว้แปลงพิกัดหน้าจอ → พิกัดหน้าต่าง)
+    origin: std::sync::Mutex<(i32, i32)>,
+}
+
+impl AppState {
+    fn new(config: Value) -> Self {
+        Self {
+            hud_ready: std::sync::atomic::AtomicBool::new(false),
+            demo: std::sync::Mutex::new(None),
+            config: std::sync::Mutex::new(config),
+            origin: std::sync::Mutex::new((0, 0)),
+        }
+    }
 }
 
 /// แหล่ง state ของโหมด demo — ใช้ทั้ง thread ที่ส่งวนและ command `hud_ready` ที่ส่งซ้ำ
@@ -68,8 +87,8 @@ fn main() {
     let options = parse_options();
     println!("[app] rnitype-app — RniType overlay (P4 slice 2)");
     println!(
-        "[app] options: demo={} seconds={:?}",
-        options.demo, options.seconds
+        "[app] options: demo={} seconds={:?} settings={}",
+        options.demo, options.seconds, options.settings
     );
 
     let demo_states = load_demo_states();
@@ -78,9 +97,20 @@ fn main() {
         demo_states.len()
     );
 
+    let config = config::load();
+    println!(
+        "[app] ui style: {}",
+        serde_json::to_string(&config::ui_style(&config)).unwrap_or_default()
+    );
+
     tauri::Builder::default()
-        .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![hud_ready])
+        .manage(AppState::new(config))
+        .invoke_handler(tauri::generate_handler![
+            hud_ready,
+            hud_style,
+            get_config,
+            save_config
+        ])
         .setup(move |app| setup_overlay(app, &options, &demo_states))
         .run(tauri::generate_context!())
         .expect("error while running rnitype-app");
@@ -97,6 +127,7 @@ fn parse_options() -> Options {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--demo" => options.demo = true,
+            "--settings" => options.settings = true,
             "--seconds" => {
                 if let Some(value) = args.next() {
                     match value.parse::<u64>() {
@@ -115,7 +146,7 @@ fn parse_options() -> Options {
                 }
             }
             "--help" | "-h" => {
-                println!("[app] usage: rnitype-app [--demo] [--seconds N]");
+                println!("[app] usage: rnitype-app [--demo] [--settings] [--seconds N]");
             }
             other => eprintln!("[app] ไม่รู้จักตัวเลือก: {other:?}"),
         }
@@ -133,6 +164,22 @@ fn load_demo_states() -> Vec<Value> {
         }
     }
 }
+
+/// แปลงพิกัดหน้าจอ → พิกัดหน้าต่าง overlay (HUD วาดในหน้าต่างของตัวเอง)
+/// contract: `pivot`/`pointer` ที่ HUD ได้รับเป็นพิกัดในหน้าต่าง (0,0 = virtual desktop)
+fn to_window_coords(state: &mut Value, origin: (i32, i32)) {
+    for field in ["pivot", "pointer"] {
+        let Some(point) = state.get_mut(field).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        for (key, offset) in [("x", origin.0), ("y", origin.1)] {
+            if let Some(value) = point.get(key).and_then(Value::as_f64) {
+                point.insert(key.to_string(), json!(value - f64::from(offset)));
+            }
+        }
+    }
+}
+
 
 /* ============================================================
    หน้าต่าง overlay
@@ -163,6 +210,10 @@ fn setup_overlay(
     // ---- virtual desktop (ทุกจอ) ด้วยพิกเซลจริง ----
     let (vx, vy, vw, vh) = virtual_desktop();
     println!("[overlay] virtual desktop: x={vx} y={vy} w={vw} h={vh}");
+    {
+        let state = app.state::<AppState>();
+        *state.origin.lock().unwrap() = (vx, vy);
+    }
 
     window.set_position(PhysicalPosition::new(vx, vy))?;
     window.set_size(PhysicalSize::new(vw, vh))?;
@@ -203,6 +254,14 @@ fn setup_overlay(
         Err(err) => eprintln!("[tray] ตั้ง tray ไม่สำเร็จ: {err} (ใช้ --seconds หรือ Ctrl+C แทน)"),
     }
 
+    // ---- Settings (ตรวจ UI / ให้ owner เห็นหน้าต่างจริง) ----
+    if options.settings {
+        match open_settings(app.handle()) {
+            Ok(()) => println!("[settings] เปิดหน้าต่าง Settings แล้ว"),
+            Err(err) => eprintln!("[settings] เปิดไม่สำเร็จ: {err}"),
+        }
+    }
+
     // ---- demo: ส่ง hud:state วนทุก 3 วินาที ----
     if options.demo {
         if demo_states.is_empty() {
@@ -233,7 +292,9 @@ fn setup_overlay(
                             break;
                         }
                         let index = source.current % source.states.len();
-                        let state = source.states[index].clone();
+                        let mut state = source.states[index].clone();
+                        let origin = *app_state.origin.lock().unwrap();
+                        to_window_coords(&mut state, origin);
                         let mode = state.get("mode").and_then(Value::as_str).unwrap_or("?");
                         let st = state.get("state").and_then(Value::as_str).unwrap_or("?");
                         match source.handle.emit_to("hud", "hud:state", &state) {
@@ -276,8 +337,9 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::TrayIconBuilder;
 
+    let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit RniType", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&quit_item])?;
+    let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
 
     let icon = match Image::from_bytes(include_bytes!("../icons/icon.ico")) {
         Ok(image) => image,
@@ -292,13 +354,42 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("RniType")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| {
-            if event.id.as_ref() == "quit" {
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "settings" => {
+                println!("[tray] เลือก Settings → เปิดหน้าต่างตั้งค่า");
+                if let Err(err) = open_settings(app) {
+                    eprintln!("[tray] เปิด Settings ไม่สำเร็จ: {err}");
+                }
+            }
+            "quit" => {
                 println!("[tray] เลือก Quit → ปิดแอป");
                 app.exit(0);
             }
+            _ => {}
         })
         .build(app)?;
+
+    Ok(())
+}
+
+/// หน้าต่าง Settings (P5 slice 1) — หน้าต่างจริง มีขอบ มี focus (ต่างจาก HUD)
+fn open_settings(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        app,
+        "settings",
+        tauri::WebviewUrl::App("settings/index.html".into()),
+    )
+    .title("RniType Settings")
+    .inner_size(560.0, 760.0)
+    .min_inner_size(460.0, 560.0)
+    .center()
+    .build()?;
 
     Ok(())
 }
@@ -321,11 +412,13 @@ fn hud_ready(state: tauri::State<'_, AppState>) -> Value {
 
     // ipc.md §4 — หลัง handshake แอปส่ง state ให้ HUD ทันที (state ถัดไปในคิว)
     {
+        let origin = *state.origin.lock().unwrap();
         let mut guard = state.demo.lock().unwrap();
         if let Some(source) = guard.as_mut() {
             if !source.states.is_empty() {
                 let index = source.current % source.states.len();
-                let payload = source.states[index].clone();
+                let mut payload = source.states[index].clone();
+                to_window_coords(&mut payload, origin);
                 let mode = payload.get("mode").and_then(Value::as_str).unwrap_or("?");
                 let st = payload.get("state").and_then(Value::as_str).unwrap_or("?");
                 match source.handle.emit_to("hud", "hud:state", &payload) {
@@ -339,6 +432,55 @@ fn hud_ready(state: tauri::State<'_, AppState>) -> Value {
     }
 
     json!({ "ok": true })
+}
+
+/// typography ปัจจุบันของ HUD — `{ textScale, font }` (ipc.md §3 `hud_style`)
+/// HUD เรียกครั้งเดียวตอน boot เพื่อกันหลุด event ที่ยิงก่อนหน้าต่างพร้อม
+#[tauri::command]
+fn hud_style(state: tauri::State<'_, AppState>) -> Value {
+    config::ui_style(&state.config.lock().unwrap())
+}
+
+/// Settings อ่าน config ทั้งไฟล์ (ipc.md §3 `get_config`)
+#[tauri::command]
+fn get_config(state: tauri::State<'_, AppState>) -> Value {
+    json!({ "ok": true, "data": state.config.lock().unwrap().clone() })
+}
+
+/// Settings บันทึก config (ipc.md §3 `save_config`) → เก็บลงดิสก์ + push style ให้ HUD
+#[tauri::command]
+fn save_config(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    config: Value,
+) -> Value {
+    if let Err(message) = config::validate_ui(&config) {
+        eprintln!("[config] ปฏิเสธการบันทึก: {message}");
+        return json!({ "ok": false, "error": { "code": "CONFIG_INVALID", "message": message } });
+    }
+
+    let style = config::ui_style(&config);
+    {
+        let mut guard = state.config.lock().unwrap();
+        *guard = config.clone();
+        if let Err(message) = config::save(&guard) {
+            eprintln!("[config] {message}");
+            return json!({ "ok": false, "error": { "code": "CONFIG_IO", "message": message } });
+        }
+    }
+
+    // typography เปลี่ยน → บอก HUD ทันที (ไม่ต้องรอ state เฟรมถัดไป)
+    if let Err(err) = app.emit_to("hud", "hud:style", &style) {
+        eprintln!("[config] ส่ง hud:style ไม่สำเร็จ: {err}");
+    }
+    // หน้าต่าง Settings อื่น ๆ (ถ้าเปิดหลายตัว) ให้เห็นค่าใหม่
+    let _ = app.emit_to("settings", "settings:config", &config);
+
+    println!(
+        "[config] บันทึกแล้ว: {}",
+        serde_json::to_string(&style).unwrap_or_default()
+    );
+    json!({ "ok": true, "data": config })
 }
 
 /* ============================================================

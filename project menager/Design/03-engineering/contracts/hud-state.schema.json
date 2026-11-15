@@ -34,6 +34,7 @@
     "opacity": { "type": "number", "minimum": 0.1, "maximum": 1 },
     "pivot": {
       "type": "object",
+      "description": "พิกัดในหน้าต่าง overlay (0,0 = มุมบนซ้ายของ virtual desktop) — app แปลงจากพิกัดหน้าจอแล้ว",
       "required": ["x", "y"],
       "properties": {
         "x": { "type": "number" },
@@ -100,6 +101,7 @@
     },
     "pointer": {
       "type": "object",
+      "description": "พิกัดเมาส์เสมือนในหน้าต่าง overlay (หน่วยเดียวกับ pivot)",
       "required": ["x", "y", "visible"],
       "properties": {
         "x": { "type": "number" },

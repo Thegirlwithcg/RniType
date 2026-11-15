@@ -11,5 +11,5 @@
   --hud-ring-soft: rgba(148, 163, 184, 0.18);
   --hud-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   --hud-radius: 14px;
-  --hud-font: "Segoe UI", "Leelawadee UI", system-ui, sans-serif;
+  --hud-font: "IBM Plex Sans Thai", "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
 }

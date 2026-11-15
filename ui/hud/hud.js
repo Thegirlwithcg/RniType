@@ -42,6 +42,15 @@
   const TYPE_MODES = ['type-en', 'type-th', 'type-other'];
   const RING_STATES = ['group', 'char', 'commit', 'repeat'];
 
+  /* ---------------- typography (ADR-16) ----------------
+     ตัวหนังสือ = style จากแอป (event `hud:style` / command `hud_style`)
+     ไม่ใช่ state รายเฟรม จึงไม่ปนกับ HudState — ค่าเริ่มต้นตรงกับ config.schema */
+  const FONT_STACKS = window.RniFonts.stacks;
+  const STYLE_DEFAULT = { textScale: 1.2, font: window.RniFonts.default };
+  /** ค่าเริ่มต้นขนาดวง (config ui.hudScale) — ใช้เมื่อ state ไม่ส่งมา */
+  const SCALE_DEFAULT = 1.2;
+  const typography = { ...STYLE_DEFAULT };
+
   const MODE_LABEL = {
     cmd: 'Command',
     lang: 'Language',
@@ -71,6 +80,28 @@
 
   function clear(node) {
     while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  /** payload ของ Tauri event (v2 ห่อด้วย {event, id, payload}) */
+  function payloadOf(message) {
+    return message && typeof message === 'object' && 'payload' in message
+      ? message.payload
+      : message;
+  }
+
+  /** style ของตัวหนังสือ — มาจากแอปเท่านั้น (HUD ไม่เดาเอง) */
+  function applyStyle(raw) {
+    const style = raw && typeof raw === 'object' ? raw : {};
+
+    typography.textScale = num(style.textScale, STYLE_DEFAULT.textScale, 0.8, 2);
+    const font = text(style.font);
+    typography.font = Object.prototype.hasOwnProperty.call(FONT_STACKS, font)
+      ? font
+      : STYLE_DEFAULT.font;
+
+    const root = document.documentElement;
+    root.style.setProperty('--hud-text-scale', typography.textScale.toFixed(2));
+    root.style.setProperty('--hud-font-family', FONT_STACKS[typography.font]);
   }
 
   function sectorPath(rIn, rOut, a0, a1) {
@@ -174,7 +205,7 @@
         const badge = svg('text', {
           class: 'slot-badge',
           x: cx.toFixed(2),
-          y: (cy + 16).toFixed(2),
+          y: (cy + 16 * typography.textScale).toFixed(2),
         });
         badge.textContent = text(label.badge);
         dom.outer.appendChild(badge);
@@ -216,7 +247,7 @@
         const sub = svg('text', {
           class: 'slot-sub',
           x: cx.toFixed(2),
-          y: (cy + 11).toFixed(2),
+          y: (cy + 12 * typography.textScale).toFixed(2),
         });
         sub.textContent = text(label.sub);
         group.appendChild(sub);
@@ -226,7 +257,7 @@
         const badge = svg('text', {
           class: 'slot-badge',
           x: cx.toFixed(2),
-          y: (cy + 21).toFixed(2),
+          y: (cy + 21 * typography.textScale).toFixed(2),
         });
         badge.textContent = text(label.badge);
         group.appendChild(badge);
@@ -302,7 +333,7 @@
 
     const mode = text(next.mode) || 'disabled';
     const visible = next.visible !== false && next.hudHidden !== true;
-    const scale = num(next.scale, 1, 0.5, 3);
+    const scale = num(next.scale, SCALE_DEFAULT, 0.5, 3);
     const opacity = num(next.opacity, 0.92, 0.1, 1);
     const ringsOn = visible && ringsVisible(next);
 
@@ -380,10 +411,21 @@
       })
       .catch((err) => console.warn('[hud] ฟัง event hud:state ไม่สำเร็จ', err));
 
+    // style ของตัวหนังสือ (typography) — เปลี่ยนไม่บ่อย จึงแยกจาก hud:state (ipc.md §2)
+    event
+      .listen('hud:style', (message) => applyStyle(payloadOf(message)))
+      .catch((err) => console.warn('[hud] ฟัง event hud:style ไม่สำเร็จ', err));
+
     // ipc.md §3 — HUD แจ้งว่าพร้อมรับ state (ไม่เปลี่ยน state ของแอป)
     const invoke =
       tauri.core && typeof tauri.core.invoke === 'function' ? tauri.core.invoke.bind(tauri.core) : null;
-    if (invoke) invoke('hud_ready').catch(() => {});
+    if (!invoke) return;
+
+    // ดึง style ปัจจุบันก่อน (กันหลุด event ที่ยิงก่อน HUD พร้อม) — applyStyle ซ้ำไม่มีผลข้างเคียง
+    invoke('hud_style')
+      .then((style) => applyStyle(style))
+      .catch(() => {});
+    invoke('hud_ready').catch(() => {});
   }
 
   let lastJson = '';
@@ -417,6 +459,16 @@
 
   if (new URLSearchParams(location.search).has('preview')) {
     document.documentElement.classList.add('preview-bg');
+  }
+
+  // โหมดเบราว์เซอร์: ปรับ typography จาก query เพื่อตรวจที่ text scale ต่าง ๆ
+  // (?preview=1&textScale=1.35&font=noto-sans-thai) — ไม่มีผลในโหมดแอปจริง
+  {
+    const params = new URLSearchParams(location.search);
+    const previewStyle = {};
+    if (params.has('textScale')) previewStyle.textScale = Number(params.get('textScale'));
+    if (params.has('font')) previewStyle.font = params.get('font');
+    applyStyle(previewStyle);
   }
 
   start();

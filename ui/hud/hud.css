@@ -19,6 +19,30 @@
   --hud-scale: 1;
   --hud-opacity: 0.92;
 
+  /* ---------------- typography (ADR-16) ----------------
+     --hud-text-scale = ตัวคูณ "ตัวหนังสือ" แยกจาก --hud-scale ที่คูณ "ขนาดวง"
+     (ขยายวงอย่างเดียว = ตัวหนังสือยังเล็ก — owner 2026-11-15)
+     ค่าใน calc() คือขนาดที่ text-scale = 1.0 · ค่าเริ่มต้น 1.2 ให้ผลตามตาราง
+     ใน ADR-16: group 13.8 · char 21.6–30 · sub/badge 11 · pill 13.2 */
+  --hud-font-family: "IBM Plex Sans Thai", "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
+  --hud-text-scale: 1.2;
+
+  --fs-group: calc(11.5px * var(--hud-text-scale));
+  --fs-group-m: calc(10.5px * var(--hud-text-scale));
+  --fs-group-l: calc(9.5px * var(--hud-text-scale));
+  --fs-char: calc(18px * var(--hud-text-scale));
+  --fs-char-selected: calc(25px * var(--hud-text-scale));
+  --fs-char-dim: calc(17px * var(--hud-text-scale));
+  --fs-sub: calc(9.2px * var(--hud-text-scale));
+  --fs-badge: calc(9.2px * var(--hud-text-scale));
+  --fs-pill: calc(11px * var(--hud-text-scale));
+  --fs-pill-badge: calc(10px * var(--hud-text-scale));
+  --fs-cmd: calc(11px * var(--hud-text-scale));
+  --fs-cmd-selected: calc(12.5px * var(--hud-text-scale));
+  --fs-lang: calc(11.5px * var(--hud-text-scale));
+  --fs-preview: calc(22px * var(--hud-text-scale));
+  --fs-repeat: calc(10px * var(--hud-text-scale));
+
   --ease-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -30,7 +54,8 @@ html, body {
   height: 100%;
   background: transparent;
   color: var(--ink);
-  font-family: var(--hud-font);
+  font-family: var(--hud-font-family);
+  -webkit-font-smoothing: antialiased;
   overflow: hidden;
   pointer-events: none;
 }
@@ -114,7 +139,7 @@ html, body {
 
 .sector-label {
   fill: #93a0b8;
-  font-size: 12px;
+  font-size: var(--fs-group);
   font-weight: 600;
   text-anchor: middle;
   dominant-baseline: central;
@@ -122,15 +147,15 @@ html, body {
   transition: fill 0.18s;
 }
 
-.sector-label--group { font-size: 11px; letter-spacing: 0.02em; }
-.sector-label--group.len-m { font-size: 9.5px; }
-.sector-label--group.len-l { font-size: 8px; }
-.sector-label--group.is-muted { fill: #5f6a7f; }
+.sector-label--group { font-size: var(--fs-group); letter-spacing: 0.02em; }
+.sector-label--group.len-m { font-size: var(--fs-group-m); }
+.sector-label--group.len-l { font-size: var(--fs-group-l); }
+.sector-label--group.is-muted { fill: #8d98ad; }
 .sector--group.is-armed + .sector-label { fill: #cfe8ff; }
 
 .char-text {
   fill: #dbe3f2;
-  font-size: 20px;
+  font-size: var(--fs-char);
   font-weight: 500;
   text-anchor: middle;
   dominant-baseline: central;
@@ -139,16 +164,16 @@ html, body {
 }
 .char-text.is-selected {
   fill: #ffffff;
-  font-size: 27px;
+  font-size: var(--fs-char-selected);
   font-weight: 700;
   filter: drop-shadow(0 0 12px rgba(169, 139, 255, 0.95));
 }
-.char-text.is-dim { fill: #566076; font-size: 15px; }
+.char-text.is-dim { fill: #94a0b6; font-size: var(--fs-char-dim); }
 
 /* badge ของช่อง (เช่น สระล่าง ุ ู หรือ IME) — ค่ามาจาก contract ตรง ๆ */
 .slot-badge {
   fill: #fbbf24;
-  font-size: 8px;
+  font-size: var(--fs-badge);
   font-weight: 600;
   text-anchor: middle;
   dominant-baseline: central;
@@ -183,17 +208,17 @@ html, body {
 
 .cmd-label {
   fill: #dbe3f2;
-  font-size: 10.5px;
+  font-size: var(--fs-cmd);
   font-weight: 650;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
 }
-.cmd-label.is-selected { fill: #ffffff; font-size: 12px; }
+.cmd-label.is-selected { fill: #ffffff; font-size: var(--fs-cmd-selected); }
 
 .lang-label {
   fill: #dbe3f2;
-  font-size: 11px;
+  font-size: var(--fs-lang);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-anchor: middle;
@@ -203,8 +228,8 @@ html, body {
 .lang-label.is-selected { fill: #ffffff; }
 
 .slot-sub {
-  fill: #7f8ba1;
-  font-size: 8px;
+  fill: #93a0b6;
+  font-size: var(--fs-sub);
   font-weight: 500;
   text-anchor: middle;
   dominant-baseline: central;
@@ -227,7 +252,7 @@ html, body {
 
 .hud__preview {
   fill: #ffffff;
-  font-size: 26px;
+  font-size: var(--fs-preview);
   font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
@@ -239,7 +264,7 @@ html, body {
 
 .hud__repeat {
   fill: var(--accent);
-  font-size: 11px;
+  font-size: var(--fs-repeat);
   font-weight: 650;
   text-anchor: middle;
   dominant-baseline: central;
@@ -256,7 +281,7 @@ html, body {
   bottom: -34px;
   transform: translateX(-50%);
   white-space: nowrap;
-  font-size: 10.5px;
+  font-size: var(--fs-pill);
 }
 
 /* ไม่มีวง (idle / mouse / nav / disabled) → pill ย้ายมากลางจุดยึด */
@@ -301,7 +326,7 @@ html, body {
   border-radius: 999px;
   background: rgba(124, 197, 255, 0.16);
   color: #cfe8ff;
-  font-size: 9.5px;
+  font-size: var(--fs-pill-badge);
   line-height: 1.4;
 }
 

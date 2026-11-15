@@ -1,0 +1,51 @@
+/* ============================================================
+   RniType — ฟอนต์ที่มากับแอป (@font-face)
+   ------------------------------------------------------------
+   IBM Plex Sans Thai = ฟอนต์ไทย *ไม่มีหัว* (loopless) → ค่าเริ่มต้นของ HUD
+   Noto Sans Thai     = ตัวสำรอง (variable 100–900)
+   ไฟล์ + license อยู่ใน ui/shared/fonts/ (OFL 1.1)
+
+   ทำไมใช้ font-display: block — ถ้าโชว์ fallback ก่อน ตัวอักษรไทย
+   จะเปลี่ยนรูป (มีหัว/ความกว้างต่าง) กลางคันเพราะ HUD เปลี่ยนข้อความทุกเฟรม
+   ============================================================ */
+
+@font-face {
+  font-family: "IBM Plex Sans Thai";
+  src: url("fonts/IBMPlexSansThai-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans Thai";
+  src: url("fonts/IBMPlexSansThai-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans Thai";
+  src: url("fonts/IBMPlexSansThai-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans Thai";
+  src: url("fonts/IBMPlexSansThai-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Noto Sans Thai";
+  src: url("fonts/NotoSansThai-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-stretch: 62.5% 100%;
+  font-style: normal;
+  font-display: block;
+}

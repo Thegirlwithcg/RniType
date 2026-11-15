@@ -49,6 +49,12 @@
     { "match": { "exe": "Code.exe" }, "mode": "en", "hud": true, "quickbar": "code" },
     { "match": { "exe": "WINWORD.EXE" }, "mode": "th", "hud": true }
   ],
-  "ui": { "language": "en", "hudScale": 1, "hudOpacity": 0.92 },
+  "ui": {
+    "language": "en",
+    "hudScale": 1.2,
+    "hudOpacity": 0.92,
+    "hudTextScale": 1.2,
+    "hudFontFamily": "ibm-plex-sans-thai"
+  },
   "system": { "autostart": false, "runAsAdmin": false, "exclusion": ["game.exe"] }
 }
