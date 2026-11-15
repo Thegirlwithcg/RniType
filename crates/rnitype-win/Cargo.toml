@@ -8,3 +8,10 @@ description = "Windows output layer: Injector trait + SendInput (P3), language d
 
 [dependencies]
 rnitype-core = { path = "../rnitype-core" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_Foundation",
+] }

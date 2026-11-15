@@ -1,10 +1,20 @@
 //! Windows output layer
 //!
 //! P1: สัญญา `Injector` + `NullInjector` สำหรับ test (ไม่มี `unsafe`)
-//! P3: `SendInputInjector` (scancode/Unicode/mouse) — เพิ่มในไฟล์แยก
+//! P3 slice 1: [`plan`] (pure) + [`SendInputInjector`] (Unicode/mouse บน Windows)
 //! P5a: ตรวจ layout + สร้าง keymap จาก QWERTY
+//!
+//! `unsafe` ทั้งหมดอยู่ใน `sendinput.rs` (FFI 2 จุด) — ที่เหลือ test ได้โดยไม่ต้องมี Windows
 
 use rnitype_core::Action;
+
+pub mod plan;
+
+#[cfg(windows)]
+mod sendinput;
+
+#[cfg(windows)]
+pub use sendinput::SendInputInjector;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InjectError(pub String);
