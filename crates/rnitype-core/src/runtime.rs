@@ -96,8 +96,10 @@ pub struct RuntimeEngine {
     languages: Vec<LangSlot>,
     wheel: Option<WheelKind>,
     wheel_armed: bool,
-    /// index ที่ไฮไลต์: วงคำสั่ง = index ของ [`Dir8`] (0..8) · วงภาษา = index ภาษา
+    /// index ที่ไฮไลต์อยู่ (วงคำสั่ง = index ของ [`Dir8`], วงภาษา = index ภาษา)
     wheel_index: Option<u8>,
+    /// ทิศที่ไฮไลต์ (ใช้กับ HUD ของทั้งสองวง)
+    wheel_dir: Option<Dir8>,
     wheel_commit_ms: u32,
     cmd_sector: SectorTracker,
     /// mode ที่จะกลับไปหลัง `deadman` หมด (เฉพาะกรณี emergency)
@@ -154,6 +156,7 @@ impl RuntimeEngine {
             wheel: None,
             wheel_armed: false,
             wheel_index: None,
+            wheel_dir: None,
             wheel_commit_ms: 0,
             cmd_sector: SectorTracker::new(gesture.sector_hysteresis_deg),
             resume_mode: Mode::Type,
@@ -239,16 +242,23 @@ impl RuntimeEngine {
         self.wheel_index
     }
 
-    /// ช่องที่ไฮไลต์เป็นทิศ (สะดวกสำหรับ HUD ของวงคำสั่ง)
+    /// ช่องที่ไฮไลต์เป็นทิศ (ทั้งวงคำสั่งและวงภาษา)
     pub fn wheel_highlight_dir(&self) -> Option<Dir8> {
-        match (self.wheel, self.wheel_index) {
-            (Some(WheelKind::Command), Some(index)) => Some(Dir8::from_index(index as usize)),
-            _ => None,
-        }
+        self.wheel_dir
     }
 
     pub fn gesture_state(&self) -> GestureState {
         self.typing.state()
+    }
+
+    /// กลุ่มที่ LS เลือกอยู่ (สำหรับ HUD) — `None` = ยังไม่มี gesture
+    pub fn typing_group(&self) -> Option<Dir8> {
+        self.typing.group()
+    }
+
+    /// ช่องที่ RS เลือกอยู่ (สำหรับ HUD preview/วงนอก)
+    pub fn typing_sector(&self) -> Option<Dir8> {
+        self.typing.sector()
     }
 
     /// เวลาที่เหลือของการถูกปิด (`0` = ไม่ได้ถูกปิดด้วย emergency)
@@ -454,6 +464,7 @@ impl RuntimeEngine {
         self.wheel = None;
         self.wheel_armed = false;
         self.wheel_index = None;
+        self.wheel_dir = None;
         self.wheel_commit_ms = 0;
         self.cmd_sector.reset();
     }
@@ -499,6 +510,8 @@ impl RuntimeEngine {
                 }
                 WheelKind::Language => Some(self.lang_index_for(pad.rs)),
             };
+            // ทิศที่ไฮไลต์ (ทั้งสองวง) — ใช้กับ HUD
+            self.wheel_dir = if index.is_some() { sector } else { None };
             if self.wheel_index != index {
                 self.wheel_index = index;
                 self.wheel_commit_ms = 0;

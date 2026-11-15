@@ -128,15 +128,15 @@ pub fn plan(action: Action, screen: ScreenRect) -> Vec<Input> {
     match action {
         Action::Key(press) => {
             push_modifiers(&mut out, press, true);
-            push_tap_key(&mut out, press.key);
+            push_tap_key(&mut out, press);
             push_modifiers(&mut out, press, false);
         }
         Action::KeyDown(press) => {
             push_modifiers(&mut out, press, true);
-            push_held_key(&mut out, press.key, true);
+            push_held_key(&mut out, press, true);
         }
         Action::KeyUp(press) => {
-            push_held_key(&mut out, press.key, false);
+            push_held_key(&mut out, press, false);
             push_modifiers(&mut out, press, false);
         }
         Action::MouseMove { dx, dy } => out.push(Input::MouseMove { dx, dy }),
@@ -178,7 +178,22 @@ fn push_modifiers(out: &mut Vec<Input>, press: KeyPress, down: bool) {
 }
 
 /// ปุ่มเดียวแบบกดแล้วปล่อย (Char = ทีละ UTF-16 unit, down+up ติดกันเหมือน Spike C)
-fn push_tap_key(out: &mut Vec<Input>, key: Key) {
+///
+/// **Ctrl + ตัวอักษร ASCII = ส่ง VirtualKey ไม่ใช่ Unicode** — แอปปลายทางอ่าน
+/// `Ctrl+VK_C` เป็นคีย์ลัด (Copy/Paste/Undo/Redo) แต่ไม่ตีความ `Ctrl+Unicode`
+fn push_tap_key(out: &mut Vec<Input>, press: KeyPress) {
+    if press.ctrl
+        && let Key::Char(ch) = press.key
+        && let Some(vk) = vk_for_ctrl_char(ch)
+    {
+        out.push(Input::VirtualKey { vk, up: false });
+        out.push(Input::VirtualKey { vk, up: true });
+        return;
+    }
+    push_tap_key_unicode(out, press.key);
+}
+
+fn push_tap_key_unicode(out: &mut Vec<Input>, key: Key) {
     match key {
         Key::Char(ch) => {
             let (units, len) = utf16_units(ch);
@@ -196,9 +211,27 @@ fn push_tap_key(out: &mut Vec<Input>, key: Key) {
     }
 }
 
+/// VK ของตัวอักษร ASCII ที่ใช้คู่กับ Ctrl (A–Z, 0–9) — `None` = ใช้ Unicode path
+pub fn vk_for_ctrl_char(ch: char) -> Option<u16> {
+    match ch {
+        'a'..='z' => Some(u16::from(b'A' + (ch as u8 - b'a'))),
+        'A'..='Z' => Some(u16::from(ch as u8)),
+        '0'..='9' => Some(u16::from(b'0' + (ch as u8 - b'0'))),
+        _ => None,
+    }
+}
+
 /// ปุ่มเดียวแบบค้าง/ปล่อย (ใช้กับ `Action::KeyDown`/`KeyUp`)
-fn push_held_key(out: &mut Vec<Input>, key: Key, down: bool) {
-    match key {
+fn push_held_key(out: &mut Vec<Input>, press: KeyPress, down: bool) {
+    if press.ctrl
+        && let Key::Char(ch) = press.key
+        && let Some(vk) = vk_for_ctrl_char(ch)
+    {
+        out.push(Input::VirtualKey { vk, up: !down });
+        return;
+    }
+
+    match press.key {
         Key::Char(ch) => {
             let (units, len) = utf16_units(ch);
             for &unit in &units[..len] {
@@ -339,27 +372,6 @@ mod tests {
         Action::Key(KeyPress { key, shift, ctrl })
     }
 
-    fn down(key: Key) -> Input {
-        match key {
-            Key::Char(ch) => {
-                let (units, len) = utf16_units(ch);
-                assert_eq!(len, 1, "helper นี้ใช้กับ BMP เท่านั้น");
-                Input::Unicode {
-                    unit: units[0],
-                    up: false,
-                }
-            }
-            Key::Named(named) => Input::VirtualKey {
-                vk: vk_for(named).expect("named key ต้องมี vk"),
-                up: false,
-            },
-        }
-    }
-
-    fn up(input: Input) -> Input {
-        input.released().expect("ต้องเป็น input ที่มีคู่ up")
-    }
-
     #[test]
     fn char_uses_unicode_down_then_up() {
         let plan = plan(tap(Key::Char('a'), false, false), full_hd());
@@ -484,12 +496,34 @@ mod tests {
                     vk: vk::CONTROL,
                     up: false
                 },
-                Input::Unicode {
-                    unit: 0x0063,
+                // Ctrl + ตัวอักษร ASCII = VK (แอปปลายทางเห็นเป็น Ctrl+C)
+                Input::VirtualKey { vk: 0x43, up: false },
+                Input::VirtualKey { vk: 0x43, up: true },
+                Input::VirtualKey {
+                    vk: vk::CONTROL,
+                    up: true
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn ctrl_with_non_ascii_stays_on_the_unicode_path() {
+        // ไทยไม่มี VK → ส่ง Unicode เหมือนเดิม (Ctrl ไม่ทำให้เพี้ยน)
+        let plan = plan(tap(Key::Char('ก'), false, true), full_hd());
+        assert_eq!(
+            plan,
+            vec![
+                Input::VirtualKey {
+                    vk: vk::CONTROL,
                     up: false
                 },
                 Input::Unicode {
-                    unit: 0x0063,
+                    unit: 0x0E01,
+                    up: false
+                },
+                Input::Unicode {
+                    unit: 0x0E01,
                     up: true
                 },
                 Input::VirtualKey {
@@ -498,6 +532,14 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn vk_for_ctrl_char_covers_letters_and_digits() {
+        assert_eq!(vk_for_ctrl_char('v'), Some(0x56));
+        assert_eq!(vk_for_ctrl_char('Z'), Some(0x5A));
+        assert_eq!(vk_for_ctrl_char('7'), Some(0x37));
+        assert_eq!(vk_for_ctrl_char('/'), None);
     }
 
     #[test]
@@ -592,10 +634,7 @@ mod tests {
                     vk: vk::CONTROL,
                     up: false
                 },
-                Input::Unicode {
-                    unit: 0x0076,
-                    up: false
-                },
+                Input::VirtualKey { vk: 0x56, up: false },
             ]
         );
     }
@@ -613,10 +652,7 @@ mod tests {
         assert_eq!(
             plan,
             vec![
-                Input::Unicode {
-                    unit: 0x0076,
-                    up: true
-                },
+                Input::VirtualKey { vk: 0x56, up: true },
                 Input::VirtualKey {
                     vk: vk::CONTROL,
                     up: true
@@ -806,7 +842,7 @@ mod tests {
         assert_eq!(
             held.release_plan(),
             vec![
-                up(down(key)),
+                Input::VirtualKey { vk: 0x56, up: true },
                 Input::VirtualKey {
                     vk: vk::CONTROL,
                     up: true

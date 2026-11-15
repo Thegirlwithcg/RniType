@@ -2533,6 +2533,7 @@ dependencies = [
 name = "rnitype-app"
 version = "0.1.0"
 dependencies = [
+ "gilrs",
  "rnitype-core",
  "rnitype-win",
  "serde",

@@ -99,6 +99,16 @@ pub fn hud_scale(config: &Value) -> f64 {
         .unwrap_or(HUD_SCALE_DEFAULT)
 }
 
+/// ความเข้มของ HUD (`ui.hudOpacity`)
+pub fn hud_opacity(config: &Value) -> f64 {
+    config
+        .get("ui")
+        .and_then(|ui| ui.get("hudOpacity"))
+        .and_then(Value::as_f64)
+        .filter(|v| (0.1..=1.0).contains(v))
+        .unwrap_or(0.92)
+}
+
 /// settings ของ HUD ที่ถูกต้อง (ใช้ตอน save) — คืน error แบบ ipc.md
 pub fn validate_ui(config: &Value) -> Result<(), String> {
     let ui = config

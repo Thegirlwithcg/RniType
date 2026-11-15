@@ -188,6 +188,33 @@ pub fn table(lang: Lang) -> &'static [[Key; 8]; 8] {
     }
 }
 
+/// ชื่อกลุ่ม 8 กลุ่ม (index = [`Dir8`] จาก ↑ ไล่ตามเข็มนาฬิกา)
+///
+/// มาจาก `Design/02-design/02-keymap-en-th.md` §1 — HUD ใช้เป็นป้ายวงใน
+pub fn group_names(lang: Lang) -> [&'static str; 8] {
+    match lang {
+        Lang::En => ["AEIOU", "B", "C", "D", "1", "2", "3", "4"],
+        Lang::Th => [
+            "พยัญชนะ",
+            "สระ",
+            "สระนำ",
+            "วรรณยุกต์",
+            "กลาง",
+            "กึ่งกลาง",
+            "หายาก",
+            "เหลือ",
+        ],
+    }
+}
+
+/// ป้ายของคีย์ 1 ช่อง (HUD): ตัวอักษรตรงตัว, ปุ่มมีชื่อใช้ชื่อสั้น
+pub fn label_of(key: Key) -> String {
+    match key {
+        Key::Char(ch) => ch.to_string(),
+        Key::Named(named) => format!("{named:?}"),
+    }
+}
+
 /// ดึงคีย์จาก gesture (กลุ่มจาก LS, ลำดับจาก RS)
 pub fn lookup(lang: Lang, group: Dir8, sector: Dir8) -> Key {
     table(lang)[group.index()][sector.index()]
@@ -247,5 +274,23 @@ mod tests {
     fn named_key_variant_is_usable_for_layer_two() {
         let press = Key::Named(crate::action::NamedKey::Enter);
         assert_eq!(format!("{press}"), "Enter");
+    }
+
+    #[test]
+    fn group_names_follow_the_design_doc() {
+        assert_eq!(group_names(Lang::En)[0], "AEIOU");
+        assert_eq!(group_names(Lang::En)[7], "4");
+        assert_eq!(group_names(Lang::Th)[1], "สระ");
+        assert_eq!(group_names(Lang::Th)[3], "วรรณยุกต์");
+        for lang in [Lang::En, Lang::Th] {
+            assert_eq!(group_names(lang).len(), 8);
+            assert!(group_names(lang).iter().all(|name| !name.is_empty()));
+        }
+    }
+
+    #[test]
+    fn label_of_prefers_the_character() {
+        assert_eq!(label_of(Key::Char('ก')), "ก");
+        assert_eq!(label_of(Key::Named(crate::action::NamedKey::Space)), "Space");
     }
 }

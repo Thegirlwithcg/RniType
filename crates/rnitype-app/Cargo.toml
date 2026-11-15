@@ -12,6 +12,7 @@ rnitype-win = { path = "../rnitype-win" }
 tauri = { version = "2", features = ["tray-icon", "image-ico"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+gilrs = { version = "0.11", default-features = false, features = ["xinput"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

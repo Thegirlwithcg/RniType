@@ -3,6 +3,7 @@
 use crate::action::{Action, KeyPress};
 use crate::gesture::{Commit, GestureConfig, GestureEngine, GestureState};
 use crate::keymap::{Lang, lookup};
+use crate::normalizer::Dir8;
 use crate::pad::PadState;
 
 #[derive(Clone, Debug)]
@@ -29,6 +30,16 @@ impl TypingPipeline {
 
     pub fn state(&self) -> GestureState {
         self.engine.state()
+    }
+
+    /// กลุ่มที่ LS เลือกอยู่ (index ตรงกับ [`Dir8`]) — HUD ใช้ไฮไลต์วงใน
+    pub fn group(&self) -> Option<Dir8> {
+        self.engine.group()
+    }
+
+    /// ช่องที่ RS เลือกอยู่ — HUD ใช้วาด preview + ไฮไลต์วงนอก
+    pub fn sector(&self) -> Option<Dir8> {
+        self.engine.sector()
     }
 
     /// ยกเลิก gesture ที่ค้าง (สลับ mode / เปิดวงคำสั่ง / ปิดฉุกเฉิน)

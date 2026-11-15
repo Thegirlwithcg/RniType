@@ -20,11 +20,21 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
+mod input;
+mod session;
 
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize};
+
+use input::{GilrsSource, PadSource, ScriptSource};
+use rnitype_core::pad::PadState;
+use rnitype_core::runtime::RuntimeConfig;
+use rnitype_core::{Lang, RuntimeEngine};
+use rnitype_win::Injector;
+use session::{HudStyle, Session};
 
 /// ตัวอย่าง state จาก contract (คัดลอกไว้ใน crate เพื่อให้ embed ได้)
 const DEMO_STATES_JSON: &str = include_str!("../assets/hud-demo-states.json");
@@ -40,6 +50,8 @@ struct Options {
     seconds: Option<u64>,
     /// เปิดหน้าต่าง Settings ตั้งแต่เริ่ม (ใช้ตรวจ UI / ถ่าย screenshot)
     settings: bool,
+    /// ใช้จอยปลอม (สคริปต์) แทนจอยจริง — ตรวจ runtime โดยไม่ต้องมีจอย
+    fake_pad: bool,
 }
 
 impl Default for Options {
@@ -48,6 +60,7 @@ impl Default for Options {
             demo: false,
             seconds: None,
             settings: false,
+            fake_pad: false,
         }
     }
 }
@@ -62,6 +75,8 @@ struct AppState {
     config: std::sync::Mutex<Value>,
     /// origin ของหน้าต่าง overlay บน virtual desktop (ไว้แปลงพิกัดหน้าจอ → พิกัดหน้าต่าง)
     origin: std::sync::Mutex<(i32, i32)>,
+    /// ผู้ใช้สั่งพักการพิมพ์จาก tray (จอยยังอ่านอยู่ แต่ไม่ส่งคีย์)
+    paused: AtomicBool,
 }
 
 impl AppState {
@@ -71,6 +86,7 @@ impl AppState {
             demo: std::sync::Mutex::new(None),
             config: std::sync::Mutex::new(config),
             origin: std::sync::Mutex::new((0, 0)),
+            paused: AtomicBool::new(false),
         }
     }
 }
@@ -87,8 +103,8 @@ fn main() {
     let options = parse_options();
     println!("[app] rnitype-app — RniType overlay (P4 slice 2)");
     println!(
-        "[app] options: demo={} seconds={:?} settings={}",
-        options.demo, options.seconds, options.settings
+        "[app] options: demo={} seconds={:?} settings={} fake_pad={}",
+        options.demo, options.seconds, options.settings, options.fake_pad
     );
 
     let demo_states = load_demo_states();
@@ -128,6 +144,7 @@ fn parse_options() -> Options {
         match arg.as_str() {
             "--demo" => options.demo = true,
             "--settings" => options.settings = true,
+            "--fake-pad" => options.fake_pad = true,
             "--seconds" => {
                 if let Some(value) = args.next() {
                     match value.parse::<u64>() {
@@ -146,7 +163,7 @@ fn parse_options() -> Options {
                 }
             }
             "--help" | "-h" => {
-                println!("[app] usage: rnitype-app [--demo] [--settings] [--seconds N]");
+                println!("[app] usage: rnitype-app [--demo] [--fake-pad] [--settings] [--seconds N]");
             }
             other => eprintln!("[app] ไม่รู้จักตัวเลือก: {other:?}"),
         }
@@ -343,7 +360,8 @@ fn setup_overlay(
             println!("[demo] เปิด demo: ส่ง hud:state ทุก {DEMO_INTERVAL_MS} ms (เริ่มทันที)");
         }
     } else {
-        println!("[demo] demo ปิด — HUD จะไม่ได้รับ state (รอ runtime จริงใน P4 slice 3)");
+        // ---- runtime จริง: จอย → core → injector → hud:state ----
+        spawn_runtime(app.handle(), options.fake_pad, (vx, vy));
     }
 
     // ---- ปิดแอปอัตโนมัติ ----
@@ -361,6 +379,211 @@ fn setup_overlay(
 }
 
 /* ============================================================
+   Runtime loop — จอย → core → injector → hud:state
+   ============================================================ */
+
+/// เริ่ม thread ที่อ่านจอย 250 Hz และส่ง `hud:state` ≤ 60 Hz (เฉพาะเมื่อเปลี่ยน)
+fn spawn_runtime(app: &tauri::AppHandle, fake_pad: bool, origin: (i32, i32)) {
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let source: Box<dyn PadSource> = if fake_pad {
+            println!("[pad] ใช้จอยปลอม (--fake-pad) — ⚠ จะพิมพ์ลงหน้าต่างที่ focus อยู่ตอนนี้");
+            Box::new(ScriptSource::typing_script(&[
+                (0.0, 0.9),  // ↑
+                (0.7, 0.7),  // ↗
+                (0.9, 0.0),  // →
+                (0.7, -0.7), // ↘
+                (0.0, -0.9), // ↓
+            ]))
+        } else {
+            match GilrsSource::open() {
+                Ok(source) => Box::new(source),
+                Err(err) => {
+                    eprintln!("[pad] {err} — HUD จะ idle (ลอง --fake-pad เพื่อตรวจท่อ)");
+                    return;
+                }
+            }
+        };
+
+        let config = handle.state::<AppState>().config.lock().unwrap().clone();
+        let mut session = build_session(&config);
+        println!(
+            "[pad] พร้อม: {} · language={:?} · languages={:?}",
+            if source.name().is_empty() { "ยังไม่พบจอย" } else { "ต่อแล้ว" },
+            session.engine().lang(),
+            session.engine().languages().len()
+        );
+
+        run_loop(&handle, source, &mut session, origin);
+    });
+}
+
+/// สร้าง engine + session จาก config (`defaults.typing`, `languages`)
+fn build_session(config: &Value) -> Session {
+    let typing = config.get("defaults").and_then(|d| d.get("typing"));
+    let dwell = typing
+        .and_then(|t| t.get("commitDwellMs"))
+        .and_then(Value::as_u64)
+        .unwrap_or(60)
+        .clamp(40, 120) as u32;
+    let mode = typing
+        .and_then(|t| t.get("mode"))
+        .and_then(Value::as_str)
+        .unwrap_or("en");
+
+    let mut cfg = RuntimeConfig::default();
+    cfg.gesture.commit_dwell_ms = dwell;
+    let mut engine = RuntimeEngine::new(cfg);
+    if mode.starts_with("th") {
+        engine.set_lang(Lang::Th);
+    }
+
+    let enabled = enabled_languages(config);
+    let (px, py) = primary_monitor_center();
+
+    Session::new(engine, make_injector(), enabled, (px, py))
+}
+
+/// ภาษาที่เปิดใน config (`languages[].enabled`) — ว่าง = EN/TH
+fn enabled_languages(config: &Value) -> Vec<Lang> {
+    let mut out = Vec::new();
+    if let Some(list) = config.get("languages").and_then(Value::as_array) {
+        for entry in list {
+            let enabled = entry.get("enabled").and_then(Value::as_bool).unwrap_or(false);
+            let code = entry.get("code").and_then(Value::as_str).unwrap_or("");
+            if !enabled {
+                continue;
+            }
+            match code {
+                "en" => out.push(Lang::En),
+                "th" => out.push(Lang::Th),
+                _ => {}
+            }
+        }
+    }
+    if out.is_empty() {
+        out = vec![Lang::En, Lang::Th];
+    }
+    out
+}
+
+#[cfg(windows)]
+fn make_injector() -> Box<dyn Injector + Send> {
+    Box::new(rnitype_win::SendInputInjector::new())
+}
+
+#[cfg(not(windows))]
+fn make_injector() -> Box<dyn Injector + Send> {
+    Box::new(rnitype_win::NullInjector::default())
+}
+
+/// loop หลัก: อ่านจอย → tick → inject → emit HUD
+fn run_loop(
+    handle: &tauri::AppHandle,
+    mut source: Box<dyn PadSource>,
+    session: &mut Session,
+    origin: (i32, i32),
+) {
+    let start = Instant::now();
+    let mut last_ms = 0u64;
+    let mut last_emit_ms = 0u64;
+    let mut last_json = String::new();
+    let mut had_pad = false;
+    let mut was_paused = false;
+
+    loop {
+        let now = start.elapsed().as_millis() as u64;
+        let dt = (now - last_ms).clamp(1, 50) as u32;
+        last_ms = now;
+
+        let paused = handle.state::<AppState>().paused.load(Ordering::Relaxed);
+        if paused != was_paused {
+            println!(
+                "[pad] {}",
+                if paused { "พักการพิมพ์ (tray)" } else { "กลับมาพิมพ์" }
+            );
+            if paused {
+                session.release_all();
+                session.on_pad_lost();
+            }
+            was_paused = paused;
+        }
+
+        let sample = source.sample(now);
+        let has_pad = sample.is_some();
+        if has_pad != had_pad {
+            if has_pad {
+                println!("[pad] จอยต่อแล้ว: {}", source.name());
+                session.on_pad_found();
+            } else {
+                println!(
+                    "[pad] จอยหลุด — ปล่อยคีย์ทั้งหมดและพัก (ส่งไปแล้ว {} คีย์)",
+                    session.sent()
+                );
+                session.on_pad_lost();
+            }
+            had_pad = has_pad;
+            last_emit_ms = 0; // บังคับ emit รอบถัดไป
+        }
+
+        let pad = if paused {
+            PadState::default()
+        } else {
+            sample.unwrap_or_default()
+        };
+
+        for action in session.step(&pad, dt) {
+            log_action(&action);
+        }
+
+        // HUD ≤ 60 Hz และเฉพาะเมื่อ payload เปลี่ยน (ipc.md §1)
+        if now.saturating_sub(last_emit_ms) >= 16 {
+            last_emit_ms = now;
+            let app_state = handle.state::<AppState>();
+            let style = {
+                let config = app_state.config.lock().unwrap();
+                HudStyle {
+                    scale: config::hud_scale(&config),
+                    opacity: config::hud_opacity(&config),
+                }
+            };
+            let state = session.hud_state(style, origin);
+            if let Ok(text) = serde_json::to_string(&state)
+                && text != last_json
+            {
+                last_json = text;
+                if let Err(err) = handle.emit_to("hud", "hud:state", &state) {
+                    eprintln!("[pad] ส่ง hud:state ไม่สำเร็จ: {err}");
+                }
+            }
+        }
+
+        // ~250 Hz (dt จริงวัดจากนาฬิกา จึงไม่เพี้ยนถ้า sleep ยืด)
+        std::thread::sleep(Duration::from_millis(3));
+    }
+}
+
+/// log เฉพาะ action ที่ทำให้เกิดผลจริง (คีย์/คลิก) — ไม่ log ทุกเฟรม
+fn log_action(action: &rnitype_core::Action) {
+    use rnitype_core::Action;
+    match action {
+        Action::Key(press) => println!(
+            "[type] {}{}{}",
+            if press.ctrl { "Ctrl+" } else { "" },
+            if press.shift { "Shift+" } else { "" },
+            press.key
+        ),
+        Action::KeyDown(press) => println!("[type] down {}", press.key),
+        Action::KeyUp(press) => println!("[type] up {}", press.key),
+        Action::MouseButton { button, down } => {
+            println!("[mouse] {button:?} {}", if *down { "down" } else { "up" })
+        }
+        Action::MouseMove { dx, dy } => println!("[mouse] move {dx},{dy}"),
+        other => println!("[pad] {other:?}"),
+    }
+}
+
+/* ============================================================
    Tray
    ============================================================ */
 
@@ -369,9 +592,10 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::TrayIconBuilder;
 
+    let pause_item = MenuItem::with_id(app, "pause", "Pause / Resume typing", true, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit RniType", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
+    let menu = Menu::with_items(app, &[&pause_item, &settings_item, &quit_item])?;
 
     let icon = match Image::from_bytes(include_bytes!("../icons/icon.ico")) {
         Ok(image) => image,
@@ -402,6 +626,12 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
         })
         .on_menu_event(|app, event| match event.id.as_ref() {
+            "pause" => {
+                let state = app.state::<AppState>();
+                let paused = state.paused.fetch_xor(true, Ordering::Relaxed);
+                let paused = !paused;
+                println!("[tray] {}", if paused { "พักการพิมพ์" } else { "กลับมาพิมพ์" });
+            }
             "settings" => {
                 println!("[tray] เลือก Settings → เปิดหน้าต่างตั้งค่า");
                 if let Err(err) = open_settings(app) {
@@ -558,6 +788,23 @@ fn virtual_desktop() -> (i32, i32, u32, u32) {
 #[cfg(not(windows))]
 fn virtual_desktop() -> (i32, i32, u32, u32) {
     (0, 0, 1920, 1080)
+}
+
+/// จุดกลางจอหลัก (พิกัดหน้าจอ) — ตำแหน่งเริ่มต้นของ HUD pivot
+#[cfg(windows)]
+fn primary_monitor_center() -> (f32, f32) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+    unsafe {
+        (
+            GetSystemMetrics(SM_CXSCREEN) as f32 / 2.0,
+            GetSystemMetrics(SM_CYSCREEN) as f32 / 2.0,
+        )
+    }
+}
+
+#[cfg(not(windows))]
+fn primary_monitor_center() -> (f32, f32) {
+    (960.0, 540.0)
 }
 
 /// ตั้ง exstyle ของหน้าต่าง: คลิกทะลุ + ไม่แย่ง focus + ไม่ขึ้น taskbar
