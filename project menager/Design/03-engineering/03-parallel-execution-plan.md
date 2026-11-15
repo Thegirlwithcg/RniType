@@ -65,8 +65,8 @@ tags: [plan, execution, parallel, agents]
 | contracts (HUD/config/IPC) | `node tools/contracts/validate.mjs` → **10/10** | ✅ P1 |
 | workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
 | state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
-| probe จอย (Spike A) | เห็น Xbox 360 Controller แต่ axes/buttons = 0 | 🟡 รอทดสอบซ้ำ (Xbox) · DualSense เลื่อน |
-| Spike B (Tauri overlay) | ใส ✅ · ย้ายจอ ✅ · click-through ❌ · focus ❌ | ❌ ไม่ผ่าน (รอ target harness) |
+| probe จอย (Spike A) | เห็น Xbox 360 Controller แต่ axes/buttons = 0 ทั้ง 2 รอบ | ❌ ไม่ผ่าน · DualSense เลื่อน |
+| Spike B (Tauri overlay) | ใส ✅ · ย้ายจอ ✅ · click-through ✅ · focus ✅ (`match=true` 4/4) | ✅ ผ่าน 2026-11-15 |
 | Spike C (SendInput ไทย) | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูก | ✅ ผ่าน 2026-11-15 |
 | injector / mouse / app shell | — | ❌ |
 | HUD overlay จริง | มีแต่ HTML mockup | ❌ |
@@ -314,7 +314,7 @@ P1 Contracts + workspace  ←── owner เคาะ Q1/Q2/Q5
 ## 9. 5 อย่างที่ต้องทำก่อนเปิด subagent
 
 1. ✅ **Commit baseline** — commit `00a6668` (`.nznote/`, `.opencode/`, `target/` ถูก ignore)
-2. ⏳ **Owner รัน A/B** — C ผ่านแล้ว; A ต้องขยับจอยจริง (Xbox; DualSense เลื่อน), B ต้องผ่าน target harness → กรอก `spikes/README.md`
+2. ⏳ **เหลือ Spike A** — B/C ผ่านแล้ว; A ยังได้ 0 ทั้ง 2 รอบ → ตรวจ `joy.cpl` ว่า Windows เห็นค่าไหม แล้วแยกว่าจอยหรือ gilrs (ถ้าจอยอื่นก็ 0 → spike `sdl3`)
 3. ✅ **P1 contracts** — `project menager/Design/03-engineering/contracts/` + `tools/contracts/validate.mjs`
 4. ✅ **แยก workspace** — core / win / app / probe + `ui/hud` / `ui/shared` + `NullInjector`
 5. ⏳ **แตก brief 4 track** พร้อมไฟล์ที่ถือ + เกณฑ์ผ่าน + คำสั่งตรวจ แล้วค่อย spawn

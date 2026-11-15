@@ -59,24 +59,46 @@ cargo run --release --manifest-path spikes/sendinput/Cargo.toml
 
 > ถ้าข้อความไปลง terminal แทน = F8 ถูกกดตอน terminal ยัง focus อยู่ → คลิก Notepad ก่อนแล้วกด F8 ใหม่
 
-## บันทึกผล
+## บันทึกผล (2026-11-15)
 
-| Gate | วันที่ | ผล | หลักฐาน / หมายเหตุ |
-| --- | --- | --- | --- |
-| **A — จอย** | 2026-11-15 | 🟡 **ยังไม่ผ่าน** | เห็น `Xbox 360 Controller for Windows` แต่ axes/buttons = 0 ทั้งหมด · **DualSense เลื่อน** (ยังไม่มีฮาร์ดแวร์) |
-| **B — overlay** | 2026-11-15 | ❌ **ไม่ผ่าน** | ใส ✅ · ย้ายจอ ✅ · click-through ❌ · focus ❌ |
-| **C — SendInput** | 2026-11-15 | ✅ **ผ่าน** | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูกทุกตัว |
+| Gate | ผล | หลักฐาน / หมายเหตุ |
+| --- | --- | --- |
+| **A — จอย** | ❌ **ไม่ผ่าน (2 รอบ)** | เห็น `Xbox 360 Controller for Windows` แต่ axes/buttons = 0 ทั้ง 2 รอบ · **DualSense เลื่อน** (ยังไม่มีฮาร์ดแวร์) |
+| **B — Tauri overlay** | ✅ **ผ่าน** | โปร่งใส ✅ · ย้ายจอ ✅ · click-through ✅ · target เป็น foreground ✅ (`match=true` 4/4) |
+| **C — SendInput ไทย** | ✅ **ผ่าน** | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูกทุกตัว |
 
-**สรุป P0: 1/3 ผ่าน (C)** → ยังไม่เปิด P2–P5 ตามแผน
+**สรุป P0: 2/3 ผ่าน (B, C)** — เหลือ A อย่างเดียว
+B ผ่านแล้ว = Tauri overlay ใช้เป็น HUD ได้ ไม่ต้องถอย egui
 
 ### หลักฐาน C — พิมพ์ไทยลง Notepad
 
 ![[spikes/attachments/Pasted image 20261115-101154.png]]
 
-### ผลดิบ A (รอบแรก)
+### ผลดิบ B — click-through ทำงาน
 
 ```text
---- สรุป (20.001535 s) ---
+Spike B: overlay + target started
+click_through=true  exstyle=0xC0138
+target click: foreground=0x861024 target=Some(0x861024) match=true
+click_through=false exstyle=0x40118
+click_through=true  exstyle=0xC0138
+target click: foreground=0x861024 target=Some(0x861024) match=true
+click_through=false exstyle=0x40118
+click_through=true  exstyle=0xC0138
+target click: foreground=0x861024 target=Some(0x861024) match=true
+click_through=false exstyle=0x40118
+click_through=true  exstyle=0xC0138
+target click: foreground=0x861024 target=Some(0x861024) match=true
+click_through=false exstyle=0x40118
+```
+
+**ตีความ B:** ทั้ง 4 รอบ target ได้รับคลิกและเป็น foreground → ผ่านเกณฑ์
+`exstyle=0xC0138` = `WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | ...` ตามที่ต้องการ
+
+### ผลดิบ A — รอบ 2 (เหมือนรอบแรก)
+
+```text
+--- สรุป (20.003643 s) ---
 [0] Xbox 360 Controller for Windows
   LSx  range +0.00 .. +0.00
   LSy  range +0.00 .. +0.00
@@ -87,39 +109,25 @@ cargo run --release --manifest-path spikes/sendinput/Cargo.toml
   idle_peak=0.000 (deadzone 0.15 OK)  max_magnitude=0.00
   buttons: -
   sectors: -
-  expected buttons: A/South, B/East, X/West, Y/North, LB, RB, LT, RT, LS, RS, D-Up, D-Down, D-Left, D-Right, View, Menu
 ```
 
-**ตีความ A:** gilrs เห็นจอย (ชั้น WGI ทำงาน) แต่ไม่ได้รับ input เลย
-ยัง **ไม่ใช่** ข้อสรุปว่า gilrs ใช้ไม่ได้ — ต้องรันใหม่แล้วขยับ LS/RS + กดปุ่มจริง
-ถ้ายังเป็น 0: ปิด Steam Input/DS4Windows → ต่อ USB → ลอง DualSense
+**ตีความ A:** gilrs เห็นชื่อจอย (WGI enumerate ได้) แต่ **ไม่มี event จากจอยเลย 2 รอบติด**
+ยังแยกไม่ออกว่าเป็น (1) จอย/ไดรเวอร์ไม่ส่งค่า หรือ (2) gilrs/WGI ไม่รับ event
 
-### ผลดิบ B
-
-1. พื้นหลังใส ✅
-2. click-through ❌
-3. ไม่เป็น foreground ❌
-4. ย้ายจอได้ ✅
-
-**ตีความ B:** transparency + multi-monitor ผ่าน; ที่เหลือคือ click-through/focus ซึ่งเป็นเกณฑ์ตัดสิน Tauri
-→ รัน `run.ps1` แล้วกด “ทดสอบคลิกทะลุ 10 วิ” + คลิกปุ่มใน **target window** แล้วดูว่า PASS หรือไม่
-ถ้ายัง fail → ตามแผนถอยไป **egui** หรือทำ click-through ด้วย Win32 เอง แล้วเขียน ADR
+**ลำดับตรวจต่อ:**
+1. เปิด `joy.cpl` → Properties → ขยับ LS/RS ดูว่า Windows เห็นค่าไหม
+2. ถ้า Windows เห็น → ปัญหาอยู่ที่ gilrs/WGI → ลอง spike `sdl3` (ตามทางถอย)
+3. ถ้า Windows ไม่เห็น → จอย/สาย/ไดรเวอร์ → เปลี่ยนสาย/พอร์ต USB, ปิด Steam Input/DS4Windows
+4. ลองจอยตัวอื่น (Xbox/PS ก็ได้) เพื่อแยกว่าจอยเสียหรือโค้ดเสีย
 
 ## ขั้นถัดไป
 
-1. **A — รันใหม่** แล้วขยับ LS/RS 8 ทิศ + กดปุ่มให้ครบ; ต้องเห็น `OK: ได้รับ input แล้ว`
-   ```powershell
-   cargo run -p rnitype-probe -- --seconds 20 --raw
-   ```
-2. **B — รัน target harness** แล้วเก็บ log
-   ```powershell
-   powershell -File spikes/overlay/run.ps1
-   ```
-   ต้องเห็น `PASS — ได้รับคลิก` และ `target click: ... match=true`
+1. **A — ตรวจจอยก่อน** ด้วย `joy.cpl` ตามลำดับข้างบน; ถ้าจอยอื่นยัง 0 → ทำ spike `sdl3`
+2. **B — ปิดได้ ✅**
 3. **C — ปิดได้ ✅**
 
 ## เกณฑ์เปิด P2–P5
 
 - [ ] A ผ่าน: Xbox ครบ 16 ปุ่ม + แกน 8 ทิศ (DualSense เลื่อนไปก่อน release)
-- [ ] B ผ่าน: click-through ได้ + target เป็น foreground
+- [x] B ผ่าน: click-through ได้ + target เป็น foreground
 - [x] C ผ่าน: SendInput ไทยลง Notepad ถูกต้อง
