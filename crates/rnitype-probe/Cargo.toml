@@ -6,6 +6,13 @@ rust-version.workspace = true
 license.workspace = true
 description = "Spike A: ตรวจว่าจอย (Xbox / DualSense) ส่งแกนและปุ่มครบตามที่ core ต้องการ"
 
+[features]
+# WGI เห็นจอยแต่ไม่ส่ง event บนเครื่องนี้ → ใช้ XInput เป็นค่าเริ่มต้น
+# สลับกลับไปทดสอบ WGI: cargo run -p rnitype-probe --no-default-features --features wgi
+default = ["xinput"]
+wgi = ["gilrs/wgi"]
+xinput = ["gilrs/xinput"]
+
 [dependencies]
-gilrs = "0.11"
+gilrs = { version = "0.11", default-features = false }
 rnitype-core = { path = "../rnitype-core" }

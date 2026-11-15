@@ -24,6 +24,10 @@ cargo run -p rnitype-probe -- --seconds 20 --raw
 probe จะมีช่วง **“ยืนยัน input: ขยับ LS หรือกด A ภายใน 10 วินาที”** — ต้องเห็น `OK: ได้รับ input แล้ว` ก่อน
 ถ้าไม่ขึ้น: ปิด Steam Input/DS4Windows → ต่อ USB → ดู Device Manager
 
+> **2026-11-15:** `joy.cpl` เห็นค่าครบทุกปุ่ม → ฮาร์ดแวร์/Windows ปกติ
+> แต่ probe (gilrs/WGI) ได้ 0 → เปลี่ยน backend เป็น **XInput** แล้ว (`default = ["xinput"]`)
+> ทดสอบ WGI แบบเดิม: `cargo run -p rnitype-probe --no-default-features --features wgi -- --seconds 20 --raw`
+
 **ถ้าเห็นชื่อจอยแต่ range เป็น 0 ทั้งหมด** — ระหว่าง 20 วินาทีต้อง **ขยับ LS/RS ให้สุด 8 ทิศ + กด A/B/X/Y/LB/RB/trigger/D-pad**
 ถ้าขยับแล้วยัง 0: ปิด Steam Input/DS4Windows แล้วรันใหม่ (Steam อาจ intercept จอย)
 
@@ -63,7 +67,7 @@ cargo run --release --manifest-path spikes/sendinput/Cargo.toml
 
 | Gate | ผล | หลักฐาน / หมายเหตุ |
 | --- | --- | --- |
-| **A — จอย** | ❌ **ไม่ผ่าน (2 รอบ)** | เห็น `Xbox 360 Controller for Windows` แต่ axes/buttons = 0 ทั้ง 2 รอบ · **DualSense เลื่อน** (ยังไม่มีฮาร์ดแวร์) |
+| **A — จอย** | 🟡 **รอทดสอบ XInput** | `joy.cpl` ผ่านทุกปุ่ม ✅ · gilrs/WGI event = 0 ❌ → สลับเป็น XInput แล้ว · **DualSense เลื่อน** |
 | **B — Tauri overlay** | ✅ **ผ่าน** | โปร่งใส ✅ · ย้ายจอ ✅ · click-through ✅ · target เป็น foreground ✅ (`match=true` 4/4) |
 | **C — SendInput ไทย** | ✅ **ผ่าน** | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูกทุกตัว |
 
@@ -111,18 +115,17 @@ click_through=false exstyle=0x40118
   sectors: -
 ```
 
-**ตีความ A:** gilrs เห็นชื่อจอย (WGI enumerate ได้) แต่ **ไม่มี event จากจอยเลย 2 รอบติด**
-ยังแยกไม่ออกว่าเป็น (1) จอย/ไดรเวอร์ไม่ส่งค่า หรือ (2) gilrs/WGI ไม่รับ event
+**ตีความ A:** `joy.cpl` แสดงค่าครบทุกปุ่ม → **ตัดสาเหตุฮาร์ดแวร์ออก**
+เหลือสาเหตุเดียวคือ gilrs/WGI ไม่ส่ง event บนเครื่องนี้ → เปลี่ยน backend เป็น **XInput** แล้ว
 
 **ลำดับตรวจต่อ:**
-1. เปิด `joy.cpl` → Properties → ขยับ LS/RS ดูว่า Windows เห็นค่าไหม
-2. ถ้า Windows เห็น → ปัญหาอยู่ที่ gilrs/WGI → ลอง spike `sdl3` (ตามทางถอย)
-3. ถ้า Windows ไม่เห็น → จอย/สาย/ไดรเวอร์ → เปลี่ยนสาย/พอร์ต USB, ปิด Steam Input/DS4Windows
-4. ลองจอยตัวอื่น (Xbox/PS ก็ได้) เพื่อแยกว่าจอยเสียหรือโค้ดเสีย
+1. รัน probe (default = XInput) → ต้องเห็น `OK: ได้รับ input แล้ว` + ค่าแกน/ปุ่มครบ
+2. ถ้า XInput ยัง 0 → รันแบบ WGI เพื่อยืนยันว่าเป็นที่ backend
+3. ถ้าทั้งคู่ 0 → ทำ spike `sdl3` ตามทางถอย
 
 ## ขั้นถัดไป
 
-1. **A — ตรวจจอยก่อน** ด้วย `joy.cpl` ตามลำดับข้างบน; ถ้าจอยอื่นยัง 0 → ทำ spike `sdl3`
+1. **A — ทดสอบ XInput** (default) แล้วดูว่ามี event ไหม; ถ้ายัง 0 → ทำ spike `sdl3`
 2. **B — ปิดได้ ✅**
 3. **C — ปิดได้ ✅**
 
