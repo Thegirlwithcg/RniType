@@ -76,7 +76,7 @@ updated: 2026-11-15
 | ภาษาไทย | วรรณยุกต์ ่ ้ ๊ ๋ อยู่กลุ่ม ↘ เดียวกัน · สระล่าง ุ ู มีขีดกำกับใน HUD |
 | หลักการ HUD | วงใน = สิ่งที่ LS เลือก · วงนอก = สิ่งที่ RS เลือก · idle เหลือ pill สถานะ (เปิดวงตลอดได้) |
 | เทคโนโลยี | Rust + Tauri v2 + gilrs/SDL3 + SendInput (แผนสำรอง: C# .NET 8) — ดู [[03-stack-rust]] |
-| สถานะ | **P1 ปิดแล้ว** — core + contracts + workspace + state player; spike A/B/C พร้อมรันบนเครื่องจริง |
+| สถานะ | **P0 ผ่าน 3/3 · P1 ปิด · P2 slice 1 merged** — วงคำสั่ง/วงภาษา/mode arbiter (39 core tests) |
 
 ## หมายเหตุการทำงาน
 

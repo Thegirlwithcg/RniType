@@ -1,6 +1,6 @@
 ---
 title: แผนทำงานหลังม็อกอัป — M0–M5 และ P0–P6
-status: active v0.4 — P0 + P1 ปิดแล้ว
+status: active v0.5 — P0/P1 ปิด · P2 slice 1 merged
 updated: 2026-11-15
 tags: [plan, execution, parallel, agents]
 ---
@@ -61,7 +61,7 @@ tags: [plan, execution, parallel, agents]
 | --- | --- | --- |
 | เอกสารออกแบบ + ADR 14 ฉบับ | `Design/` | ✅ |
 | ม็อกอัป HUD v0.11 | `node tools/tests/hud-smoke.mjs` → **54/54** | ✅ |
-| core + win crate | `cargo test --workspace` → **19 passed** (core 18 + win 1) | ✅ |
+| core + win crate | `cargo test --workspace` → **40 passed** (core 39 + win 1) | ✅ P2 slice 1 |
 | contracts (HUD/config/IPC) | `node tools/contracts/validate.mjs` → **10/10** | ✅ P1 |
 | workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
 | state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
@@ -125,6 +125,9 @@ tags: [plan, execution, parallel, agents]
 ---
 
 ### P2 — Core behaviors (Track A) · 5–7 วัน · ขนานได้
+
+> **slice 1 ✅ merged `ce7d027`** — วงคำสั่ง · วงภาษา · mode arbiter · emergency (39 core tests)
+> เหลือ: repeat, layer 2, shift toggle, quickbar, caret nav, mouse math, Nav pivot, face buttons
 
 | งาน | เกณฑ์ผ่าน |
 | --- | --- |
