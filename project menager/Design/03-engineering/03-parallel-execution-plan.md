@@ -168,6 +168,7 @@ tags: [plan, execution, parallel, agents]
 
 > **slice 1 ✅ `bd98777`** — state-driven renderer ครบทุก mode (type/cmd/lang/mouse/nav/disabled)
 > **slice 2 ✅ `2354912`** — Tauri overlay เต็ม virtual desktop, click-through/no-focus, tray Quit, `hud:state` demo
+> **slice 3 (next, owner feedback 2026-11-15)** — typography/readability: ตัวหนังสือใหญ่ขึ้น + ฟอนต์ไทยไม่มีหัว (IBM Plex Sans Thai) + text scale
 > เหลือ: pivot per-monitor/mixed-DPI, 60 Hz coalescing + latency, real runtime wiring
 
 | งาน | เกณฑ์ผ่าน |
@@ -177,6 +178,7 @@ tags: [plan, execution, parallel, agents]
 | 2 จอ + DPI 150%/200%, จำ pivot | ย้ายจอแล้วไม่เพี้ยน |
 | วงใน/วงนอก/วงคำสั่ง/วงภาษา/pill/idle/ไทยมีขีด | ครบทุก state ใน schema |
 | latency + repaint | HUD ขึ้น < 16 ms, วาด < 8 ms |
+| **Typography/readability (owner feedback)** | group 14–15px · sub 11px · pill 13px · preview 32px · ฟอนต์ไทย loopless · อ่านชัดที่ 100–150% DPI |
 
 **เริ่มได้ทันทีหลัง P1** ด้วย `StatePlayer` — ไม่ต้องรอ P3
 **เสี่ยงต่ำ:** ถ้า P3 ช้า HUD ยังเสร็จและเดโมได้
@@ -190,6 +192,7 @@ tags: [plan, execution, parallel, agents]
 | P5a ตรวจ layout: `GetKeyboardLayoutList` + `ToUnicodeEx` | เห็น EN/TH/RU/EL ตามเครื่องจริง |
 | P5a สร้าง 8×8 จาก QWERTY + cache + override | RU/EL พิมพ์ได้, แก้ช่องได้ |
 | P5b Settings window (General/Languages/Keymap/HUD) | ตั้งค่าแล้วมีผลทันที |
+| **P5b Settings → HUD: text size + font family** | slider 0.8–2.0 + loopless Thai font (IBM Plex Sans Thai / Noto Sans Thai / System) + preview |
 | Keymap editor + controller map + Reset all | reset ได้ทั้ง section/ทั้งหมด |
 | Profiles ต่อ exe + autostart | reload โดยไม่ต้องรีสตาร์ต |
 

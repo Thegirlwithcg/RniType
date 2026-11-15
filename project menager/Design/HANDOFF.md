@@ -116,6 +116,47 @@ crates\rnitype-app\run.ps1 -- --demo --seconds 30
 - ไม่มี `--demo` = HUD idle (รอ runtime จริง)
 - path มี apostrophe → ใช้ `run.ps1`; build.rs copy icon ไป `%TEMP%` ให้ `cargo test/check` ทำงานได้เอง
 
+### 4.5 UI feedback จาก owner (2026-11-15) — ต้องทำก่อน release
+
+**ปัญหา:** ตัวหนังสือ HUD เล็กและอ่านไม่ชัด โดยเฉพาะบนจอ 3840×1080 และภาษาไทย
+**ขอ:** ภาษาไทยใช้ **ฟอนต์ไม่มีหัว (loopless)** และ Settings ต้องปรับขนาด/เลือกฟอนต์ได้
+
+**สภาพปัจจุบัน (ui/hud/hud.css):**
+
+| จุด | ขนาดตอนนี้ |
+| --- | --- |
+| group label | 11px (len-m 9.5 / len-l 8) |
+| char | 15–27px |
+| sub / badge | 8–10.5px |
+| pill | 10.5px |
+| ring | 340px |
+
+**งานที่ต้องทำ (P4 slice 3 + P5):**
+
+1. **Typography pass** — เพิ่มขนาดขั้นต่ำ: group 14–15px · len 11–12px · char 20–34px · sub 11px · pill 13px · badge 11px
+   และเพิ่ม default `hudScale` เป็น ~1.2 (หรือขยาย ring 340 → 400) แล้วตรวจที่ 100%/125%/150% DPI
+2. **ฟอนต์ไทยไม่มีหัว** — ใช้ **IBM Plex Sans Thai** (loopless, OFL) เป็น primary
+   · **Noto Sans Thai** เป็น fallback · เก็บไฟล์ + LICENSE ใน `ui/shared/fonts/` แล้ว `@font-face`
+   · เลิกใช้ `Leelawadee UI` เป็นค่าเริ่มต้น
+3. **Settings → HUD** — เพิ่ม “Text size” (slider 0.8–2.0, default ~1.2) และ “Font”
+   (IBM Plex Sans Thai / Noto Sans Thai / System) · preview ทันที · persist ใน `config.json`
+4. **Contract** — เสนอเพิ่ม `ui.hudTextScale` + `ui.hudFontFamily` ใน `config.schema.json`
+   และให้ app ส่งค่า typography ไป HUD (ทางใดทางหนึ่ง: เพิ่มใน `HudState` หรือ event `hud:style`)
+   — ต้องตัดสินและ bump contract ให้ชัดก่อน implement
+5. **ตรวจรับ** — screenshot 100%/150% DPI + หน้าต่างเล็ก; อ่านวรรณยุกต์/สระล่างได้; ไม่มี label ถูกตัด;
+   contrast ตัวอักษรจาง ≥ 4.5:1
+
+**ข้อควรระวัง:** อย่าเพิ่ม `hudScale` อย่างเดียวโดยไม่เพิ่ม font size — วงจะใหญ่แต่ตัวหนังสือยังเล็ก
+ต้องมีตัวคูณ typography แยกจาก scale ของวง
+
+### 4.6 เริ่ม session หน้า
+
+1. อ่าน HANDOFF นี้ + [[03-parallel-execution-plan]] §P4/P5
+2. งานหลัก: **runtime wiring** (จอย → core → injector → `hud:state`) หรือ **UI typography/font** ตามลำดับที่ owner เลือก
+3. ถ้าทำ UI: เริ่มจาก `ui/hud/hud.css` + `ui/shared/fonts/` + `ui/shared/tokens.css` แล้วต่อ Settings (P5)
+4. รัน checks: `cargo test --workspace` · `node tools/contracts/validate.mjs` · `node tools/tests/hud-smoke.mjs`
+5. ถ้าแตะ overlay: รัน `crates\rnitype-app\run.ps1 -- --demo --seconds 30` แล้วเก็บ screenshot/log
+
 ## 5. คำถามที่ยังค้าง (เจ้าของต้องตอบก่อนเขียนโค้ดเยอะ)
 
 | # | เรื่อง | ข้อเสนอเริ่มต้น |
@@ -125,7 +166,8 @@ crates\rnitype-app\run.ps1 -- --demo --seconds 30
 | Q4 | Alt อยู่ปุ่มไหน | hold-Y = Alt (หรือ View/Share) |
 | Q5 | X/Y/A/B | A=Space, B=Backspace, X=Enter, Y=Tab ✅ แนะนำ |
 | Q7 | layout ไทย | ความถี่ (ที่ออกแบบไว้) ก่อน, เลือก Kedmanee ได้ |
-| Q10 | รองรับจอยอื่นไหม | ทุกตัวที่ SDL3 รู้จัก แต่ QA เฉพาะ Xbox + DS5 |
+| Q10 | รองรับจอยอื่นไหม | XInput สูงสุด 4 ตัว; SDL3 ภายหลังถ้าต้องการ DualSense เต็ม |
+| Q17 | ฟอนต์ไทย/ขนาดเริ่มต้น | IBM Plex Sans Thai (loopless) + text scale ~1.2 ✅ เสนอ |
 
 ที่เหลือ (Q3, Q6, Q8, Q9, Q11, Q12, Q13, Q14) มีข้อเสนอชัดเจนแล้วใน [[01-open-questions]] — ใช้ค่าเริ่มต้นได้เลย
 
