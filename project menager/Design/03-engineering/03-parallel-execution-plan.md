@@ -1,6 +1,6 @@
 ---
 title: แผนทำงานหลังม็อกอัป — M0–M5 และ P0–P6
-status: active v0.6 — P0/P1 ปิด · P2 slice 1–2 merged
+status: active v0.7 — P0/P1 ปิด · P2 slice 1–2 · P3/P4 slice 1 merged
 updated: 2026-11-15
 tags: [plan, execution, parallel, agents]
 ---
@@ -61,15 +61,16 @@ tags: [plan, execution, parallel, agents]
 | --- | --- | --- |
 | เอกสารออกแบบ + ADR 14 ฉบับ | `Design/` | ✅ |
 | ม็อกอัป HUD v0.11 | `node tools/tests/hud-smoke.mjs` → **54/54** | ✅ |
-| core + win crate | `cargo test --workspace` → **51 passed** (core 50 + win 1) | ✅ P2 slice 2 |
+| core + win crate | `cargo test --workspace` → **84 passed** (core 50 + win 34) | ✅ P2/P3 |
 | contracts (HUD/config/IPC) | `node tools/contracts/validate.mjs` → **10/10** | ✅ P1 |
 | workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
 | state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
 | probe จอย (Spike A) | XInput: แกน ±1.0 · 8 sectors · ปุ่ม 16/16 | ✅ ผ่าน 2026-11-15 · DualSense เลื่อน |
 | Spike B (Tauri overlay) | ใส ✅ · ย้ายจอ ✅ · click-through ✅ · focus ✅ (`match=true` 4/4) | ✅ ผ่าน 2026-11-15 |
 | Spike C (SendInput ไทย) | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูก | ✅ ผ่าน 2026-11-15 |
-| injector / mouse / app shell | — | ❌ |
-| HUD overlay จริง | มีแต่ HTML mockup | ❌ |
+| injector (SendInput) | P3 slice 1: Unicode/VK/mouse + partial-send guard | ✅ 84 tests |
+| app shell / tray / loop | — | ❌ |
+| HUD overlay จริง | P4 slice 1: state-driven renderer (static) | ✅ รอ Tauri window |
 | Settings window + config | — | ❌ |
 | ตรวจภาษาที่ติดตั้ง / QWERTY map | — | ❌ |
 | วงคำสั่ง / วงภาษา / repeat / layer 2 / Nav | core ยังไม่มี | ❌ |
@@ -146,6 +147,9 @@ tags: [plan, execution, parallel, agents]
 
 ### P3 — Windows runtime + injector (Track B) · 5–7 วัน · ขนานได้
 
+> **slice 1 ✅ `a90b909`** — SendInput Unicode/VK, mouse rel/abs/buttons/wheel, modifier guard, partial-send tracking, Drop safety net
+> เหลือ: scancode/VK path สำหรับ IME, exclusion/UIPI/admin, app runtime wiring
+
 | งาน | เกณฑ์ผ่าน |
 | --- | --- |
 | `rnitype-win`: SendInput scancode + Unicode fallback | พิมพ์ EN/TH ลง Notepad ถูก 100% |
@@ -161,6 +165,9 @@ tags: [plan, execution, parallel, agents]
 ---
 
 ### P4 — HUD overlay (Track C) · 4–5 วัน · ขนานได้
+
+> **slice 1 ✅ `bd98777`** — state-driven renderer ครบทุก mode (type/cmd/lang/mouse/nav/disabled)
+> ตรวจ 13/13 DOM + 44/44 CDP, screenshot ครบ; เหลือ Tauri window/click-through/DPI/latency
 
 | งาน | เกณฑ์ผ่าน |
 | --- | --- |
