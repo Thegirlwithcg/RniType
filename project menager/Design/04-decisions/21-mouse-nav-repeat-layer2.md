@@ -75,7 +75,7 @@ commit (ปล่อย RS + dwell 60 ms) → จำ (group, sector) ไว้
 ## หลักฐาน
 
 ```
-cargo test --workspace        → 144 passed (core 83 + win 36 + app 25)
+cargo test --workspace        → 145 passed (core 84 + win 36 + app 25)
 node tools/contracts/validate.mjs
 node tools/tests/hud-smoke.mjs
 node tools/tests/hud-typography.mjs

@@ -15,7 +15,7 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2 slice 3 · P3/P4/P5 slice 1 · runtime จอยจริงต่อได้และพิมพ์ได้ — 144 tests** |
+| สถานะ | **P0/P1 ปิด · P2 slice 3 · P3/P4/P5 slice 1 · runtime จอยจริงต่อได้และพิมพ์ได้ — 145 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, XInput) + `SendInput` |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
 | งานถัดไป | **P2 slice 4**: quick bar (LB) + caret nav (R3) + sticky drag (RB 2 taps) + pivot clamp |
@@ -106,7 +106,7 @@ project menager/
 
 | Track | ทำแล้ว | เหลือ |
 | --- | --- | --- |
-| P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons + **slice 3: mouse math, Nav pivot, auto-repeat, layer 2, double-tap/hold** (83 tests) | quickbar, caret nav, sticky drag, pivot clamp/DPI |
+| P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons + **slice 3: mouse math, Nav pivot, auto-repeat, layer 2, double-tap/hold** (84 tests) | quickbar, caret nav, sticky drag, pivot clamp/DPI |
 | P3 win | SendInput Unicode/VK/mouse + **HWheel** + Ctrl+ASCII→VK (36 tests) | scancode/IME, exclusion/UIPI |
 | P4 HUD | renderer ครบ mode + overlay + typography + `HudState` จริง (+ `layer`/`repeat`/`pointer`) (30 checks) | latency, pivot per-monitor/mixed-DPI |
 | Runtime | `input.rs` + `session.rs` + tray Pause + resend/heartbeat + single instance + **mouse/Nav recenter/reset** | ทดสอบ mouse/Nav กับจอยจริง |
@@ -129,7 +129,7 @@ crates\rnitype-app\run.ps1 --demo --settings --seconds 30  # HUD จาก state
 ```
 
 ```powershell
-cargo test --workspace                      # 144 tests
+cargo test --workspace                      # 145 tests
 node tools/contracts/validate.mjs           # 10/10
 node tools/tests/hud-smoke.mjs              # 54/54 (ม็อกอัป)
 node tools/tests/hud-typography.mjs         # 30/30 + screenshot

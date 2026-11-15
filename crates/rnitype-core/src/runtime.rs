@@ -438,11 +438,11 @@ impl RuntimeEngine {
 
         // 6) ชั้น 2 (RB/RT) เฉพาะ Type: แตะ = ล็อก · ค้าง = ชั่วคราว
         if self.mode == Mode::Type {
-            self.tick_layer2(pad, dt_ms, edges.rb, edges.rt);
-            // ใช้ RB/RT ค้างระหว่างพิมพ์ = ชั่วคราว ไม่ใช่แตะเพื่อล็อก
+            // เช็คก่อนประมวลผลปล่อยปุ่ม: ถ้ามี gesture ค้างอยู่ = ค้างเพื่อพิมพ์ ไม่ใช่แตะ
             if self.layer2_held && self.typing.state() != GestureState::Idle {
                 self.layer2_used = true;
             }
+            self.tick_layer2(pad, dt_ms, edges.rb, edges.rt);
             // เปลี่ยนชั้นกลาง gesture = ยกเลิก (กันพิมพ์ผิดชุด)
             let layer = self.layer();
             if layer != self.prev_layer && self.typing.state() != GestureState::Idle {
@@ -2002,6 +2002,19 @@ mod tests {
         e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
         assert_eq!(e.layer(), 1);
         assert!(!e.layer2_locked(), "ค้างเพื่อพิมพ์ต้องไม่ล็อกชั้น 2");
+    }
+
+    #[test]
+    fn quick_layer_two_gesture_does_not_lock_the_layer() {
+        let mut e = engine();
+        let rb = |ls: (f32, f32), rs: (f32, f32)| with(p(ls, rs), |b| b.rb = true);
+        e.tick(&rb((0.0, 0.0), (0.0, 0.0)), D); // กด RB
+        e.tick(&rb(LS_N, (0.0, 0.0)), D); // arm
+        e.tick(&rb(LS_N, LS_N), D); // select ภายใน < 280 ms
+        e.tick(&rb(LS_N, (0.0, 0.0)), D); // committing
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D); // ปล่อย RB
+        assert!(!e.layer2_locked(), "การพิมพ์ระหว่างกดต้องไม่ล็อกชั้น 2");
+        assert_eq!(e.layer(), 1);
     }
 
     #[test]

@@ -61,7 +61,7 @@ tags: [plan, execution, parallel, agents]
 | --- | --- | --- |
 | เอกสารออกแบบ + ADR 14 ฉบับ | `Design/` | ✅ |
 | ม็อกอัป HUD v0.11 | `node tools/tests/hud-smoke.mjs` → **54/54** | ✅ |
-| core + win crate | `cargo test --workspace` → **144 passed** (core 83 + win 36 + app 25) | ✅ P2/P3 |
+| core + win crate | `cargo test --workspace` → **145 passed** (core 84 + win 36 + app 25) | ✅ P2/P3 |
 | contracts (HUD/config/IPC) | `node tools/contracts/validate.mjs` → **10/10** | ✅ P1 |
 | workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
 | state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
