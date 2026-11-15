@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rnitype.dev/contracts/config.schema.json",
+  "title": "RniTypeConfig",
+  "description": "ไฟล์ config เดียวของแอป (เก็บที่ %APPDATA%/RniType/config.json) — P1 freeze",
+  "type": "object",
+  "required": ["version", "defaults", "languages", "keymaps", "profiles"],
+  "properties": {
+    "version": { "const": 1 },
+    "defaults": {
+      "type": "object",
+      "required": ["typing", "mouse", "hotkeys"],
+      "properties": {
+        "typing": {
+          "type": "object",
+          "required": ["mode", "commitDwellMs", "hud"],
+          "properties": {
+            "mode": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)?$" },
+            "commitDwellMs": { "type": "integer", "minimum": 40, "maximum": 120 },
+            "hud": { "type": "boolean" },
+            "ringAlways": { "type": "boolean", "default": false },
+            "layer": { "type": "integer", "minimum": 1, "maximum": 2, "default": 1 }
+          },
+          "additionalProperties": false
+        },
+        "mouse": {
+          "type": "object",
+          "required": ["vmax", "gamma", "deadzone"],
+          "properties": {
+            "vmax": { "type": "integer", "minimum": 200, "maximum": 8000 },
+            "gamma": { "type": "number", "minimum": 1, "maximum": 3 },
+            "deadzone": { "type": "number", "minimum": 0.05, "maximum": 0.4 }
+          },
+          "additionalProperties": false
+        },
+        "hotkeys": {
+          "type": "object",
+          "required": ["emergency", "hudToggle"],
+          "properties": {
+            "emergency": { "type": "string", "minLength": 1, "maxLength": 32 },
+            "hudToggle": { "type": "string", "minLength": 1, "maxLength": 32 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "languages": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["code", "enabled", "kind"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)?$" },
+          "label": { "type": "string", "maxLength": 40 },
+          "enabled": { "type": "boolean" },
+          "kind": { "enum": ["layout", "ime"] },
+          "overrides": {
+            "type": "object",
+            "description": "เฉพาะช่องที่ผู้ใช้แก้: key = \"group-sector\" (0-7), value = ข้อความ",
+            "patternProperties": {
+              "^[0-7]-[0-7]$": { "type": "string", "maxLength": 4 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "keymaps": {
+      "type": "object",
+      "description": "key = language code — 8 กลุ่ม × 8 ช่อง ต่อ layer",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["layers"],
+        "properties": {
+          "layers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["name", "cells"],
+              "properties": {
+                "name": { "type": "string", "maxLength": 40 },
+                "cells": {
+                  "type": "array",
+                  "minItems": 64,
+                  "maxItems": 64,
+                  "items": { "type": "string", "maxLength": 4 }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["match", "mode"],
+        "properties": {
+          "match": {
+            "type": "object",
+            "required": ["exe"],
+            "properties": {
+              "exe": { "type": "string", "minLength": 1, "maxLength": 260 }
+            },
+            "additionalProperties": false
+          },
+          "mode": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)?$" },
+          "hud": { "type": "boolean" },
+          "quickbar": { "type": "string", "maxLength": 40 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "language": { "const": "en" },
+        "hudScale": { "type": "number", "minimum": 0.5, "maximum": 3 },
+        "hudOpacity": { "type": "number", "minimum": 0.1, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "system": {
+      "type": "object",
+      "properties": {
+        "autostart": { "type": "boolean" },
+        "runAsAdmin": { "type": "boolean" },
+        "exclusion": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 260 }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

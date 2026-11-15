@@ -1,6 +1,6 @@
 ---
 title: แผนทำงานหลังม็อกอัป — M0–M5 และ P0–P6
-status: proposed v0.2
+status: active v0.3 — P1 ปิดแล้ว
 updated: 2026-11-15
 tags: [plan, execution, parallel, agents]
 ---
@@ -11,6 +11,7 @@ tags: [plan, execution, parallel, agents]
 > เป้าหมาย: ลดเวลาปฏิทินจาก ~7 สัปดาห์ (ทำเรียง) เหลือ ~4–5 สัปดาห์ ด้วยงานคู่ขนาน 4 track
 >
 > **v0.2:** ตัด big-pickle ออก · เพิ่มข้อตกลง M ↔ P ให้เหลือแหล่งความจริงเดียว
+> **v0.3 (2026-11-15):** เลือกแผน P เป็นแผนลงมือ · **P1 ปิดแล้ว** (contracts + workspace + state player)
 
 ## 0. สรุป 1 นาที
 
@@ -60,7 +61,10 @@ tags: [plan, execution, parallel, agents]
 | --- | --- | --- |
 | เอกสารออกแบบ + ADR 14 ฉบับ | `Design/` | ✅ |
 | ม็อกอัป HUD v0.11 | `node tools/tests/hud-smoke.mjs` → **54/54** | ✅ |
-| core crate (pure Rust) | `cargo test --workspace` → **18 passed** | ✅ |
+| core + win crate | `cargo test --workspace` → **19 passed** (core 18 + win 1) | ✅ |
+| contracts (HUD/config/IPC) | `node tools/contracts/validate.mjs` → **10/10** | ✅ P1 |
+| workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
+| state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
 | probe จอย (Spike A) | `crates/rnitype-probe` มีโค้ด | 🟡 ยังไม่รันกับจอยจริง |
 | Spike B (Tauri overlay) | — | ❌ |
 | Spike C (SendInput ไทย) | — | ❌ |
@@ -308,12 +312,19 @@ P1 Contracts + workspace  ←── owner เคาะ Q1/Q2/Q5
 
 ## 9. 5 อย่างที่ต้องทำก่อนเปิด subagent
 
-1. **Commit baseline** — design + `crates/` + `tools/` + `.gitignore` (ตัดสิน `.nznote/`, `.opencode/`, `target/`)
-   เพื่อให้ใช้ worktree/branch ได้จริง (ตอนนี้ทุกอย่าง untracked)
-2. **Owner รัน probe A** กับ Xbox + DS5 แล้วเก็บ log → กรอกตารางวัดผล
-3. **เขียน P1 contracts** ให้ครบ 4 อย่าง (Action, hud-state, config, IPC) + `StatePlayer`
-4. **แยก workspace** เป็น core / win / app / ui + fake injector
-5. **แตก brief 4 track** พร้อมไฟล์ที่ถือ + เกณฑ์ผ่าน + คำสั่งตรวจ แล้วค่อย spawn
+1. ✅ **Commit baseline** — commit `00a6668` (`.nznote/`, `.opencode/`, `target/` ถูก ignore)
+2. ⏳ **Owner รัน probe A** กับ Xbox + DS5 แล้วเก็บ log → กรอกตารางวัดผล
+3. ✅ **P1 contracts** — `project menager/Design/03-engineering/contracts/` + `tools/contracts/validate.mjs`
+4. ✅ **แยก workspace** — core / win / app / probe + `ui/hud` / `ui/shared` + `NullInjector`
+5. ⏳ **แตก brief 4 track** พร้อมไฟล์ที่ถือ + เกณฑ์ผ่าน + คำสั่งตรวจ แล้วค่อย spawn
+
+**คำสั่งตรวจ P1 (รันซ้ำได้)**
+
+```powershell
+cargo test --workspace
+node tools/contracts/validate.mjs
+node tools/state-player/serve.mjs   # เปิด http://127.0.0.1:4173/ui/hud/
+```
 
 ---
 

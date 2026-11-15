@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RniType HUD — contract harness (P1)</title>
+  <link rel="stylesheet" href="../shared/tokens.css" />
+  <link rel="stylesheet" href="hud.css" />
+</head>
+<body>
+  <main id="hud" data-mode="disabled" aria-live="polite">
+    <div id="pivot" class="pivot" aria-hidden="true"></div>
+    <div id="pointer" class="pointer" hidden aria-hidden="true"></div>
+
+    <section id="rings" class="rings" aria-label="ring">
+      <div class="ring inner-ring"></div>
+      <div class="ring outer-ring"></div>
+      <div id="inner" class="slots inner"></div>
+      <div id="outer" class="slots outer"></div>
+      <div id="preview" class="preview" hidden>
+        <span id="previewChar" class="preview-char"></span>
+        <span id="previewCount" class="preview-count"></span>
+      </div>
+    </section>
+
+    <div id="pill" class="pill">
+      <span id="pillMode" class="pill-mode">—</span>
+      <span id="pillLang" class="pill-lang"></span>
+      <span id="pillBadges" class="pill-badges"></span>
+    </div>
+
+    <p class="hint">P1 contract harness · กด <kbd>N</kbd> เพื่อดู state ถัดไป</p>
+  </main>
+  <script src="hud.js"></script>
+</body>
+</html>

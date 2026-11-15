@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "defaults": {
+    "typing": { "mode": "th", "commitDwellMs": 60, "hud": true, "ringAlways": false, "layer": 1 },
+    "mouse": { "vmax": 1600, "gamma": 1.7, "deadzone": 0.15 },
+    "hotkeys": { "emergency": "LB+RB", "hudToggle": "LT+RT" }
+  },
+  "languages": [
+    { "code": "en", "label": "English", "enabled": true, "kind": "layout" },
+    { "code": "th", "label": "ไทย", "enabled": true, "kind": "layout" }
+  ],
+  "keymaps": {
+    "en": {
+      "layers": [
+        {
+          "name": "Type EN",
+          "cells": [
+            "a", "e", "i", "o", "u", "t", "n", "s",
+            "h", "r", "d", "l", "c", "m", "f", "w",
+            "g", "p", "b", "v", "k", "x", "y", "j",
+            "q", "z", "'", "\"", "-", "_", ".", ",",
+            "1", "2", "3", "4", "5", "6", "7", "8",
+            "9", "0", "/", "\\", "(", ")", "[", "]",
+            "!", "?", "@", "#", "$", "%", "&", "*",
+            ":", ";", "=", "+", "<", ">", "`", "~"
+          ]
+        }
+      ]
+    },
+    "th": {
+      "layers": [
+        {
+          "name": "Type TH",
+          "cells": [
+            "ก", "น", "ร", "อ", "ง", "ม", "ย", "ล",
+            "า", "ะ", "ิ", "ี", "ื", "ึ", "ุ", "ู",
+            "เ", "แ", "โ", "ใ", "ไ", "อ", "่", "้",
+            "๊", "๋", "์", "็", "ำ", "ั", "ฤ", "ฮ",
+            "ด", "ท", "ส", "ว", "ต", "ป", "ค", "ข",
+            "จ", "ช", "บ", "พ", "ฟ", "ผ", "ฝ", "ห",
+            "ซ", "ญ", "ฎ", "ฏ", "ฐ", "ฑ", "ฒ", "ณ",
+            "ฉ", "ฌ", "ฆ", "ธ", "ศ", "ษ", "ถ", "ภ"
+          ]
+        }
+      ]
+    }
+  },
+  "profiles": [
+    { "match": { "exe": "Code.exe" }, "mode": "en", "hud": true, "quickbar": "code" },
+    { "match": { "exe": "WINWORD.EXE" }, "mode": "th", "hud": true }
+  ],
+  "ui": { "language": "en", "hudScale": 1, "hudOpacity": 0.92 },
+  "system": { "autostart": false, "runAsAdmin": false, "exclusion": ["game.exe"] }
+}

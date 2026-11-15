@@ -68,7 +68,10 @@ pub struct SectorTracker {
 
 impl SectorTracker {
     pub fn new(hysteresis_deg: f32) -> Self {
-        Self { current: None, hysteresis_deg }
+        Self {
+            current: None,
+            hysteresis_deg,
+        }
     }
 
     pub fn current(&self) -> Option<Dir8> {
@@ -123,7 +126,11 @@ pub struct NormalizerConfig {
 
 impl Default for NormalizerConfig {
     fn default() -> Self {
-        Self { deadzone: 0.15, trigger_down: 0.40, trigger_up: 0.20 }
+        Self {
+            deadzone: 0.15,
+            trigger_down: 0.40,
+            trigger_up: 0.20,
+        }
     }
 }
 
@@ -137,7 +144,11 @@ pub struct Normalizer {
 
 impl Normalizer {
     pub fn new(cfg: NormalizerConfig) -> Self {
-        Self { cfg, lt_down: false, rt_down: false }
+        Self {
+            cfg,
+            lt_down: false,
+            rt_down: false,
+        }
     }
 
     pub fn config(&self) -> NormalizerConfig {
@@ -145,8 +156,18 @@ impl Normalizer {
     }
 
     pub fn apply(&mut self, raw: &PadState) -> PadState {
-        self.lt_down = hysteresis(raw.lt_analog, self.lt_down, self.cfg.trigger_down, self.cfg.trigger_up);
-        self.rt_down = hysteresis(raw.rt_analog, self.rt_down, self.cfg.trigger_down, self.cfg.trigger_up);
+        self.lt_down = hysteresis(
+            raw.lt_analog,
+            self.lt_down,
+            self.cfg.trigger_down,
+            self.cfg.trigger_up,
+        );
+        self.rt_down = hysteresis(
+            raw.rt_analog,
+            self.rt_down,
+            self.cfg.trigger_down,
+            self.cfg.trigger_up,
+        );
 
         PadState {
             ls: apply_deadzone(raw.ls, self.cfg.deadzone),
@@ -207,7 +228,10 @@ mod tests {
     #[test]
     fn trigger_hysteresis_prevents_chatter() {
         let mut n = Normalizer::new(NormalizerConfig::default());
-        let mut raw = PadState { lt_analog: 0.45, ..PadState::default() };
+        let mut raw = PadState {
+            lt_analog: 0.45,
+            ..PadState::default()
+        };
         assert!(n.apply(&raw).buttons.lt);
 
         raw.lt_analog = 0.30; // ระหว่าง up กับ down → ต้องยังกดอยู่

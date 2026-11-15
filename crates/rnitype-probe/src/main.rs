@@ -53,7 +53,11 @@ struct Args {
 
 impl Args {
     fn parse() -> Self {
-        let mut args = Args { seconds: 20.0, print_hz: 5.0, raw: false };
+        let mut args = Args {
+            seconds: 20.0,
+            print_hz: 5.0,
+            raw: false,
+        };
         let mut it = std::env::args().skip(1);
         while let Some(arg) = it.next() {
             match arg.as_str() {
@@ -120,7 +124,10 @@ fn main() -> ExitCode {
         }
     };
 
-    println!("RniType probe (spike A) — gilrs {}", env!("CARGO_PKG_VERSION"));
+    println!(
+        "RniType probe (spike A) — gilrs {}",
+        env!("CARGO_PKG_VERSION")
+    );
     println!(
         "args: seconds={} hz={} raw={}",
         args.seconds, args.print_hz, args.raw
@@ -133,7 +140,9 @@ fn main() -> ExitCode {
 
     if detected.is_empty() {
         println!("pads: 0");
-        println!("FAIL: ไม่พบจอย — ต่อจอยแล้วรันใหม่ (ดูคู่มือใน Design/03-engineering/02-roadmap-and-smoke-tests.md)");
+        println!(
+            "FAIL: ไม่พบจอย — ต่อจอยแล้วรันใหม่ (ดูคู่มือใน Design/03-engineering/02-roadmap-and-smoke-tests.md)"
+        );
         return ExitCode::from(2);
     }
 
@@ -245,7 +254,8 @@ fn print_snapshot(
         if slot_stats.name.is_empty() {
             slot_stats.name = name.clone();
             slot_stats.axes = (0..AXES.len()).map(|_| AxisStats::default()).collect();
-        }        for (i, (axis, _)) in AXES.iter().enumerate() {
+        }
+        for (i, (axis, _)) in AXES.iter().enumerate() {
             slot_stats.axes[i].feed(pad.value(*axis));
         }
         for (btn, label) in BUTTONS {
@@ -273,7 +283,11 @@ fn print_snapshot(
             normalized.rs.y,
             normalized.lt_analog,
             normalized.rt_analog,
-            if pressed.is_empty() { "-".to_string() } else { pressed.join("+") },
+            if pressed.is_empty() {
+                "-".to_string()
+            } else {
+                pressed.join("+")
+            },
             ls_dir.map(Dir8::symbol).unwrap_or("·"),
             rs_dir.map(Dir8::symbol).unwrap_or("·"),
         );
@@ -295,29 +309,59 @@ fn print_summary(pads: &[(GamepadId, String)], stats: &[PadStats]) {
             Some(s) => s,
             None => continue,
         };
-        println!("[{id}] {}", if s.name.is_empty() { name.as_str() } else { s.name.as_str() });
+        println!(
+            "[{id}] {}",
+            if s.name.is_empty() {
+                name.as_str()
+            } else {
+                s.name.as_str()
+            }
+        );
         for (i, (_axis, label)) in AXES.iter().enumerate() {
             if let Some(a) = s.axes.get(i)
                 && a.touched
             {
-                println!("  {label:<4} range {min:+.2} .. {max:+.2}", min = a.min, max = a.max);
+                println!(
+                    "  {label:<4} range {min:+.2} .. {max:+.2}",
+                    min = a.min,
+                    max = a.max
+                );
             }
         }
         println!(
             "  idle_peak={:.3} (deadzone 0.15 {})  max_magnitude={:.2}",
             s.idle_peak,
-            if s.idle_peak < 0.15 { "OK" } else { "สูงเกิน — ต้องขยับ deadzone" },
+            if s.idle_peak < 0.15 {
+                "OK"
+            } else {
+                "สูงเกิน — ต้องขยับ deadzone"
+            },
             s.max_magnitude
         );
         println!(
             "  buttons: {}",
-            if s.buttons.is_empty() { "-".into() } else { s.buttons.iter().copied().collect::<Vec<_>>().join(", ") }
+            if s.buttons.is_empty() {
+                "-".into()
+            } else {
+                s.buttons.iter().copied().collect::<Vec<_>>().join(", ")
+            }
         );
         println!(
             "  sectors: {}",
-            if s.sectors.is_empty() { "-".into() } else { s.sectors.iter().copied().collect::<Vec<_>>().join(" ") }
+            if s.sectors.is_empty() {
+                "-".into()
+            } else {
+                s.sectors.iter().copied().collect::<Vec<_>>().join(" ")
+            }
         );
-        println!("  expected buttons: {}", BUTTONS.iter().map(|(_, l)| *l).collect::<Vec<_>>().join(", "));
+        println!(
+            "  expected buttons: {}",
+            BUTTONS
+                .iter()
+                .map(|(_, l)| *l)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 }
 

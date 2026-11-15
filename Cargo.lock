@@ -206,6 +206,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rnitype-app"
+version = "0.1.0"
+dependencies = [
+ "rnitype-core",
+ "rnitype-win",
+]
+
+[[package]]
 name = "rnitype-core"
 version = "0.1.0"
 
@@ -214,6 +222,13 @@ name = "rnitype-probe"
 version = "0.1.0"
 dependencies = [
  "gilrs",
+ "rnitype-core",
+]
+
+[[package]]
+name = "rnitype-win"
+version = "0.1.0"
+dependencies = [
  "rnitype-core",
 ]
 

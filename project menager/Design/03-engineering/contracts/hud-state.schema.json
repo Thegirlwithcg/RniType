@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rnitype.dev/contracts/hud-state.schema.json",
+  "title": "HudState",
+  "description": "สถานะ 1 เฟรมที่ app ส่งให้ HUD overlay — ห้ามมี field ที่ HUD ต้องคำนวณเอง",
+  "type": "object",
+  "required": [
+    "version",
+    "visible",
+    "mode",
+    "ringAlways",
+    "scale",
+    "opacity",
+    "pivot",
+    "layer",
+    "shiftLock",
+    "state",
+    "group",
+    "sector",
+    "language",
+    "inner",
+    "outer",
+    "preview"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "visible": { "type": "boolean" },
+    "mode": {
+      "enum": ["type-en", "type-th", "type-other", "cmd", "lang", "mouse", "nav", "disabled"]
+    },
+    "ringAlways": { "type": "boolean", "description": "โหมดเรียนรู้ = แสดงวงตลอด" },
+    "hudHidden": { "type": "boolean" },
+    "scale": { "type": "number", "minimum": 0.5, "maximum": 3 },
+    "opacity": { "type": "number", "minimum": 0.1, "maximum": 1 },
+    "pivot": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "layer": { "type": "integer", "minimum": 1, "maximum": 2 },
+    "shiftLock": { "type": "boolean", "description": "LT toggle ตัวพิมพ์ใหญ่" },
+    "state": { "enum": ["idle", "group", "char", "commit", "repeat"] },
+    "group": { "type": "integer", "minimum": -1, "maximum": 7 },
+    "sector": { "type": "integer", "minimum": -1, "maximum": 7 },
+    "language": {
+      "type": "object",
+      "required": ["code", "kind", "enabled"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)?$" },
+        "kind": { "enum": ["layout", "ime"] },
+        "enabled": {
+          "type": "array",
+          "items": { "type": "string" },
+          "maxItems": 8,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "inner": {
+      "type": "object",
+      "required": ["kind", "active", "labels"],
+      "properties": {
+        "kind": { "enum": ["group", "command", "language", "none"] },
+        "active": { "type": "integer", "minimum": -1, "maximum": 7 },
+        "labels": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/label" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "outer": {
+      "type": "object",
+      "required": ["kind", "active", "labels"],
+      "properties": {
+        "kind": { "enum": ["char", "none"] },
+        "active": { "type": "integer", "minimum": -1, "maximum": 7 },
+        "labels": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/label" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "preview": {
+      "type": "object",
+      "required": ["char", "count"],
+      "properties": {
+        "char": { "type": "string", "maxLength": 4 },
+        "count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "pointer": {
+      "type": "object",
+      "required": ["x", "y", "visible"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "visible": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "status": {
+      "type": "object",
+      "required": ["text", "badges"],
+      "properties": {
+        "text": { "type": "string" },
+        "badges": {
+          "type": "array",
+          "items": { "type": "string" },
+          "maxItems": 6
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "label": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string", "maxLength": 24 },
+        "sub": { "type": "string", "maxLength": 32 },
+        "badge": { "type": "string", "maxLength": 8 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

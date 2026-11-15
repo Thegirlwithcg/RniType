@@ -124,7 +124,11 @@ mod tests {
 
     #[test]
     fn button_names_follow_pressed_flags() {
-        let b = Buttons { a: true, rb: true, ..Buttons::default() };
+        let b = Buttons {
+            a: true,
+            rb: true,
+            ..Buttons::default()
+        };
         let names: Vec<_> = b.names().collect();
         assert_eq!(names, vec!["A", "RB"]);
         assert!(Buttons::default().names().next().is_none());

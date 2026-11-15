@@ -13,7 +13,10 @@ pub struct TypingPipeline {
 
 impl TypingPipeline {
     pub fn new(lang: Lang, cfg: GestureConfig) -> Self {
-        Self { engine: GestureEngine::new(cfg), lang }
+        Self {
+            engine: GestureEngine::new(cfg),
+            lang,
+        }
     }
 
     pub fn lang(&self) -> Lang {
@@ -70,11 +73,25 @@ mod tests {
     fn types_en_and_th_from_same_gesture() {
         let mut en = TypingPipeline::default();
         let action = press(&mut en, (0.0, 0.9), (0.0, 0.9)).expect("commit");
-        assert_eq!(action, Action::Key(KeyPress { key: Key::Char('a'), shift: false, ctrl: false }));
+        assert_eq!(
+            action,
+            Action::Key(KeyPress {
+                key: Key::Char('a'),
+                shift: false,
+                ctrl: false
+            })
+        );
 
         let mut th = TypingPipeline::new(Lang::Th, GestureConfig::default());
         let action = press(&mut th, (0.0, 0.9), (0.0, 0.9)).expect("commit");
-        assert_eq!(action, Action::Key(KeyPress { key: Key::Char('ก'), shift: false, ctrl: false }));
+        assert_eq!(
+            action,
+            Action::Key(KeyPress {
+                key: Key::Char('ก'),
+                shift: false,
+                ctrl: false
+            })
+        );
     }
 
     #[test]
@@ -86,6 +103,13 @@ mod tests {
         pipe.tick(&p((0.0, 0.9), (0.0, 0.9)), 4);
         pipe.tick(&p((0.0, 0.9), (0.0, 0.0)), 4);
         let action = pipe.tick(&pad, 64).expect("commit");
-        assert_eq!(action, Action::Key(KeyPress { key: Key::Char('a'), shift: true, ctrl: false }));
+        assert_eq!(
+            action,
+            Action::Key(KeyPress {
+                key: Key::Char('a'),
+                shift: true,
+                ctrl: false
+            })
+        );
     }
 }

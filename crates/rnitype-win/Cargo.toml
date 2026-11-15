@@ -1,0 +1,10 @@
+[package]
+name = "rnitype-win"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Windows output layer: Injector trait + SendInput (P3), language detection (P5a)"
+
+[dependencies]
+rnitype-core = { path = "../rnitype-core" }

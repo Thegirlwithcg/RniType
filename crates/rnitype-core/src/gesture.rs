@@ -171,7 +171,10 @@ impl GestureEngine {
                 }
                 self.commit_ms = self.commit_ms.saturating_add(dt_ms);
                 if self.commit_ms >= self.cfg.commit_dwell_ms {
-                    let commit = self.group.zip(self.sector).map(|(group, sector)| Commit { group, sector });
+                    let commit = self
+                        .group
+                        .zip(self.sector)
+                        .map(|(group, sector)| Commit { group, sector });
                     self.reset(false);
                     return commit;
                 }
@@ -239,8 +242,16 @@ mod tests {
         assert_eq!(e.state(), GestureState::Committing);
 
         assert!(e.tick(&pad((0.0, 0.9), (0.0, 0.0)), 40).is_none());
-        let commit = e.tick(&pad((0.0, 0.9), (0.0, 0.0)), 24).expect("ต้อง commit");
-        assert_eq!(commit, Commit { group: Dir8::N, sector: Dir8::N });
+        let commit = e
+            .tick(&pad((0.0, 0.9), (0.0, 0.0)), 24)
+            .expect("ต้อง commit");
+        assert_eq!(
+            commit,
+            Commit {
+                group: Dir8::N,
+                sector: Dir8::N
+            }
+        );
 
         // ไม่พิมพ์ซ้ำ
         for _ in 0..10 {
@@ -281,8 +292,16 @@ mod tests {
         e.tick(&pad((0.0, 0.9), (0.9, 0.0)), 4); // เลื่อนไปทางขวา
         assert_eq!(e.sector(), Some(Dir8::E));
         e.tick(&pad((0.0, 0.9), (0.0, 0.1)), 4);
-        let commit = e.tick(&pad((0.0, 0.9), (0.0, 0.0)), 64).expect("ต้อง commit");
-        assert_eq!(commit, Commit { group: Dir8::N, sector: Dir8::E });
+        let commit = e
+            .tick(&pad((0.0, 0.9), (0.0, 0.0)), 64)
+            .expect("ต้อง commit");
+        assert_eq!(
+            commit,
+            Commit {
+                group: Dir8::N,
+                sector: Dir8::E
+            }
+        );
     }
 
     #[test]
@@ -293,7 +312,15 @@ mod tests {
         assert_eq!(e.group(), Some(Dir8::E));
         e.tick(&pad((0.9, 0.0), (0.0, 0.9)), 4);
         e.tick(&pad((0.9, 0.0), (0.0, 0.0)), 4);
-        let commit = e.tick(&pad((0.9, 0.0), (0.0, 0.0)), 64).expect("ต้อง commit");
-        assert_eq!(commit, Commit { group: Dir8::E, sector: Dir8::N });
+        let commit = e
+            .tick(&pad((0.9, 0.0), (0.0, 0.0)), 64)
+            .expect("ต้อง commit");
+        assert_eq!(
+            commit,
+            Commit {
+                group: Dir8::E,
+                sector: Dir8::N
+            }
+        );
     }
 }

@@ -16,10 +16,10 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **M0: core + probe พร้อม, ม็อกอัป HUD v0.11 ใช้ได้ — ยังไม่มีแอปจริง** |
+| สถานะ | **P1 ปิดแล้ว: contracts + workspace + state player · spike ยังไม่รันกับจอยจริง — ยังไม่มีแอปจริง** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, fallback `sdl3`) + `SendInput` |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
-| งานถัดไป | Rust spike 3 ข้อ (2–3 วัน) → M0 → M1 |
+| งานถัดไป | Owner รัน spike A/B/C → เปิด P2–P5 ขนาน (4 track) |
 
 ## 2. การตัดสินใจที่ล็อกแล้ว (ห้ามถามซ้ำ)
 
@@ -82,6 +82,7 @@ project menager/
 
 > แผนลงมือแบบละเอียด (7 เฟส · 4 track คู่ขนาน · subagent) อยู่ที่ [[03-parallel-execution-plan]]
 > ลำดับย่อ: P0 spike → P1 contracts → P2/P3/P4/P5 ขนาน → P6 วัดผล+แพ็กเกจ
+> **P1 ปิดแล้ว 2026-11-15** — contracts อยู่ที่ `Design/03-engineering/contracts/`, ตรวจด้วย `node tools/contracts/validate.mjs`
 
 ### ขั้น 4.1 Rust spike (2–3 วัน) — เกณฑ์ผ่านอยู่ใน [[03-stack-rust]]
 

@@ -1,0 +1,11 @@
+[package]
+name = "rnitype-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Runtime + tray + config (P3) — ยังเป็น skeleton ใน P1"
+
+[dependencies]
+rnitype-core = { path = "../rnitype-core" }
+rnitype-win = { path = "../rnitype-win" }
