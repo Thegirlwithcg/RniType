@@ -61,19 +61,19 @@ tags: [plan, execution, parallel, agents]
 | --- | --- | --- |
 | เอกสารออกแบบ + ADR 14 ฉบับ | `Design/` | ✅ |
 | ม็อกอัป HUD v0.11 | `node tools/tests/hud-smoke.mjs` → **54/54** | ✅ |
-| core + win crate | `cargo test --workspace` → **84 passed** (core 50 + win 34) | ✅ P2/P3 |
+| core + win crate | `cargo test --workspace` → **144 passed** (core 83 + win 36 + app 25) | ✅ P2/P3 |
 | contracts (HUD/config/IPC) | `node tools/contracts/validate.mjs` → **10/10** | ✅ P1 |
 | workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
 | state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
 | probe จอย (Spike A) | XInput: แกน ±1.0 · 8 sectors · ปุ่ม 16/16 | ✅ ผ่าน 2026-11-15 · DualSense เลื่อน |
 | Spike B (Tauri overlay) | ใส ✅ · ย้ายจอ ✅ · click-through ✅ · focus ✅ (`match=true` 4/4) | ✅ ผ่าน 2026-11-15 |
 | Spike C (SendInput ไทย) | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูก | ✅ ผ่าน 2026-11-15 |
-| injector (SendInput) | P3 slice 1: Unicode/VK/mouse + partial-send guard | ✅ 84 tests |
+| injector (SendInput) | P3 slice 1: Unicode/VK/mouse + HWheel + partial-send guard | ✅ 36 tests |
 | app shell / tray / overlay | P4 slice 2: full virtual desktop + click-through + tray | ✅ |
 | HUD overlay จริง | Tauri window โหลด `ui/hud` + `hud:state` demo | ✅ |
-| Settings window + config | — | ❌ |
+| Settings window + config | P5 slice 1: หน้าต่าง + แท็บ HUD + persist | ✅ |
 | ตรวจภาษาที่ติดตั้ง / QWERTY map | — | ❌ |
-| วงคำสั่ง / วงภาษา / repeat / layer 2 / Nav | core ยังไม่มี | ❌ |
+| วงคำสั่ง / วงภาษา / repeat / layer 2 / mouse / Nav | core + runtime + HUD (P2 slice 1–3) | ✅ |
 | แพ็กเกจ / installer / autostart | — | ❌ |
 
 **สรุปความคืบหน้าตาม M:** M0 ~70% · M1 ~35% · M2 0% · M2.5 0% (มีแต่ mockup) · M3 0% · M4 0% · M5 0%
@@ -129,7 +129,8 @@ tags: [plan, execution, parallel, agents]
 
 > **slice 1 ✅ `ce7d027`** — วงคำสั่ง · วงภาษา · mode arbiter · emergency
 > **slice 2 ✅ `2084e26`** — Shift toggle (LT) · ปุ่มหน้า A/B/X/Y แตะ · B ยกเลิก gesture (50 core tests)
-> เหลือ: double-tap/hold face buttons, repeat, layer 2, quickbar, caret nav, mouse math, Nav pivot
+> **slice 3 ✅ 2026-11-16** — mouse math/accel · Nav pivot · auto-repeat · layer 2 · double-tap/hold
+> เหลือ: quickbar (LB) · caret nav (R3) · sticky drag · pivot clamp/DPI
 
 | งาน | เกณฑ์ผ่าน |
 | --- | --- |

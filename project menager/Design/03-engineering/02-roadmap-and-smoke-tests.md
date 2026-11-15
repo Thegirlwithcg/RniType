@@ -65,6 +65,7 @@ tags: [plan, testing]
 | 2026-11-15 | runtime | — | — | — | — | จอยจริง → core → injector → HUD · `--fake-pad` พิมพ์จริง 21 คีย์/9 วิ · 108 tests · ยังไม่ได้ทดสอบจอยจริง |
 | 2026-11-15 | probe A | — | — | — | — | Xbox Controller: LS/RS ±1.00 · idle_peak 0.000 · LT/RT **ดิจิทัล** (LZ/RZ = 0.00) → `lt_analog` ใช้ไม่ได้กับจอยนี้ |
 | 2026-11-15 | UI r3 | — | — | — | — | ยกเลิก scale sector (วงเพี้ยน) · Shift→A-Z บนวง · 109 tests · typography 30/30 |
+| 2026-11-16 | P2 slice 3 | — | — | — | — | Mouse math (1600 px/s · gamma 1.7 · smooth 0.5) · Nav pivot 900/320 · repeat 350/90 ms · layer 2 · double-tap/hold · 144 tests · ยังไม่วัด WPM |
 
 ## 5. ความเสี่ยงและทางถอย
 
