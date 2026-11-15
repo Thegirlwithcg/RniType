@@ -1,137 +1,423 @@
-// P1 contract harness — วาด HudState จาก state player เท่านั้น
-// ไม่มี logic ของแป้น/gesture ที่นี่ (นั่นคือ P2/P4)
+/* ============================================================
+   RniType — HUD overlay renderer (P4 Track C, slice 1)
+   ------------------------------------------------------------
+   วาดจาก HudState เท่านั้น (อ่านอย่างเดียว · คลิกทะลุ)
+   ไม่มีแป้น / gesture / keymap / simulation — ตัดสินใจทั้งหมดอยู่ที่ฝั่งแอป
 
-if (new URLSearchParams(location.search).has('preview')) {
-  document.documentElement.classList.add('preview-bg');
-}
+   แหล่ง state:
+     • มี window.__TAURI__  → ฟัง event 'hud:state' (Tauri v2) และไม่ fetch
+     • ไม่มี                → poll /api/state ทุก ~100 ms (state player สำหรับ dev)
+   ============================================================ */
+(() => {
+  'use strict';
 
-const hud = document.getElementById('hud');
-const innerEl = document.getElementById('inner');
-const outerEl = document.getElementById('outer');
-const previewEl = document.getElementById('preview');
-const previewChar = document.getElementById('previewChar');
-const previewCount = document.getElementById('previewCount');
-const pillMode = document.getElementById('pillMode');
-const pillLang = document.getElementById('pillLang');
-const pillBadges = document.getElementById('pillBadges');
-const pivotEl = document.getElementById('pivot');
-const pointerEl = document.getElementById('pointer');
+  const NS = 'http://www.w3.org/2000/svg';
+  const POLL_MS = 100;
+  const MARGIN = 172; // รัศมีวง HUD/2 + ขอบจอ (ADR-11: clamp pivot ไม่ให้ล้นจอ)
 
-const MODE_LABEL = {
-  'type-en': 'Type EN',
-  'type-th': 'Type TH',
-  'type-other': 'Type',
-  cmd: 'Command',
-  lang: 'Language',
-  mouse: 'Mouse',
-  nav: 'Place UI',
-  disabled: 'พักอยู่',
-};
+  const dom = {
+    hud: document.getElementById('hud'),
+    stage: document.getElementById('stage'),
+    inner: document.getElementById('innerRing'),
+    outer: document.getElementById('outerRing'),
+    cmd: document.getElementById('cmdRing'),
+    lang: document.getElementById('langRing'),
+    previewChar: document.getElementById('previewChar'),
+    previewCount: document.getElementById('previewCount'),
+    pillMode: document.getElementById('pillMode'),
+    pillText: document.getElementById('pillText'),
+    pillLang: document.getElementById('pillLang'),
+    pillBadges: document.getElementById('pillBadges'),
+    pointer: document.getElementById('pointer'),
+    pivot: document.getElementById('pivot'),
+  };
 
-let lastJson = '';
-let lastState = null;
+  // รัศมีวง (หน่วยเดียวกับ viewBox -170..170) — คัดลอกจากม็อกอัป v0.11
+  const R = {
+    groupIn: 31, groupOut: 68, groupText: 49.5,
+    charIn: 74, charOut: 158, charText: 116,
+    wheelIn: 34, wheelOut: 96, wheelText: 66,
+  };
 
-async function poll() {
-  try {
-    const res = await fetch('/api/state', { cache: 'no-store' });
-    if (res.ok) {
-      const text = await res.text();
-      if (text !== lastJson) {
-        lastJson = text;
-        lastState = JSON.parse(text);
-        render(lastState);
+  const TYPE_MODES = ['type-en', 'type-th', 'type-other'];
+  const RING_STATES = ['group', 'char', 'commit', 'repeat'];
+
+  const MODE_LABEL = {
+    cmd: 'Command',
+    lang: 'Language',
+    mouse: 'Mouse',
+    nav: 'Place UI',
+    disabled: 'Paused',
+  };
+
+  /* ---------------- helpers ---------------- */
+
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  function num(value, fallback, lo, hi) {
+    const n = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+    return clamp(n, lo, hi);
+  }
+
+  function text(value) {
+    return typeof value === 'string' ? value : '';
+  }
+
+  function svg(name, attrs) {
+    const node = document.createElementNS(NS, name);
+    for (const key in attrs) node.setAttribute(key, attrs[key]);
+    return node;
+  }
+
+  function clear(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function sectorPath(rIn, rOut, a0, a1) {
+    const gap = 0.018;
+    const s0 = a0 + gap;
+    const s1 = a1 - gap;
+    const pt = (r, a) => `${(Math.cos(a) * r).toFixed(2)} ${(Math.sin(a) * r).toFixed(2)}`;
+    return (
+      `M ${pt(rOut, s0)} A ${rOut} ${rOut} 0 0 1 ${pt(rOut, s1)} ` +
+      `L ${pt(rIn, s1)} A ${rIn} ${rIn} 0 0 0 ${pt(rIn, s0)} Z`
+    );
+  }
+
+  function labelLength(value) {
+    return Array.from(value).length;
+  }
+
+  /** ป้ายกลุ่มยาว (ไทย) → ย่อตัวอักษรให้พอดีกับแถบวง */
+  function lengthClass(value) {
+    const len = labelLength(value);
+    if (len <= 4) return '';
+    if (len <= 6) return 'len-m';
+    return 'len-l';
+  }
+
+  /** clamp pivot ให้วง HUD ยังอยู่ในจอ (ADR-11) — ตอนจริงแอป clamp มาแล้ว */
+  function clampPivot(point, scale) {
+    const margin = MARGIN * scale;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const rawX = num(point && point.x, w * 0.62, -1e6, 1e6);
+    const rawY = num(point && point.y, h * 0.55, -1e6, 1e6);
+    const x = w - margin < margin ? w / 2 : clamp(rawX, margin, w - margin);
+    const y = h - margin < margin ? h / 2 : clamp(rawY, margin, h - margin);
+    return { x, y };
+  }
+
+  /* ---------------- rings ---------------- */
+
+  function renderGroupRing(ring) {
+    const labels = Array.isArray(ring.labels) ? ring.labels : [];
+    if (!labels.length) return;
+
+    const step = (Math.PI * 2) / labels.length;
+    const active = num(ring.active, -1, -1, 7);
+
+    labels.forEach((label, i) => {
+      const center = -Math.PI / 2 + i * step;
+      const armed = active === i;
+
+      const sector = svg('path', {
+        d: sectorPath(R.groupIn, R.groupOut, center - step / 2, center + step / 2),
+        class: `sector sector--group${armed ? ' is-armed' : ''}`,
+      });
+      dom.inner.appendChild(sector);
+
+      const labelText = text(label.text);
+      const node = svg('text', {
+        class:
+          'sector-label sector-label--group' +
+          (active >= 0 && !armed ? ' is-muted' : '') +
+          (lengthClass(labelText) ? ` ${lengthClass(labelText)}` : ''),
+        x: (Math.cos(center) * R.groupText).toFixed(2),
+        y: (Math.sin(center) * R.groupText).toFixed(2),
+      });
+      node.textContent = labelText;
+      dom.inner.appendChild(node);
+    });
+  }
+
+  function renderCharRing(ring) {
+    const labels = Array.isArray(ring.labels) ? ring.labels : [];
+    if (!labels.length) return;
+
+    const step = (Math.PI * 2) / labels.length;
+    const active = num(ring.active, -1, -1, 7);
+
+    labels.forEach((label, i) => {
+      const center = -Math.PI / 2 + i * step;
+      const selected = active === i;
+
+      const sector = svg('path', {
+        d: sectorPath(R.charIn, R.charOut, center - step / 2, center + step / 2),
+        class: `sector sector--char${selected ? ' is-selected' : ''}`,
+      });
+      dom.outer.appendChild(sector);
+
+      const cx = Math.cos(center) * R.charText;
+      const cy = Math.sin(center) * R.charText;
+
+      const node = svg('text', {
+        class: `char-text${selected ? ' is-selected' : ' is-dim'}`,
+        x: cx.toFixed(2),
+        y: cy.toFixed(2),
+      });
+      node.textContent = text(label.text);
+      dom.outer.appendChild(node);
+
+      // badge ของช่อง (เช่น สระล่าง ุ ู หรือ IME) — ค่าตรง ๆ จาก contract
+      if (text(label.badge)) {
+        const badge = svg('text', {
+          class: 'slot-badge',
+          x: cx.toFixed(2),
+          y: (cy + 16).toFixed(2),
+        });
+        badge.textContent = text(label.badge);
+        dom.outer.appendChild(badge);
       }
+    });
+  }
+
+  function renderWheel(group, ring, kind) {
+    const labels = Array.isArray(ring.labels) ? ring.labels : [];
+    if (!labels.length) return;
+
+    const step = (Math.PI * 2) / labels.length;
+    const active = num(ring.active, -1, -1, 7);
+    const sectorClass = kind === 'command' ? 'cmd-sector' : 'lang-sector';
+    const labelClass = kind === 'command' ? 'cmd-label' : 'lang-label';
+
+    labels.forEach((label, i) => {
+      const center = -Math.PI / 2 + i * step;
+      const selected = active === i;
+
+      const sector = svg('path', {
+        d: sectorPath(R.wheelIn, R.wheelOut, center - step / 2, center + step / 2),
+        class: `${sectorClass}${selected ? ' is-selected' : ''}`,
+      });
+      group.appendChild(sector);
+
+      const cx = Math.cos(center) * R.wheelText;
+      const cy = Math.sin(center) * R.wheelText;
+
+      const node = svg('text', {
+        class: `${labelClass}${selected ? ' is-selected' : ''}`,
+        x: cx.toFixed(2),
+        y: cy.toFixed(2),
+      });
+      node.textContent = text(label.text);
+      group.appendChild(node);
+
+      if (text(label.sub)) {
+        const sub = svg('text', {
+          class: 'slot-sub',
+          x: cx.toFixed(2),
+          y: (cy + 11).toFixed(2),
+        });
+        sub.textContent = text(label.sub);
+        group.appendChild(sub);
+      }
+
+      if (text(label.badge)) {
+        const badge = svg('text', {
+          class: 'slot-badge',
+          x: cx.toFixed(2),
+          y: (cy + 21).toFixed(2),
+        });
+        badge.textContent = text(label.badge);
+        group.appendChild(badge);
+      }
+    });
+  }
+
+  /* ---------------- pill ---------------- */
+
+  function modeLabel(s) {
+    const mode = s.mode;
+    if (mode === 'type-en') return 'Type EN';
+    if (mode === 'type-th') return 'Type TH';
+    if (mode === 'type-other') {
+      const code = text(s.language && s.language.code).toUpperCase();
+      return code ? `Type ${code}` : 'Type';
     }
-  } catch {
-    // state player ปิดอยู่ — เงียบไว้
-  }
-  setTimeout(poll, 120);
-}
-
-function render(s) {
-  hud.dataset.mode = s.mode;
-  hud.dataset.visible = String(s.visible && !s.hudHidden);
-
-  renderSlots(innerEl, s.inner, 62);
-  renderSlots(outerEl, s.outer, 150);
-
-  const showPreview = ['char', 'commit', 'repeat'].includes(s.state) && s.preview?.char;
-  previewEl.hidden = !showPreview;
-  previewChar.textContent = s.preview?.char ?? '';
-  previewCount.textContent = s.preview?.count > 0 ? `×${s.preview.count}` : '';
-
-  pillMode.textContent = MODE_LABEL[s.mode] ?? s.mode;
-  pillLang.textContent = s.language ? s.language.code.toUpperCase() : '';
-
-  const badges = [...(s.status?.badges ?? [])];
-  if (s.layer > 1) badges.push(`layer ${s.layer}`);
-  if (s.shiftLock) badges.push('shift');
-  pillBadges.replaceChildren(
-    ...[...new Set(badges)].map((text) => {
-      const el = document.createElement('span');
-      el.className = 'pill-badge';
-      el.textContent = text;
-      return el;
-    }),
-  );
-
-  pivotEl.style.left = `${s.pivot.x}px`;
-  pivotEl.style.top = `${s.pivot.y}px`;
-
-  const showPointer = s.mode === 'mouse' && s.pointer?.visible;
-  pointerEl.hidden = !showPointer;
-  if (showPointer) {
-    pointerEl.style.left = `${s.pointer.x}px`;
-    pointerEl.style.top = `${s.pointer.y}px`;
+    return MODE_LABEL[mode] || mode;
   }
 
-  document.title = `RniType HUD — ${s.mode}/${s.state}`;
-}
+  function renderPill(s) {
+    const mode = modeLabel(s);
+    const code = text(s.language && s.language.code).toUpperCase();
+    const status = text(s.status && s.status.text).trim();
 
-function renderSlots(container, ring, radius) {
-  if (!ring || ring.kind === 'none' || ring.labels.length === 0) {
-    container.replaceChildren();
-    return;
+    dom.pillMode.textContent = mode;
+
+    // status.text ที่ซ้ำกับชื่อโหมดหรือรหัสภาษาที่แสดงอยู่แล้ว → ไม่พิมพ์ซ้ำ
+    const dup =
+      status !== '' &&
+      (status.toLowerCase() === mode.toLowerCase() ||
+        (code !== '' && status.toLowerCase() === code.toLowerCase()));
+    dom.pillText.textContent = dup ? '' : status;
+
+    // ภาษา: โหมดพิมพ์มีรหัสอยู่ในชื่อโหมดแล้ว (Type EN) → ไม่พิมพ์ซ้ำ
+    dom.pillLang.textContent = TYPE_MODES.includes(s.mode) ? '' : code;
+
+    const badges = [];
+    const push = (value) => {
+      const t = text(value).trim();
+      if (!t) return;
+      if (badges.some((b) => b.toLowerCase() === t.toLowerCase())) return;
+      badges.push(t);
+    };
+
+    const statusBadges = s.status && Array.isArray(s.status.badges) ? s.status.badges : [];
+    statusBadges.forEach(push);
+    if (num(s.layer, 1, 1, 2) > 1) push(`layer ${s.layer}`);
+    if (s.shiftLock === true) push('shift');
+
+    dom.pillBadges.replaceChildren(
+      ...badges.map((value) => {
+        const node = document.createElement('span');
+        node.className = 'pill-badge';
+        node.textContent = value;
+        return node;
+      }),
+    );
   }
 
-  const nodes = ring.labels.map((label, i) => {
-    const angle = (i * Math.PI) / 4;
-    const x = Math.sin(angle) * radius;
-    const y = -Math.cos(angle) * radius;
+  /* ---------------- apply state ---------------- */
 
-    const el = document.createElement('div');
-    el.className = 'slot';
-    el.style.left = `calc(50% + ${x.toFixed(1)}px)`;
-    el.style.top = `calc(50% + ${y.toFixed(1)}px)`;
-    if (i === ring.active) el.classList.add('active');
-    if (ring.active >= 0 && i !== ring.active) el.classList.add('dim');
+  function ringsVisible(s) {
+    const mode = s.mode;
+    if (mode === 'cmd' || mode === 'lang') return true; // โหมดนี้ = เปิดวงอยู่
+    if (!TYPE_MODES.includes(mode)) return false; // mouse / nav / disabled
+    if (s.ringAlways === true) return true;
+    return RING_STATES.includes(s.state);
+  }
 
-    const text = document.createElement('span');
-    text.textContent = label.text;
-    el.append(text);
+  function applyState(next) {
+    if (!next || typeof next !== 'object') return;
 
-    if (label.sub) {
-      const sub = document.createElement('span');
-      sub.className = 'sub';
-      sub.textContent = label.sub;
-      el.append(sub);
+    const mode = text(next.mode) || 'disabled';
+    const visible = next.visible !== false && next.hudHidden !== true;
+    const scale = num(next.scale, 1, 0.5, 3);
+    const opacity = num(next.opacity, 0.92, 0.1, 1);
+    const ringsOn = visible && ringsVisible(next);
+
+    dom.hud.dataset.mode = mode;
+    dom.hud.dataset.state = text(next.state) || 'idle';
+    dom.hud.dataset.visible = String(visible);
+    dom.hud.dataset.rings = ringsOn ? 'on' : 'off';
+    dom.hud.style.setProperty('--hud-opacity', opacity.toFixed(3));
+    dom.hud.style.setProperty('--hud-scale', scale.toFixed(3));
+
+    // ตำแหน่ง HUD = pivot (ไม่ตามเมาส์ — ADR-11)
+    const pivot = clampPivot(next.pivot, scale);
+    dom.stage.style.left = `${pivot.x.toFixed(1)}px`;
+    dom.stage.style.top = `${pivot.y.toFixed(1)}px`;
+
+    // วง — วงซ่อนอยู่ก็ไม่ต้องสร้าง DOM (idle = เหลือ pill อย่างเดียว)
+    clear(dom.inner);
+    clear(dom.outer);
+    clear(dom.cmd);
+    clear(dom.lang);
+
+    const inner = next.inner && typeof next.inner === 'object' ? next.inner : { kind: 'none' };
+    const outer = next.outer && typeof next.outer === 'object' ? next.outer : { kind: 'none' };
+
+    if (ringsOn) {
+      if (inner.kind === 'group') renderGroupRing(inner);
+      else if (inner.kind === 'command') renderWheel(dom.cmd, inner, 'command');
+      else if (inner.kind === 'language') renderWheel(dom.lang, inner, 'language');
+
+      // วงนอก (ตัวอักษร) มีเฉพาะโหมดพิมพ์
+      if (outer.kind === 'char' && TYPE_MODES.includes(mode)) renderCharRing(outer);
     }
-    if (label.badge) {
-      const badge = document.createElement('span');
-      badge.className = 'badge';
-      badge.textContent = label.badge;
-      el.append(badge);
+
+    // ตัวอักษรกลางวง + จำนวนซ้ำ
+    const preview = next.preview && typeof next.preview === 'object' ? next.preview : { char: '', count: 0 };
+    const previewChar = text(preview.char);
+    const previewCount = num(preview.count, 0, 0, 1e6);
+    dom.previewChar.textContent = previewChar;
+    dom.previewCount.textContent = previewCount > 0 ? `×${previewCount}` : '';
+    dom.hud.dataset.preview = previewChar !== '' || previewCount > 0 ? 'on' : 'off';
+
+    renderPill(next);
+
+    // pointer (กำหนดโดยแอปผ่าน pointer.visible)
+    const pointer = next.pointer && typeof next.pointer === 'object' ? next.pointer : null;
+    const pointerOn = !!(pointer && pointer.visible === true);
+    dom.pointer.dataset.visible = String(pointerOn && visible);
+    if (pointerOn) {
+      dom.pointer.style.left = `${num(pointer.x, 0, -1e6, 1e6).toFixed(1)}px`;
+      dom.pointer.style.top = `${num(pointer.y, 0, -1e6, 1e6).toFixed(1)}px`;
     }
-    return el;
-  });
 
-  container.replaceChildren(...nodes);
-}
+    // pivot crosshair — โชว์ตอนโหมด nav (จัดตำแหน่ง UI)
+    dom.pivot.dataset.visible = String(mode === 'nav' && visible);
+    dom.pivot.style.left = `${pivot.x.toFixed(1)}px`;
+    dom.pivot.style.top = `${pivot.y.toFixed(1)}px`;
 
-addEventListener('keydown', (event) => {
-  if (event.key.toLowerCase() === 'n') {
-    fetch('/api/next', { method: 'POST' }).catch(() => {});
+    document.title = `RniType HUD — ${mode}/${dom.hud.dataset.state}`;
   }
-});
 
-poll();
+  /* ---------------- state source ---------------- */
+
+  function startTauriSource(tauri) {
+    const event = tauri.event;
+    if (!event || typeof event.listen !== 'function') {
+      console.warn('[hud] window.__TAURI__.event.listen ไม่พร้อม — HUD จะไม่ได้รับ state');
+      return;
+    }
+
+    event
+      .listen('hud:state', (message) => {
+        const payload =
+          message && typeof message === 'object' && 'payload' in message ? message.payload : message;
+        applyState(payload);
+      })
+      .catch((err) => console.warn('[hud] ฟัง event hud:state ไม่สำเร็จ', err));
+
+    // ipc.md §3 — HUD แจ้งว่าพร้อมรับ state (ไม่เปลี่ยน state ของแอป)
+    const invoke =
+      tauri.core && typeof tauri.core.invoke === 'function' ? tauri.core.invoke.bind(tauri.core) : null;
+    if (invoke) invoke('hud_ready').catch(() => {});
+  }
+
+  let lastJson = '';
+
+  async function poll() {
+    try {
+      const res = await fetch('/api/state', { cache: 'no-store' });
+      if (res.ok) {
+        const body = await res.text();
+        if (body !== lastJson) {
+          lastJson = body;
+          applyState(JSON.parse(body));
+        }
+      }
+    } catch {
+      // state player ปิดอยู่ — เงียบไว้
+    }
+    setTimeout(poll, POLL_MS);
+  }
+
+  function start() {
+    const tauri = typeof window !== 'undefined' ? window.__TAURI__ : null;
+    if (tauri) {
+      startTauriSource(tauri); // โหมดแอปจริง: ไม่ fetch
+      return;
+    }
+    poll(); // โหมดเบราว์เซอร์: ดูจาก state player
+  }
+
+  /* ---------------- boot ---------------- */
+
+  if (new URLSearchParams(location.search).has('preview')) {
+    document.documentElement.classList.add('preview-bg');
+  }
+
+  start();
+})();

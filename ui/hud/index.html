@@ -3,34 +3,45 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RniType HUD — contract harness (P1)</title>
+  <title>RniType HUD</title>
   <link rel="stylesheet" href="../shared/tokens.css" />
   <link rel="stylesheet" href="hud.css" />
 </head>
 <body>
-  <main id="hud" data-mode="disabled" aria-live="polite">
-    <div id="pivot" class="pivot" aria-hidden="true"></div>
-    <div id="pointer" class="pointer" hidden aria-hidden="true"></div>
+  <!--
+    HUD overlay — วาดจาก HudState เท่านั้น (read-only, click-through)
+    โครงสร้าง: stage (ยึดที่ pivot + scale) → ring (SVG) + pill (aria-live)
+  -->
+  <main id="hud" class="hud" data-mode="disabled" data-state="idle" data-visible="false" data-rings="off" data-preview="off">
+    <div class="hud__stage" id="stage">
+      <div class="hud__glass" aria-hidden="true"></div>
+      <svg class="hud__ring" viewBox="-170 -170 340 340" aria-hidden="true" focusable="false">
+        <g id="outerRing"></g>
+        <g id="innerRing"></g>
+        <g id="cmdRing" class="cmd-ring"></g>
+        <g id="langRing" class="lang-ring"></g>
+        <g class="hud__center">
+          <circle class="center__track" r="27" />
+          <circle class="center__halo" r="6" />
+        </g>
+        <text class="hud__preview" id="previewChar" x="0" y="-4" text-anchor="middle" dominant-baseline="central"></text>
+        <text class="hud__repeat" id="previewCount" x="0" y="16" text-anchor="middle" dominant-baseline="central"></text>
+      </svg>
 
-    <section id="rings" class="rings" aria-label="ring">
-      <div class="ring inner-ring"></div>
-      <div class="ring outer-ring"></div>
-      <div id="inner" class="slots inner"></div>
-      <div id="outer" class="slots outer"></div>
-      <div id="preview" class="preview" hidden>
-        <span id="previewChar" class="preview-char"></span>
-        <span id="previewCount" class="preview-count"></span>
+      <div class="hud__status" id="pill" aria-live="polite">
+        <span class="chip chip--status">
+          <b id="pillMode"></b>
+          <span class="pill__part" id="pillText"></span>
+          <span class="pill__part" id="pillLang"></span>
+          <span class="pill__badges" id="pillBadges"></span>
+        </span>
       </div>
-    </section>
-
-    <div id="pill" class="pill">
-      <span id="pillMode" class="pill-mode">—</span>
-      <span id="pillLang" class="pill-lang"></span>
-      <span id="pillBadges" class="pill-badges"></span>
     </div>
-
-    <p class="hint">P1 contract harness · กด <kbd>N</kbd> เพื่อดู state ถัดไป</p>
   </main>
+
+  <div id="pointer" class="pointer" data-visible="false" aria-hidden="true"><i></i></div>
+  <div id="pivot" class="pivot" data-visible="false" aria-hidden="true"></div>
+
   <script src="hud.js"></script>
 </body>
 </html>
