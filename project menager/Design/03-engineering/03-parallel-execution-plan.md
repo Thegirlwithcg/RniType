@@ -1,6 +1,6 @@
 ---
 title: แผนทำงานหลังม็อกอัป — M0–M5 และ P0–P6
-status: active v0.7 — P0/P1 ปิด · P2 slice 1–2 · P3/P4 slice 1 merged
+status: active v0.8 — P0/P1 ปิด · P2/P3/P4 slice 1 · P4 overlay merged
 updated: 2026-11-15
 tags: [plan, execution, parallel, agents]
 ---
@@ -69,8 +69,8 @@ tags: [plan, execution, parallel, agents]
 | Spike B (Tauri overlay) | ใส ✅ · ย้ายจอ ✅ · click-through ✅ · focus ✅ (`match=true` 4/4) | ✅ ผ่าน 2026-11-15 |
 | Spike C (SendInput ไทย) | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูก | ✅ ผ่าน 2026-11-15 |
 | injector (SendInput) | P3 slice 1: Unicode/VK/mouse + partial-send guard | ✅ 84 tests |
-| app shell / tray / loop | — | ❌ |
-| HUD overlay จริง | P4 slice 1: state-driven renderer (static) | ✅ รอ Tauri window |
+| app shell / tray / overlay | P4 slice 2: full virtual desktop + click-through + tray | ✅ |
+| HUD overlay จริง | Tauri window โหลด `ui/hud` + `hud:state` demo | ✅ |
 | Settings window + config | — | ❌ |
 | ตรวจภาษาที่ติดตั้ง / QWERTY map | — | ❌ |
 | วงคำสั่ง / วงภาษา / repeat / layer 2 / Nav | core ยังไม่มี | ❌ |
@@ -167,7 +167,8 @@ tags: [plan, execution, parallel, agents]
 ### P4 — HUD overlay (Track C) · 4–5 วัน · ขนานได้
 
 > **slice 1 ✅ `bd98777`** — state-driven renderer ครบทุก mode (type/cmd/lang/mouse/nav/disabled)
-> ตรวจ 13/13 DOM + 44/44 CDP, screenshot ครบ; เหลือ Tauri window/click-through/DPI/latency
+> **slice 2 ✅ `2354912`** — Tauri overlay เต็ม virtual desktop, click-through/no-focus, tray Quit, `hud:state` demo
+> เหลือ: pivot per-monitor/mixed-DPI, 60 Hz coalescing + latency, real runtime wiring
 
 | งาน | เกณฑ์ผ่าน |
 | --- | --- |

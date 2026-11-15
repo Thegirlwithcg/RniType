@@ -16,10 +16,10 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2 slice 1–2 · P3 injector + P4 HUD renderer slice 1 merged (84 tests) — ยังไม่มีแอปจริง** |
+| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay จริง (full desktop + click-through + tray) — 84 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, fallback `sdl3`) + `SendInput` |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
-| งานถัดไป | Owner รัน spike A/B/C → เปิด P2–P5 ขนาน (4 track) |
+| งานถัดไป | Runtime wiring: จอย → core → injector → HUD ใน `rnitype-app` |
 
 ## 2. การตัดสินใจที่ล็อกแล้ว (ห้ามถามซ้ำ)
 
@@ -84,25 +84,37 @@ project menager/
 > ลำดับย่อ: P0 spike → P1 contracts → P2/P3/P4/P5 ขนาน → P6 วัดผล+แพ็กเกจ
 > **P1 ปิดแล้ว 2026-11-15** — contracts อยู่ที่ `Design/03-engineering/contracts/`, ตรวจด้วย `node tools/contracts/validate.mjs`
 
-### ขั้น 4.1 Rust spike (2–3 วัน) — เกณฑ์ผ่านอยู่ใน [[03-stack-rust]]
+### 4.1 P0 + P1 — ✅ ปิดแล้ว
 
-| # | ทดสอบ | ผ่านเมื่อ |
+- A: `gilrs` **XInput** อ่าน Xbox ครบ 16 ปุ่ม + 8 sectors ([15-gilrs-xinput-backend])
+- B: Tauri overlay โปร่งใส คลิกทะลุ ไม่แย่ง focus (2 จอ)
+- C: `SendInput` Unicode พิมพ์ไทยลง Notepad ถูก
+- contracts + workspace + state player + 54/54 mockup checks
+
+### 4.2 P2/P3/P4 — slice 1 merged
+
+| Track | ทำแล้ว | เหลือ |
 | --- | --- | --- |
-| A | `gilrs` อ่าน Xbox + DS5 | เห็นปุ่มครบ 8 + trigger + แกน 4 ทิศ, deadzone ถูก |
-| B | Tauri overlay โปร่งใส | 2 จอ + scaling 150%, คลิกทะลุ, ไม่แย่ง focus |
-| C | `SendInput` ภาษาไทย | พิมพ์ "กขคง" ลง Notepad ถูกต้อง (Unicode path) |
+| P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons (50 tests) | repeat, layer 2, double-tap/hold, quickbar, caret nav, mouse math, Nav pivot |
+| P3 win | SendInput Unicode/VK/mouse + partial-send guard (34 tests) | scancode/IME, exclusion/UIPI, runtime wiring |
+| P4 HUD | renderer ครบ mode + Tauri overlay เต็ม virtual desktop/click-through/tray | `hud:state` จาก runtime จริง, 60 Hz coalescing, latency, pivot per-monitor/mixed-DPI |
 
-ถ้า A ไม่ผ่าน → เปลี่ยนชั้นจอยเป็น `sdl3` · ถ้า B ไม่ผ่าน → egui · ถ้าทั้งคู่พัง → ถอยไป C#
+### 4.3 ขั้นถัดไป (เรียง)
 
-### ขั้น 4.2 M0 — โครงโปรเจกต์
+1. **Runtime wiring** ใน `rnitype-app`: `gilrs` XInput → `PadState` → `RuntimeEngine` → `SendInputInjector` → `hud:state` (~60 Hz) + `release_all()` เมื่อจอยหลุด/ปิด
+2. **P2 slice 3**: repeat/auto-repeat, layer 2, double-tap/hold, quickbar, caret nav
+3. **P5 Settings** + config + ตรวจภาษา/สร้าง keymap จาก HKL
+4. **P6** วัด WPM/latency, ทดสอบคนจริง, installer/Steam/itch
 
-- `cargo new rnitype --bin` + workspace (`core`, `app`, `ui`)
-- โครง module ตาม [[01-architecture]]: device → normalizer → gesture → mapper → injector
-- `tools/smoke/probe-pad.ps1` (ตัวแรกที่ต้องมี)
+### 4.4 รัน overlay ตอนนี้ (demo)
 
-### ขั้น 4.3 M1 — Typing core
+```powershell
+crates\rnitype-app\run.ps1 -- --demo --seconds 30
+```
 
-state machine ตาม [[04-state-machine-spec]] + keymap EN ตาม [[02-keymap-en-th]] + harness วัด WPM
+- Tray → Quit (หรือ `Ctrl+C` ใน terminal)
+- ไม่มี `--demo` = HUD idle (รอ runtime จริง)
+- path มี apostrophe → ใช้ `run.ps1`; build.rs copy icon ไป `%TEMP%` ให้ `cargo test/check` ทำงานได้เอง
 
 ## 5. คำถามที่ยังค้าง (เจ้าของต้องตอบก่อนเขียนโค้ดเยอะ)
 
