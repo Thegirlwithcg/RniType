@@ -1,7 +1,7 @@
 //! Gesture engine — state machine ตาม `Design/02-design/04-state-machine-spec.md`
 //!
-//! รอบนี้ทำครบเฉพาะเส้นทางการพิมพ์ (IDLE → GROUP_ARMED → CHAR_SELECTED → COMMITTING)
-//! ส่วน QUICKBAR / MODE_MENU / REPEATING / MOUSE ยังไม่ทำ (M2–M3)
+//! รอบนี้ทำครบเส้นทางการพิมพ์ (IDLE → GROUP_ARMED → CHAR_SELECTED → COMMITTING)
+//! และ REPEATING (auto-repeat หลัง commit) — QUICKBAR / MODE_MENU / CARET_NAV ยังไม่ทำ
 
 use crate::normalizer::{Dir8, SectorTracker};
 use crate::pad::PadState;
