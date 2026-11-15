@@ -61,6 +61,20 @@
     }
     #monitors { font-size: 11px; color: #8b93a1; white-space: pre-line; }
     .hint { font-size: 11px; color: #8b93a1; }
+
+    /* ระหว่างทดสอบ: ซ่อน panel เพื่อให้เห็น/คลิก target window ด้านหลัง */
+    body.testing .panel {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+    body.testing .panel > *:not(#status) { visibility: hidden; }
+    body.testing #status {
+      color: #5eead4;
+      font-size: 15px;
+      font-weight: 700;
+    }
   </style>
 </head>
 <body>
@@ -72,14 +86,14 @@
 
     <ol>
       <li>พื้นหลังรอบ panel ต้องโปร่งใส (เห็น desktop)</li>
-      <li>กด “ทดสอบคลิกทะลุ 5 วิ” → คลิก/พิมพ์ใน Notepad ด้านหลังได้</li>
-      <li>ระหว่างนั้น Notepad ยังเป็น foreground (ไม่แย่ง focus)</li>
+      <li>กด “ทดสอบคลิกทะลุ 10 วิ” → คลิกปุ่มใน target window ด้านหลังได้</li>
+      <li>target window ต้องเป็น foreground (overlay ไม่แย่ง focus)</li>
       <li>ย้ายไปจอ 2 → panel อยู่ถูกตำแหน่งที่ DPI 150%/200%</li>
     </ol>
 
     <div class="row" id="monitorButtons"></div>
     <div class="row">
-      <button onclick="testClickThrough()">ทดสอบคลิกทะลุ 5 วิ</button>
+      <button onclick="testClickThrough()">ทดสอบคลิกทะลุ 10 วิ</button>
       <button class="ghost" onclick="refreshMonitors()">สแกนจอใหม่</button>
     </div>
 
@@ -90,30 +104,60 @@
 
   <script>
     const invoke = window.__TAURI__.core.invoke;
+    const listen = window.__TAURI__.event.listen;
+    let testTimer = 0;
 
     refreshMonitors();
 
+    listen('test:passed', async () => {
+      clearTimeout(testTimer);
+      await endTest();
+      setStatus('PASS: target ได้รับคลิก และเป็น foreground');
+    }).catch((e) => setStatus('ERROR listen: ' + e));
+
     async function refreshMonitors() {
-      const list = await invoke('list_monitors');
-      document.getElementById('monitors').textContent = list.join('\n');
-      const wrap = document.getElementById('monitorButtons');
-      wrap.replaceChildren();
-      list.forEach((text, i) => {
-        const b = document.createElement('button');
-        b.className = 'ghost';
-        b.textContent = `ย้ายไปจอ ${i}`;
-        b.onclick = async () => setStatus(await invoke('move_to_monitor', { index: i }));
-        wrap.append(b);
-      });
+      try {
+        const list = await invoke('list_monitors');
+        document.getElementById('monitors').textContent = list.join('\n');
+        const wrap = document.getElementById('monitorButtons');
+        wrap.replaceChildren();
+        list.forEach((text, i) => {
+          const b = document.createElement('button');
+          b.className = 'ghost';
+          b.textContent = `ย้ายไปจอ ${i}`;
+          b.onclick = async () => setStatus(await invoke('move_to_monitor', { index: i }));
+          wrap.append(b);
+        });
+      } catch (e) {
+        setStatus('ERROR monitors: ' + e);
+      }
     }
 
     async function testClickThrough() {
-      setStatus('คลิกทะลุ 5 วิ — ลองคลิก Notepad ด้านหลัง');
-      await invoke('set_click_through', { on: true });
-      setTimeout(async () => {
+      clearTimeout(testTimer);
+      document.body.classList.add('testing');
+      setStatus('ทดสอบ 10 วิ — คลิกปุ่มใหญ่ใน target window ด้านหลัง');
+      try {
+        await invoke('set_click_through', { on: true });
+      } catch (e) {
+        document.body.classList.remove('testing');
+        setStatus('ERROR invoke: ' + e);
+        return;
+      }
+
+      testTimer = setTimeout(async () => {
+        await endTest();
+        setStatus('FAIL: ไม่ได้รับคลิกภายใน 10 วิ');
+      }, 10000);
+    }
+
+    async function endTest() {
+      document.body.classList.remove('testing');
+      try {
         await invoke('set_click_through', { on: false });
-        setStatus('กลับมาแล้ว — panel รับคลิกได้ตามเดิม');
-      }, 5000);
+      } catch (e) {
+        console.error(e);
+      }
     }
 
     function quit() {

@@ -167,6 +167,10 @@ fn main() -> ExitCode {
         println!("  [{id}] {name} — kind={:?}", kind_of(name));
     }
     let mut pads = detected;
+    if !wait_for_input(&mut gilrs, 10) {
+        println!("WARN: ไม่ได้รับ input 10 วิ — จะเก็บค่าต่อ แต่ผลอาจเป็น 0 ทั้งหมด");
+        println!("      ตรวจ Steam Input/DS4Windows หรือลองต่อ USB");
+    }
     println!("เริ่มเก็บค่า… กด LS/RS ครบ 8 ทิศ, trigger, ปุ่มหน้า, D-pad");
 
     let mut normalizer = Normalizer::new(NormalizerConfig::default());
@@ -245,6 +249,24 @@ fn main() -> ExitCode {
     }
     println!("OK: probe รันจบ — ส่ง log นี้ให้ agent เพื่อปิด spike A");
     ExitCode::SUCCESS
+}
+
+fn wait_for_input(gilrs: &mut Gilrs, seconds: u64) -> bool {
+    println!("ยืนยัน input: ขยับ LS หรือกด A ภายใน {seconds} วินาที…");
+    let deadline = Instant::now() + Duration::from_secs(seconds);
+    while Instant::now() < deadline {
+        while let Some(ev) = gilrs.next_event() {
+            match ev.event {
+                EventType::ButtonPressed(..) | EventType::AxisChanged(..) => {
+                    println!("OK: ได้รับ input แล้ว");
+                    return true;
+                }
+                _ => {}
+            }
+        }
+        sleep(Duration::from_millis(8));
+    }
+    false
 }
 
 fn print_snapshot(

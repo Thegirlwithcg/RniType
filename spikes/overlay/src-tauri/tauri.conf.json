@@ -22,6 +22,19 @@
         "resizable": false,
         "shadow": false,
         "center": true
+      },
+      {
+        "label": "target",
+        "url": "target.html",
+        "title": "Spike B — target window",
+        "width": 620,
+        "height": 260,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": true,
+        "resizable": false,
+        "focus": true,
+        "visible": true
       }
     ],
     "security": {

@@ -1,6 +1,6 @@
 {
   "identifier": "default",
   "description": "Spike B overlay",
-  "windows": ["main"],
+  "windows": ["main", "target"],
   "permissions": ["core:default"]
 }

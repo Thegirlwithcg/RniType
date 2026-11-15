@@ -9,7 +9,8 @@
 
 use std::time::Duration;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput,
+    GetAsyncKeyState, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
+    SendInput, VK_F8,
 };
 
 fn main() {
@@ -21,11 +22,13 @@ fn main() {
 
     println!("Spike C — SendInput Unicode");
     println!("ข้อความ: {text:?} ({} UTF-16 units)", text.encode_utf16().count());
-    println!("สลับไป Notepad แล้วคลิกวาง cursor — เริ่มใน 3 วินาที...");
-    for n in (1..=3).rev() {
-        println!("  {n}...");
-        std::thread::sleep(Duration::from_secs(1));
-    }
+    println!();
+    println!("1) เปิด Notepad");
+    println!("2) คลิกใน Notepad ให้ cursor อยู่ตรงนั้น");
+    println!("3) กด F8 เพื่อเริ่มส่ง (ไม่ต้องกลับมาที่ terminal)");
+    wait_for_f8();
+    println!("เริ่มส่ง…");
+    std::thread::sleep(Duration::from_millis(300));
 
     let mut sent_units = 0usize;
     for unit in text.encode_utf16() {
@@ -39,6 +42,20 @@ fn main() {
     println!("ส่งแล้ว {sent_units} units — ตรวจ Notepad:");
     println!("  ผ่าน = ข้อความตรงทุกตัว");
     println!("  ไม่ผ่าน = จดสิ่งที่ได้ + เวอร์ชัน Windows/Notepad ไว้ใน HANDOFF");
+}
+
+fn wait_for_f8() {
+    loop {
+        let down = (unsafe { GetAsyncKeyState(VK_F8 as i32) } as u16 & 0x8000) != 0;
+        if down {
+            // รอให้ปล่อยปุ่มก่อน กันส่งซ้ำ
+            while (unsafe { GetAsyncKeyState(VK_F8 as i32) } as u16 & 0x8000) != 0 {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 fn arg_value(args: &[String], key: &str) -> Option<String> {
