@@ -101,43 +101,62 @@ try {
     const px = (el) => parseFloat(getComputedStyle(el).fontSize);
     const first = (sel) => document.querySelector(sel);
     const fill = (sel) => getComputedStyle(first(sel)).fill;
+    // ink box = กล่องหมึกจริง (getBBox ของ <text> ใช้ em box → ชนกันหลอกได้)
+    const inkBox = (el) => {
+      const size = parseFloat(getComputedStyle(el).fontSize);
+      const x = parseFloat(el.getAttribute('x')) || 0;
+      const y = parseFloat(el.getAttribute('y')) || 0;
+      const len = el.getComputedTextLength();
+      const lines = el.querySelectorAll('tspan').length || 1;
+      const h = size * 0.78 + (lines > 1 ? size * 1.1 : 0);
+      return { x: x - len / 2, y: y - h / 2, width: len, height: h };
+    };
     return {
       mode: document.getElementById('hud').dataset.mode,
       rings: document.getElementById('hud').dataset.rings,
       group: px(first('.sector-label--group:not(.len-m):not(.len-l)')),
       groupLabels: [...document.querySelectorAll('.sector-label--group')].map(el => ({
-        text: el.textContent, size: px(el), box: el.getBBox(),
+        text: el.textContent, size: px(el), lines: el.querySelectorAll('tspan').length || 1, box: inkBox(el),
       })),
       char: [...document.querySelectorAll('.char-text')].map(el => ({
-        text: el.textContent, size: px(el), cls: el.getAttribute('class'), box: el.getBBox(),
+        text: el.textContent, size: px(el), cls: el.getAttribute('class'), box: inkBox(el),
       })),
+      guides: document.querySelectorAll('.char-guide.is-on').length,
       sub: first('.slot-sub') ? px(first('.slot-sub')) : null,
       badge: first('.slot-badge') ? px(first('.slot-badge')) : null,
       pill: px(first('.chip--status')),
       dimFill: fill('.char-text.is-dim'),
       family: getComputedStyle(document.body).fontFamily,
+      ringScale: parseFloat(getComputedStyle(document.getElementById('hud')).getPropertyValue('--hud-scale')),
     };
   })()`);
 
   check('HUD วาดวงไทย (mode/rings)', rings.mode === 'type-th' && rings.rings === 'on', `${rings.mode}/${rings.rings}`);
   check('ฟอนต์ของ HUD = IBM Plex Sans Thai', /IBM Plex Sans Thai/.test(rings.family), rings.family);
 
-  check('group label ≥ 13.5px', rings.group >= 13.5, `${rings.group.toFixed(2)}px`);
-  check('pill ≥ 13px', rings.pill >= 13, `${rings.pill.toFixed(2)}px`);
-  if (rings.sub !== null) check('slot-sub ≥ 10.5px', rings.sub >= 10.5, `${rings.sub.toFixed(2)}px`);
-  if (rings.badge !== null) check('slot-badge ≥ 10.5px', rings.badge >= 10.5, `${rings.badge.toFixed(2)}px`);
+  check('group label ≥ 15px', rings.group >= 15, `${rings.group.toFixed(2)}px`);
+  check('pill ≥ 13.5px', rings.pill >= 13.5, `${rings.pill.toFixed(2)}px`);
+  if (rings.sub !== null) check('slot-sub ≥ 11.5px', rings.sub >= 11.5, `${rings.sub.toFixed(2)}px`);
+  if (rings.badge !== null) check('slot-badge ≥ 11.5px', rings.badge >= 11.5, `${rings.badge.toFixed(2)}px`);
 
   const charMin = Math.min(...rings.char.map((c) => c.size));
   const charMax = Math.max(...rings.char.map((c) => c.size));
   check(
-    'char 20–34px (ทุกช่อง)',
-    charMin >= 20 && charMax <= 34,
+    'char 22–28px (ทุกช่อง)',
+    charMin >= 22 && charMax <= 28,
     `${charMin.toFixed(2)}–${charMax.toFixed(2)}px`,
   );
 
   // ขนาดขั้นต่ำของ label กลุ่มทุกตัว (รวม .len-m/.len-l)
   const groupMin = Math.min(...rings.groupLabels.map((g) => g.size));
-  check('group label ที่ยาวที่สุด ≥ 11px', groupMin >= 11, `${groupMin.toFixed(2)}px`);
+  check('group label ที่ยาวที่สุด ≥ 12px', groupMin >= 12, `${groupMin.toFixed(2)}px`);
+
+  // ป้ายไทยยาว (วรรณยุกต์) ต้องแบ่ง 2 บรรทัด
+  const twoLine = rings.groupLabels.filter((g) => g.lines === 2).map((g) => g.text);
+  check('ป้าย "วรรณยุกต์" ใช้ 2 บรรทัด', twoLine.includes('วรรณยุกต์'), twoLine.join(', '));
+
+  // ขีดกำกับสระล่าง (ุ ู) แทนคำว่า "ขีดล่าง"
+  check('มีขีดกำกับสระล่าง 2 เส้น (ุ ู)', rings.guides === 2, `${rings.guides} เส้น`);
 
   /* ---- ไม่มี label ชนกัน ---- */
   const collisions = (items) => {
@@ -164,6 +183,26 @@ try {
 
   const charCollisions = collisions(rings.char);
   check('ตัวอักษรในวงนอกไม่ชนกัน', charCollisions.length === 0, charCollisions.join(', '));
+
+  /* ---- animation: ช่องที่ active ต้องขยาย (ADR-17) ---- */
+  const anim = await browser.evaluate(`(() => {
+    const scaleOf = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const m = getComputedStyle(el).transform;
+      const parts = m.match(/matrix\\(([^,]+),/);
+      return parts ? parseFloat(parts[1]) : 1;
+    };
+    return {
+      sector: scaleOf('.sector--char.is-selected'),
+      char: scaleOf('.char-text.is-selected'),
+      group: scaleOf('.sector--group.is-armed'),
+      selected: document.querySelectorAll('.sector--char.is-selected').length,
+    };
+  })()`);
+  check('ช่องที่เลือกขยาย (sector > 1.02)', anim.sector > 1.02, `scale ${anim.sector}`);
+  check('ตัวอักษรที่เลือกขยาย (char > 1.15)', anim.char > 1.15, `scale ${anim.char}`);
+  check('กลุ่มที่เลือกขยาย (group > 1.02)', anim.group > 1.02, `scale ${anim.group}`);
 
   /* ---- contrast ของตัวอักษรจาง ---- */
   const contrast = await browser.evaluate(`(() => {
@@ -199,19 +238,30 @@ try {
   await browser.screenshot(path.join(SHOTS, 'hud-command-100dpi.png'));
 
   const cmd = await browser.evaluate(`(() => {
-    const labels = [...document.querySelectorAll('.cmd-label')].map(el => ({
-      text: el.textContent, size: parseFloat(getComputedStyle(el).fontSize), box: el.getBBox(),
+    const inkBox = (el) => {
+      const size = parseFloat(getComputedStyle(el).fontSize);
+      const x = parseFloat(el.getAttribute('x')) || 0;
+      const y = parseFloat(el.getAttribute('y')) || 0;
+      const len = el.getComputedTextLength();
+      const lines = el.querySelectorAll('tspan').length || 1;
+      const h = size * 0.78 + (lines > 1 ? size * 1.1 : 0);
+      return { x: x - len / 2, y: y - h / 2, width: len, height: h };
+    };
+    const labels = [...document.querySelectorAll('#cmdRing .cmd-label')].map(el => ({
+      text: el.textContent, size: parseFloat(getComputedStyle(el).fontSize), box: inkBox(el),
     }));
-    return { count: labels.length, labels, collisions: 0 };
+    const subs = [...document.querySelectorAll('#cmdRing .slot-sub')].map(el => ({
+      text: el.textContent, size: parseFloat(getComputedStyle(el).fontSize), box: inkBox(el),
+    }));
+    return { count: labels.length, labels, subs, all: [...labels, ...subs] };
   })()`);
   check('วงคำสั่งมี 8 ช่อง', cmd.count === 8, `${cmd.count}`);
-  check(
-    'label วงคำสั่ง ≥ 12px',
-    Math.min(...cmd.labels.map((l) => l.size)) >= 12,
-    `${Math.min(...cmd.labels.map((l) => l.size)).toFixed(2)}px`,
-  );
-  const cmdCollisions = collisions(cmd.labels);
-  check('label วงคำสั่งไม่ชนกัน', cmdCollisions.length === 0, cmdCollisions.join(', '));
+  const labelMin = Math.min(...cmd.labels.map((l) => l.size));
+  const subMin = Math.min(...cmd.subs.map((l) => l.size));
+  check('label วงคำสั่ง ≥ 13px', labelMin >= 13, `${labelMin.toFixed(2)}px`);
+  check('sub วงคำสั่ง ≥ 11.5px', subMin >= 11.5, `${subMin.toFixed(2)}px`);
+  const cmdCollisions = collisions(cmd.all);
+  check('label + sub ของวงคำสั่งไม่ชนกัน', cmdCollisions.length === 0, cmdCollisions.join(', '));
 
   /* ---- 150% DPI + text scale 1.6 (แยกจากขนาดวง) ---- */
   const dpr = await browser.evaluate('window.devicePixelRatio');
@@ -246,11 +296,15 @@ try {
   check('จอ 150% DPI → devicePixelRatio 1.5', Math.abs(hi.dpr - 1.5) < 0.001, String(hi.dpr));
   check('textScale=1.6 → --hud-text-scale = 1.60', hi.cssScale === '1.60', hi.cssScale);
   check(
-    'textScale 1.6 ขยายเฉพาะตัวหนังสือ (group ≈ 18.4px)',
-    hi.group >= 18 && hi.group <= 19,
+    'textScale 1.6 ขยายเฉพาะตัวหนังสือ (group ≈ 18.2px)',
+    hi.group >= 17.5 && hi.group <= 19,
     `${hi.group.toFixed(2)}px`,
   );
-  check('ขนาดวงไม่เปลี่ยนตาม text scale', Math.abs(parseFloat(hi.ringScale) - 1.2) < 0.001, `--hud-scale=${hi.ringScale}`);
+  check(
+    'ขนาดวงมาจาก state ไม่ใช่ text scale',
+    Math.abs(parseFloat(hi.ringScale) - 1.0) < 0.001,
+    `--hud-scale=${hi.ringScale}`,
+  );
   check('font=noto-sans-thai ใช้ Noto Sans Thai', /^"?Noto Sans Thai/.test(hi.family), hi.family);
 
   await hidpi.screenshot(path.join(SHOTS, 'hud-typing-150dpi.png'));

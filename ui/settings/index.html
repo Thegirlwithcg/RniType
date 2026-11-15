@@ -31,14 +31,24 @@
       <div class="field">
         <div class="field__head">
           <label for="textScale">Text size</label>
-          <output id="textScaleValue" for="textScale">1.20×</output>
+          <output id="textScaleValue" for="textScale">1.40×</output>
         </div>
-        <input id="textScale" type="range" min="0.8" max="2" step="0.05" value="1.2" />
+        <input id="textScale" type="range" min="0.8" max="2" step="0.05" value="1.4" />
         <div class="field__scale" aria-hidden="true"><span>0.8×</span><span>2.0×</span></div>
         <p class="hint">
           Multiplies every label, character and badge. Independent from the ring size, so the
           letters grow without the circles growing.
         </p>
+      </div>
+
+      <div class="field">
+        <div class="field__head">
+          <label for="ringScale">Ring size</label>
+          <output id="ringScaleValue" for="ringScale">1.00×</output>
+        </div>
+        <input id="ringScale" type="range" min="0.8" max="1.6" step="0.05" value="1" />
+        <div class="field__scale" aria-hidden="true"><span>0.8×</span><span>1.6×</span></div>
+        <p class="hint">Diameter of the whole wheel. The text below keeps its own size.</p>
       </div>
 
       <fieldset class="field">
@@ -69,8 +79,7 @@
       <section class="preview" aria-label="Preview">
         <p class="preview__caption">Preview</p>
         <p class="preview__group">วรรณยุกต์</p>
-        <p class="preview__chars"><b>่</b> <b>้</b> <b>๊</b> <b>๋</b> <span class="sep">·</span> <b>ุ</b> <b>ู</b></p>
-        <p class="preview__chars"><b>ก</b> <b>น</b> <b>ร</b> <b>อ</b> <b>ง</b> <b>ม</b> <b>ย</b> <b>ล</b></p>
+        <p class="preview__chars"><b>่</b> <b>้</b> <b>๊</b> <b>๋</b> <span class="sep">·</span> <b>ุ</b> <b>ู</b> <span class="sep">·</span> <b>ก</b> <b>น</b> <b>ร</b> <b>อ</b> <b>ง</b></p>
         <p class="preview__pill">Type TH <span>·</span> ตัวใหญ่ <span class="badge">shift</span></p>
       </section>
 

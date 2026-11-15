@@ -14,6 +14,7 @@
 | Rate | `hud:state` สูงสุด **60 Hz** และส่งเฉพาะเมื่อค่าเปลี่ยน (coalesce) |
 | Errors | ทุก command คืน `{ ok: true, data }` หรือ `{ ok: false, error: { code, message } }` |
 | Version | payload มี `version: 1` เฉพาะ `hud:state` / config; ที่เหลือดูจาก field |
+| หน่วย | `hud:state.pivot`/`pointer` = พิกัดในหน้าต่าง overlay · `hud:state.scale` = `ui.hudScale` (app ประทับทุกเฟรม) |
 | ห้าม | HUD เรียก command ที่เปลี่ยน state ของแอป (HUD เป็น read-only + click-through) |
 
 ## 2. Events (app → UI)

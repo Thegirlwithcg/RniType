@@ -51,9 +51,9 @@
   ],
   "ui": {
     "language": "en",
-    "hudScale": 1.2,
+    "hudScale": 1.0,
     "hudOpacity": 0.92,
-    "hudTextScale": 1.2,
+    "hudTextScale": 1.4,
     "hudFontFamily": "ibm-plex-sans-thai"
   },
   "system": { "autostart": false, "runAsAdmin": false, "exclusion": ["game.exe"] }

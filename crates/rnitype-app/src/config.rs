@@ -14,12 +14,14 @@ pub const FONTS: [&str; 3] = ["ibm-plex-sans-thai", "noto-sans-thai", "system"];
 pub const FONT_DEFAULT: &str = "ibm-plex-sans-thai";
 
 /// ขนาดตัวหนังสือของ HUD (0.8–2.0) — ตัวคูณแยกจากขนาดวง
-pub const TEXT_SCALE_DEFAULT: f64 = 1.2;
+pub const TEXT_SCALE_DEFAULT: f64 = 1.4;
 pub const TEXT_SCALE_MIN: f64 = 0.8;
 pub const TEXT_SCALE_MAX: f64 = 2.0;
 
-/// ขนาดวงเริ่มต้น (ขยายจาก 1.0 เพราะตัวหนังสือใหญ่ขึ้น — ADR-16)
-pub const HUD_SCALE_DEFAULT: f64 = 1.2;
+/// ขนาดวงเริ่มต้น — 1.0 = 340px (ขนาดที่ออกแบบ) · owner 2026-11-15: 1.2 ใหญ่ไปนิด
+pub const HUD_SCALE_DEFAULT: f64 = 1.0;
+pub const HUD_SCALE_MIN: f64 = 0.5;
+pub const HUD_SCALE_MAX: f64 = 3.0;
 
 pub fn config_path() -> Option<PathBuf> {
     let base = std::env::var_os("APPDATA").map(PathBuf::from)?;
@@ -87,6 +89,16 @@ pub fn ui_style(config: &Value) -> Value {
     json!({ "textScale": text_scale, "font": font })
 }
 
+/// ขนาดวง (`ui.hudScale`) — แอปประทับลง `HudState.scale` ทุกเฟรม
+pub fn hud_scale(config: &Value) -> f64 {
+    config
+        .get("ui")
+        .and_then(|ui| ui.get("hudScale"))
+        .and_then(Value::as_f64)
+        .filter(|v| (HUD_SCALE_MIN..=HUD_SCALE_MAX).contains(v))
+        .unwrap_or(HUD_SCALE_DEFAULT)
+}
+
 /// settings ของ HUD ที่ถูกต้อง (ใช้ตอน save) — คืน error แบบ ipc.md
 pub fn validate_ui(config: &Value) -> Result<(), String> {
     let ui = config
@@ -121,8 +133,10 @@ pub fn validate_ui(config: &Value) -> Result<(), String> {
         let n = value
             .as_f64()
             .ok_or_else(|| "ui.hudScale: ต้องเป็น number".to_string())?;
-        if !(0.5..=3.0).contains(&n) {
-            return Err("ui.hudScale: ต้องอยู่ระหว่าง 0.5–3".to_string());
+        if !(HUD_SCALE_MIN..=HUD_SCALE_MAX).contains(&n) {
+            return Err(format!(
+                "ui.hudScale: ต้องอยู่ระหว่าง {HUD_SCALE_MIN}–{HUD_SCALE_MAX}"
+            ));
         }
     }
 
@@ -152,6 +166,13 @@ mod tests {
         let style = ui_style(&json!({}));
         assert_eq!(scale_of(&style), TEXT_SCALE_DEFAULT);
         assert_eq!(style["font"], FONT_DEFAULT);
+    }
+
+    #[test]
+    fn hud_scale_reads_and_clamps() {
+        assert_eq!(hud_scale(&json!({})), HUD_SCALE_DEFAULT);
+        assert_eq!(hud_scale(&json!({ "ui": { "hudScale": 1.6 } })), 1.6);
+        assert_eq!(hud_scale(&json!({ "ui": { "hudScale": 9.0 } })), HUD_SCALE_DEFAULT);
     }
 
     #[test]

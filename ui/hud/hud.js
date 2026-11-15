@@ -32,11 +32,13 @@
     pivot: document.getElementById('pivot'),
   };
 
-  // รัศมีวง (หน่วยเดียวกับ viewBox -170..170) — คัดลอกจากม็อกอัป v0.11
+  // รัศมีวง (หน่วยเดียวกับ viewBox -170..170)
+  // v0.12 (ADR-17): วงในกว้างขึ้น (32–88) และข้อความอยู่ที่ r=61 เพื่อให้ป้ายไทยยาว ๆ มีที่
+  // วงนอก (ตัวอักษร) 94–158 · text อยู่ r=126
   const R = {
-    groupIn: 31, groupOut: 68, groupText: 49.5,
-    charIn: 74, charOut: 158, charText: 116,
-    wheelIn: 34, wheelOut: 96, wheelText: 66,
+    groupIn: 33, groupOut: 90, groupText: 63,
+    charIn: 96, charOut: 158, charText: 127,
+    wheelIn: 36, wheelOut: 112, wheelText: 76,
   };
 
   const TYPE_MODES = ['type-en', 'type-th', 'type-other'];
@@ -46,9 +48,9 @@
      ตัวหนังสือ = style จากแอป (event `hud:style` / command `hud_style`)
      ไม่ใช่ state รายเฟรม จึงไม่ปนกับ HudState — ค่าเริ่มต้นตรงกับ config.schema */
   const FONT_STACKS = window.RniFonts.stacks;
-  const STYLE_DEFAULT = { textScale: 1.2, font: window.RniFonts.default };
+  const STYLE_DEFAULT = { textScale: 1.4, font: window.RniFonts.default };
   /** ค่าเริ่มต้นขนาดวง (config ui.hudScale) — ใช้เมื่อ state ไม่ส่งมา */
-  const SCALE_DEFAULT = 1.2;
+  const SCALE_DEFAULT = 1.0;
   const typography = { ...STYLE_DEFAULT };
 
   const MODE_LABEL = {
@@ -119,9 +121,47 @@
     return Array.from(value).length;
   }
 
-  /** ป้ายกลุ่มยาว (ไทย) → ย่อตัวอักษรให้พอดีกับแถบวง */
+  /* ---------------- Thai text helpers ---------------- */
+
+  /** สระล่าง 3 ตัว (ุ ู ฺ) — วาดขีดกำกับเหนือตัวอักษร (ADR-12) */
+  const BELOW_MARKS = new Set(['\u0E38', '\u0E39', '\u0E3A']);
+
+  /** ตัดข้อความเป็น grapheme cluster (ไม่แยกสระ/วรรณยุกต์ออกจากพยัญชนะ) */
+  const SEGMENTER =
+    typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+      ? new Intl.Segmenter('th', { granularity: 'grapheme' })
+      : null;
+
+  function graphemes(value) {
+    if (!value) return [];
+    return SEGMENTER
+      ? [...SEGMENTER.segment(value)].map((part) => part.segment)
+      : Array.from(value);
+  }
+
+  /** ป้ายกลุ่มที่ยาวตั้งแต่ 7 ตัว → แบ่ง 2 บรรทัด (กันชนกันในช่อง 45°) */
+  const LABEL_TWO_LINES_AT = 7;
+
+  /** เขียนข้อความลง <text> — 1 หรือ 2 บรรทัด (คืนจำนวนบรรทัด) */
+  function renderLines(node, cx, cy, value) {
+    const parts = graphemes(value);
+    if (parts.length < LABEL_TWO_LINES_AT) {
+      node.textContent = value;
+      return 1;
+    }
+
+    const half = Math.ceil(parts.length / 2);
+    [parts.slice(0, half), parts.slice(half)].forEach((line, index) => {
+      const tspan = svg('tspan', { x: cx, dy: index === 0 ? '-0.55em' : '1.1em' });
+      tspan.textContent = line.join('');
+      node.appendChild(tspan);
+    });
+    return 2;
+  }
+
+  /** ป้ายกลุ่มยาว → ย่อตัวอักษรให้พอดีกับแถบวง (นับตาม grapheme ไม่ใช่ code point) */
   function lengthClass(value) {
-    const len = labelLength(value);
+    const len = graphemes(value).length;
     if (len <= 4) return '';
     if (len <= 6) return 'len-m';
     return 'len-l';
@@ -159,15 +199,22 @@
       dom.inner.appendChild(sector);
 
       const labelText = text(label.text);
+      const twoLines = graphemes(labelText).length >= LABEL_TWO_LINES_AT;
       const node = svg('text', {
         class:
           'sector-label sector-label--group' +
+          (armed ? ' is-armed' : '') +
           (active >= 0 && !armed ? ' is-muted' : '') +
-          (lengthClass(labelText) ? ` ${lengthClass(labelText)}` : ''),
+          (twoLines ? ' is-two-line' : lengthClass(labelText) ? ` ${lengthClass(labelText)}` : ''),
         x: (Math.cos(center) * R.groupText).toFixed(2),
         y: (Math.sin(center) * R.groupText).toFixed(2),
       });
-      node.textContent = labelText;
+      renderLines(
+        node,
+        (Math.cos(center) * R.groupText).toFixed(2),
+        (Math.sin(center) * R.groupText).toFixed(2),
+        labelText,
+      );
       dom.inner.appendChild(node);
     });
   }
@@ -182,6 +229,7 @@
     labels.forEach((label, i) => {
       const center = -Math.PI / 2 + i * step;
       const selected = active === i;
+      const textScale = typography.textScale;
 
       const sector = svg('path', {
         d: sectorPath(R.charIn, R.charOut, center - step / 2, center + step / 2),
@@ -191,21 +239,36 @@
 
       const cx = Math.cos(center) * R.charText;
       const cy = Math.sin(center) * R.charText;
+      const labelText = text(label.text);
+
+      // ขีดกำกับสระล่าง (ุ ู ฺ) = เส้นประสั้นเหนือตัวอักษร — ADR-12
+      if (BELOW_MARKS.has(labelText)) {
+        const line = cy - 6.5 * textScale;
+        dom.outer.appendChild(
+          svg('line', {
+            class: `char-guide is-on${selected ? ' is-selected' : ''}`,
+            x1: (cx - 8 * textScale).toFixed(2),
+            x2: (cx + 8 * textScale).toFixed(2),
+            y1: line.toFixed(2),
+            y2: line.toFixed(2),
+          }),
+        );
+      }
 
       const node = svg('text', {
         class: `char-text${selected ? ' is-selected' : ' is-dim'}`,
         x: cx.toFixed(2),
         y: cy.toFixed(2),
       });
-      node.textContent = text(label.text);
+      node.textContent = labelText;
       dom.outer.appendChild(node);
 
-      // badge ของช่อง (เช่น สระล่าง ุ ู หรือ IME) — ค่าตรง ๆ จาก contract
+      // badge ของช่อง (เช่น IME) — ค่าตรง ๆ จาก contract
       if (text(label.badge)) {
         const badge = svg('text', {
           class: 'slot-badge',
           x: cx.toFixed(2),
-          y: (cy + 16 * typography.textScale).toFixed(2),
+          y: (cy + 16 * textScale).toFixed(2),
         });
         badge.textContent = text(label.badge);
         dom.outer.appendChild(badge);
@@ -247,7 +310,7 @@
         const sub = svg('text', {
           class: 'slot-sub',
           x: cx.toFixed(2),
-          y: (cy + 12 * typography.textScale).toFixed(2),
+          y: (cy + 14 * typography.textScale).toFixed(2),
         });
         sub.textContent = text(label.sub);
         group.appendChild(sub);

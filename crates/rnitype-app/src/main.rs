@@ -180,6 +180,31 @@ fn to_window_coords(state: &mut Value, origin: (i32, i32)) {
     }
 }
 
+/// ขนาดวงมาจาก config (`ui.hudScale`) — แอปประทับลง state ทุกเฟรม
+fn apply_scale(state: &mut Value, scale: f64) {
+    if let Some(object) = state.as_object_mut() {
+        object.insert("scale".to_string(), json!(scale));
+    }
+}
+
+/// state ปัจจุบันของโหมด demo ในรูปแบบที่ HUD ต้องได้ (scale + พิกัดหน้าต่าง)
+/// ⚠ ลำดับ lock ที่ใช้ทั้งไฟล์: config → demo → origin (กัน deadlock)
+fn snapshot_for_hud(app: &tauri::AppHandle, scale: f64) -> Option<Value> {
+    let state = app.state::<AppState>();
+    let mut guard = state.demo.lock().unwrap();
+    let source = guard.as_mut()?;
+    if source.states.is_empty() {
+        return None;
+    }
+    let index = source.current % source.states.len();
+    let mut payload = source.states[index].clone();
+    apply_scale(&mut payload, scale);
+
+    let origin = *state.origin.lock().unwrap();
+    to_window_coords(&mut payload, origin);
+    Some(payload)
+}
+
 
 /* ============================================================
    หน้าต่าง overlay
@@ -284,6 +309,10 @@ fn setup_overlay(
                 loop {
                     {
                         let app_state = handle.state::<AppState>();
+                        let scale = {
+                            let config = app_state.config.lock().unwrap();
+                            config::hud_scale(&config)
+                        };
                         let mut guard = app_state.demo.lock().unwrap();
                         let Some(source) = guard.as_mut() else {
                             break;
@@ -293,8 +322,11 @@ fn setup_overlay(
                         }
                         let index = source.current % source.states.len();
                         let mut state = source.states[index].clone();
+                        apply_scale(&mut state, scale);
+
                         let origin = *app_state.origin.lock().unwrap();
                         to_window_coords(&mut state, origin);
+
                         let mode = state.get("mode").and_then(Value::as_str).unwrap_or("?");
                         let st = state.get("state").and_then(Value::as_str).unwrap_or("?");
                         match source.handle.emit_to("hud", "hud:state", &state) {
@@ -354,6 +386,21 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("RniType")
         .menu(&menu)
         .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            // คลิกซ้ายที่ไอคอน = เปิด Settings (ทางลัดแบบ Logi Options+)
+            use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                println!("[tray] คลิกซ้ายไอคอน → เปิด Settings");
+                if let Err(err) = open_settings(tray.app_handle()) {
+                    eprintln!("[tray] เปิด Settings ไม่สำเร็จ: {err}");
+                }
+            }
+        })
         .on_menu_event(|app, event| match event.id.as_ref() {
             "settings" => {
                 println!("[tray] เลือก Settings → เปิดหน้าต่างตั้งค่า");
@@ -380,16 +427,22 @@ fn open_settings(app: &tauri::AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
 
-    tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         app,
         "settings",
         tauri::WebviewUrl::App("settings/index.html".into()),
     )
     .title("RniType Settings")
-    .inner_size(560.0, 760.0)
+    .inner_size(560.0, 880.0)
     .min_inner_size(460.0, 560.0)
+    .focused(true)
     .center()
     .build()?;
+
+    // ให้หน้าต่างขึ้นมาเหนือหน้าต่างอื่นเสมอ (บางครั้ง Windows ไม่ยกให้เอง)
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
 
     Ok(())
 }
@@ -401,7 +454,7 @@ fn open_settings(app: &tauri::AppHandle) -> tauri::Result<()> {
 /// HUD แจ้งว่าพร้อมรับ state (ipc.md §3) — log + ส่ง state ให้ HUD ทันทีหลัง handshake
 /// (HUD เป็น read-only จึงไม่มี command อื่นที่เปลี่ยน state ของแอป)
 #[tauri::command]
-fn hud_ready(state: tauri::State<'_, AppState>) -> Value {
+fn hud_ready(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Value {
     let first = !state
         .hud_ready
         .swap(true, std::sync::atomic::Ordering::SeqCst);
@@ -410,24 +463,17 @@ fn hud_ready(state: tauri::State<'_, AppState>) -> Value {
         if first { " (ครั้งแรก)" } else { "" }
     );
 
-    // ipc.md §4 — หลัง handshake แอปส่ง state ให้ HUD ทันที (state ถัดไปในคิว)
-    {
-        let origin = *state.origin.lock().unwrap();
-        let mut guard = state.demo.lock().unwrap();
-        if let Some(source) = guard.as_mut() {
-            if !source.states.is_empty() {
-                let index = source.current % source.states.len();
-                let mut payload = source.states[index].clone();
-                to_window_coords(&mut payload, origin);
-                let mode = payload.get("mode").and_then(Value::as_str).unwrap_or("?");
-                let st = payload.get("state").and_then(Value::as_str).unwrap_or("?");
-                match source.handle.emit_to("hud", "hud:state", &payload) {
-                    Ok(()) => println!(
-                        "[hud] ส่ง hud:state ให้ HUD หลัง handshake (mode={mode} state={st})"
-                    ),
-                    Err(err) => eprintln!("[hud] ส่ง hud:state หลัง handshake ไม่สำเร็จ: {err}"),
-                }
-            }
+    // ipc.md §4 — หลัง handshake แอปส่ง state ให้ HUD ทันที (state ปัจจุบัน + scale จาก config)
+    let scale = {
+        let config = state.config.lock().unwrap();
+        config::hud_scale(&config)
+    };
+    if let Some(payload) = snapshot_for_hud(&app, scale) {
+        let mode = payload.get("mode").and_then(Value::as_str).unwrap_or("?");
+        let st = payload.get("state").and_then(Value::as_str).unwrap_or("?");
+        match app.emit_to("hud", "hud:state", &payload) {
+            Ok(()) => println!("[hud] ส่ง hud:state ให้ HUD หลัง handshake (mode={mode} state={st})"),
+            Err(err) => eprintln!("[hud] ส่ง hud:state หลัง handshake ไม่สำเร็จ: {err}"),
         }
     }
 
@@ -472,6 +518,11 @@ fn save_config(
     // typography เปลี่ยน → บอก HUD ทันที (ไม่ต้องรอ state เฟรมถัดไป)
     if let Err(err) = app.emit_to("hud", "hud:style", &style) {
         eprintln!("[config] ส่ง hud:style ไม่สำเร็จ: {err}");
+    }
+    // ขนาดวงอยู่ใน state (scale) → ส่ง state ปัจจุบันซ้ำทันที ให้ slider เห็นผลทันที
+    let scale = config::hud_scale(&config);
+    if let Some(payload) = snapshot_for_hud(&app, scale) {
+        let _ = app.emit_to("hud", "hud:state", &payload);
     }
     // หน้าต่าง Settings อื่น ๆ (ถ้าเปิดหลายตัว) ให้เห็นค่าใหม่
     let _ = app.emit_to("settings", "settings:config", &config);

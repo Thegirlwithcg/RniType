@@ -7,7 +7,11 @@
 (() => {
   'use strict';
 
-  const DEFAULT_UI = { hudTextScale: 1.2, hudFontFamily: window.RniFonts.default };
+  const DEFAULT_UI = {
+    hudTextScale: 1.4,
+    hudScale: 1.0,
+    hudFontFamily: window.RniFonts.default,
+  };
   const SAVE_DELAY_MS = 200;
 
   const tauri = typeof window !== 'undefined' ? window.__TAURI__ : null;
@@ -19,6 +23,8 @@
   const dom = {
     slider: document.getElementById('textScale'),
     sliderValue: document.getElementById('textScaleValue'),
+    ringSlider: document.getElementById('ringScale'),
+    ringValue: document.getElementById('ringScaleValue'),
     radios: Array.from(document.querySelectorAll('input[name="font"]')),
     reset: document.getElementById('reset'),
     status: document.getElementById('status'),
@@ -42,6 +48,11 @@
     return Number.isFinite(value) && value >= 0.8 && value <= 2 ? value : DEFAULT_UI.hudTextScale;
   }
 
+  function ringScale() {
+    const value = ui().hudScale;
+    return Number.isFinite(value) && value >= 0.5 && value <= 3 ? value : DEFAULT_UI.hudScale;
+  }
+
   function fontId() {
     const value = ui().hudFontFamily;
     return window.RniFonts.ids.includes(value) ? value : DEFAULT_UI.hudFontFamily;
@@ -63,9 +74,12 @@
   function render() {
     const scale = textScale();
     const font = fontId();
+    const ring = ringScale();
 
     dom.slider.value = String(scale);
     dom.sliderValue.textContent = `${scale.toFixed(2)}×`;
+    dom.ringSlider.value = String(ring);
+    dom.ringValue.textContent = `${ring.toFixed(2)}×`;
     dom.radios.forEach((radio) => {
       radio.checked = radio.value === font;
     });
@@ -115,6 +129,13 @@
     scheduleSave();
   });
 
+  dom.ringSlider.addEventListener('input', () => {
+    const ring = Number(dom.ringSlider.value);
+    ui().hudScale = ring;
+    dom.ringValue.textContent = `${ring.toFixed(2)}×`;
+    scheduleSave();
+  });
+
   dom.radios.forEach((radio) => {
     radio.addEventListener('change', () => {
       if (!radio.checked) return;
@@ -127,6 +148,7 @@
   dom.reset.addEventListener('click', () => {
     const uiSection = ui();
     uiSection.hudTextScale = DEFAULT_UI.hudTextScale;
+    uiSection.hudScale = DEFAULT_UI.hudScale;
     uiSection.hudFontFamily = DEFAULT_UI.hudFontFamily;
     render();
     save();

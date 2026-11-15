@@ -12,7 +12,7 @@
   --line: rgba(255, 255, 255, 0.08);
   --text: #eceff6;
   --text-dim: #9aa3b2;
-  --preview-text-scale: 1.2;
+  --preview-text-scale: 1.4;
   --preview-font: "IBM Plex Sans Thai", "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
 }
 
@@ -156,7 +156,7 @@ input[type="range"] {
 .preview__group {
   margin: 0 0 10px;
   color: #cfe8ff;
-  font-size: calc(11.5px * var(--preview-text-scale));
+  font-size: calc(11.4px * var(--preview-text-scale));
   font-weight: 600;
 }
 
@@ -180,14 +180,14 @@ input[type="range"] {
   border-radius: 999px;
   background: rgba(14, 22, 32, 0.82);
   color: #b9c4d8;
-  font-size: calc(11px * var(--preview-text-scale));
+  font-size: calc(10px * var(--preview-text-scale));
 }
 .preview__pill .badge {
   padding: 0 6px;
   border-radius: 999px;
   background: rgba(94, 234, 212, 0.18);
   color: #cffaf1;
-  font-size: calc(10px * var(--preview-text-scale));
+  font-size: calc(9px * var(--preview-text-scale));
 }
 
 /* ---------------- actions ---------------- */

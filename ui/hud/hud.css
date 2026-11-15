@@ -19,29 +19,27 @@
   --hud-scale: 1;
   --hud-opacity: 0.92;
 
-  /* ---------------- typography (ADR-16) ----------------
+  /* ---------------- typography (ADR-16 · ADR-17) ----------------
      --hud-text-scale = ตัวคูณ "ตัวหนังสือ" แยกจาก --hud-scale ที่คูณ "ขนาดวง"
      (ขยายวงอย่างเดียว = ตัวหนังสือยังเล็ก — owner 2026-11-15)
-     ค่าใน calc() คือขนาดที่ text-scale = 1.0 · ค่าเริ่มต้น 1.2 ให้ผลตามตาราง
-     ใน ADR-16: group 13.8 · char 21.6–30 · sub/badge 11 · pill 13.2 */
+     ค่าใน calc() คือขนาดที่ text-scale = 1.0 · ค่าเริ่มต้น 1.4 ให้ผลจริง
+     (ADR-17): group 16 · len-m 14.3 · char 25.2 · sub/badge 12 · pill 14 */
   --hud-font-family: "IBM Plex Sans Thai", "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
-  --hud-text-scale: 1.2;
+  --hud-text-scale: 1.4;
 
-  --fs-group: calc(11.5px * var(--hud-text-scale));
-  --fs-group-m: calc(10.5px * var(--hud-text-scale));
-  --fs-group-l: calc(9.5px * var(--hud-text-scale));
+  --fs-group: calc(11.4px * var(--hud-text-scale));
+  --fs-group-m: calc(10.2px * var(--hud-text-scale));
+  --fs-group-l: calc(9.2px * var(--hud-text-scale));
   --fs-char: calc(18px * var(--hud-text-scale));
-  --fs-char-selected: calc(25px * var(--hud-text-scale));
   --fs-char-dim: calc(17px * var(--hud-text-scale));
-  --fs-sub: calc(9.2px * var(--hud-text-scale));
-  --fs-badge: calc(9.2px * var(--hud-text-scale));
-  --fs-pill: calc(11px * var(--hud-text-scale));
-  --fs-pill-badge: calc(10px * var(--hud-text-scale));
-  --fs-cmd: calc(11px * var(--hud-text-scale));
-  --fs-cmd-selected: calc(12.5px * var(--hud-text-scale));
-  --fs-lang: calc(11.5px * var(--hud-text-scale));
-  --fs-preview: calc(22px * var(--hud-text-scale));
-  --fs-repeat: calc(10px * var(--hud-text-scale));
+  --fs-sub: calc(8.6px * var(--hud-text-scale));
+  --fs-badge: calc(8.6px * var(--hud-text-scale));
+  --fs-pill: calc(10px * var(--hud-text-scale));
+  --fs-pill-badge: calc(9px * var(--hud-text-scale));
+  --fs-cmd: calc(10px * var(--hud-text-scale));
+  --fs-lang: calc(10.5px * var(--hud-text-scale));
+  --fs-preview: calc(19px * var(--hud-text-scale));
+  --fs-repeat: calc(9px * var(--hud-text-scale));
 
   --ease-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -117,25 +115,49 @@ html, body {
 
 /* ---------------- sectors ---------------- */
 
+/* ทุก sector ขยายจาก "ศูนย์กลางวง" (view-box 50% 50%) → ดูเหมือนปูดออกจากกลาง
+   ตอนถูกเลือก (ADR-17: active ต้องขยับ ไม่ใช่นิ่ง) */
+.sector,
+.cmd-sector,
+.lang-sector {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+
 .sector {
   fill: rgba(23, 28, 40, 0.55);
   stroke: rgba(255, 255, 255, 0.055);
   stroke-width: 1;
-  transition: fill 0.18s linear, stroke 0.18s linear, opacity 0.25s var(--ease-soft);
+  transition: fill 0.18s linear, stroke 0.18s linear, opacity 0.25s var(--ease-soft),
+    transform 0.2s var(--ease-out);
 }
 
 .sector--group.is-armed {
   fill: rgba(124, 197, 255, 0.16);
   stroke: rgba(124, 197, 255, 0.45);
+  transform: scale(1.07);
 }
 
 .sector--char.is-selected {
   fill: rgba(169, 139, 255, 0.26);
   stroke: rgba(184, 160, 255, 0.85);
   stroke-width: 1.5;
+  transform: scale(1.05);
 }
 
 /* ---------------- labels ---------------- */
+
+/* ข้อความขยายจากศูนย์กลางของตัวเอง (ไม่ใช่ศูนย์กลางวง) */
+.sector-label,
+.char-text,
+.cmd-label,
+.lang-label,
+.slot-sub,
+.slot-badge,
+.char-guide {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
 
 .sector-label {
   fill: #93a0b8;
@@ -144,13 +166,15 @@ html, body {
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  transition: fill 0.18s;
+  transition: fill 0.18s, transform 0.2s var(--ease-out);
 }
 
 .sector-label--group { font-size: var(--fs-group); letter-spacing: 0.02em; }
 .sector-label--group.len-m { font-size: var(--fs-group-m); }
 .sector-label--group.len-l { font-size: var(--fs-group-l); }
+.sector-label--group.is-two-line { font-size: var(--fs-group-m); }
 .sector-label--group.is-muted { fill: #8d98ad; }
+.sector-label--group.is-armed { fill: #e6f4ff; transform: scale(1.1); }
 .sector--group.is-armed + .sector-label { fill: #cfe8ff; }
 
 .char-text {
@@ -160,17 +184,30 @@ html, body {
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  transition: fill 0.16s, font-size 0.22s var(--ease-out), filter 0.22s;
+  transition: fill 0.16s, transform 0.2s var(--ease-out), filter 0.2s;
 }
 .char-text.is-selected {
   fill: #ffffff;
-  font-size: var(--fs-char-selected);
   font-weight: 700;
+  transform: scale(1.3);
   filter: drop-shadow(0 0 12px rgba(169, 139, 255, 0.95));
 }
 .char-text.is-dim { fill: #94a0b6; font-size: var(--fs-char-dim); }
 
-/* badge ของช่อง (เช่น สระล่าง ุ ู หรือ IME) — ค่ามาจาก contract ตรง ๆ */
+/* ขีดกำกับสระล่าง (ุ ู ฺ) — ADR-12: เส้นประสั้นเหนือตัวอักษร ให้เห็นว่าอยู่ใต้ฐาน */
+.char-guide {
+  stroke: rgba(216, 228, 245, 0.5);
+  stroke-width: 1.4;
+  stroke-dasharray: 2.2 2.2;
+  stroke-linecap: round;
+  opacity: 0;
+  pointer-events: none;
+  transition: stroke 0.16s linear, opacity 0.16s linear;
+}
+.char-guide.is-on { opacity: 1; }
+.char-guide.is-selected { stroke: rgba(255, 255, 255, 0.92); }
+
+/* badge ของช่อง (เช่น IME) — ค่ามาจาก contract ตรง ๆ */
 .slot-badge {
   fill: #fbbf24;
   font-size: var(--fs-badge);
@@ -186,24 +223,26 @@ html, body {
   fill: rgba(18, 23, 34, 0.78);
   stroke: rgba(255, 255, 255, 0.08);
   stroke-width: 1;
-  transition: fill 0.15s linear, stroke 0.15s linear;
+  transition: fill 0.15s linear, stroke 0.15s linear, transform 0.2s var(--ease-out);
 }
 .cmd-sector.is-selected {
   fill: rgba(124, 197, 255, 0.34);
   stroke: rgba(160, 220, 255, 0.95);
   stroke-width: 1.6;
+  transform: scale(1.07);
 }
 
 .lang-sector {
   fill: rgba(18, 24, 36, 0.8);
   stroke: rgba(255, 255, 255, 0.08);
   stroke-width: 1;
-  transition: fill 0.15s linear, stroke 0.15s linear;
+  transition: fill 0.15s linear, stroke 0.15s linear, transform 0.2s var(--ease-out);
 }
 .lang-sector.is-selected {
   fill: rgba(124, 197, 255, 0.34);
   stroke: rgba(160, 220, 255, 0.95);
   stroke-width: 1.6;
+  transform: scale(1.07);
 }
 
 .cmd-label {
@@ -213,8 +252,9 @@ html, body {
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
+  transition: fill 0.15s linear, transform 0.2s var(--ease-out);
 }
-.cmd-label.is-selected { fill: #ffffff; font-size: var(--fs-cmd-selected); }
+.cmd-label.is-selected { fill: #ffffff; transform: scale(1.16); }
 
 .lang-label {
   fill: #dbe3f2;
@@ -224,8 +264,9 @@ html, body {
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
+  transition: fill 0.15s linear, transform 0.2s var(--ease-out);
 }
-.lang-label.is-selected { fill: #ffffff; }
+.lang-label.is-selected { fill: #ffffff; transform: scale(1.14); }
 
 .slot-sub {
   fill: #93a0b6;
