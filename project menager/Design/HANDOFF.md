@@ -16,7 +16,7 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay+typography · P5 slice 1 (Settings→HUD) — 90 tests** |
+| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay+typography+geometry · P5 slice 1 (Settings→HUD) — 91 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, fallback `sdl3`) + `SendInput` |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
 | งานถัดไป | Runtime wiring: จอย → core → injector → HUD ใน `rnitype-app` |
@@ -36,8 +36,9 @@ tags: [handoff]
 11. **ไม่ใช้ Godot** — [[02-engine-choice-godot]]
 12. **ภาษาหลัก = Rust + Tauri v2** — [[03-stack-rust]]
 13. ไฟล์ออกแบบอยู่ใน `Design/` + sub-folder (ตาม canvas)
-14. **Typography แยก 2 ตัวคูณ**: `hudScale` (วง, 1.2) ≠ `hudTextScale` (ตัวหนังสือ, 1.2) · ฟอนต์ไทย **ไม่มีหัว = IBM Plex Sans Thai** (fallback Noto Sans Thai) · ส่งค่าด้วย event `hud:style` ไม่ใช่ HudState · **Settings window (ภาษาอังกฤษ) มี slider + ฟอนต์** — [[16-hud-typography-and-fonts]]
+14. **Typography แยก 2 ตัวคูณ**: `hudScale` (วง, **1.0 = 340px**) ≠ `hudTextScale` (ตัวหนังสือ, **1.4**) · ฟอนต์ไทย **ไม่มีหัว = IBM Plex Sans Thai** (fallback Noto Sans Thai) · ส่งค่าด้วย event `hud:style` ไม่ใช่ HudState · **Settings window (ภาษาอังกฤษ) มี slider ขนาดตัวอักษร + ขนาดวง + ฟอนต์** — [[16-hud-typography-and-fonts]] · [[17-hud-ring-geometry-and-active-animation]]
 15. **pivot/pointer ใน HudState = พิกัดในหน้าต่าง overlay** (0,0 = virtual desktop) — app แปลงจากพิกัดหน้าจอ ก่อน emit
+16. **ป้ายกลุ่มไทยยาว ≥ 7 grapheme = 2 บรรทัด** · สระล่าง ุ ู มี **ขีดเส้นประ** (ไม่ใช่คำว่า "ขีดล่าง") · ช่องที่ active **ขยาย** (sector ปูดจากกลางวง, ตัวอักษรขยายในที่) — [[17-hud-ring-geometry-and-active-animation]]
 
 ## 3. โครงสร้างไฟล์
 
@@ -78,6 +79,7 @@ project menager/
    │  ├─ 14-universal-languages.md  ← ADR-14 (หลายภาษา + Settings window)
    │  ├─ 15-gilrs-xinput-backend.md ← ADR-15 (gilrs XInput)
    │  └─ 16-hud-typography-and-fonts.md ← ADR-16 (ขนาดตัวหนังสือ + ฟอนต์ไม่มีหัว)
+   │  └─ 17-hud-ring-geometry-and-active-animation.md ← ADR-17 (วงเล็กลง/ชัดขึ้น + animation + ขีดสระล่าง)
    └─ 05-mockup/
       ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (index.html + hud.js + styles.css)
       └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings)
@@ -137,10 +139,10 @@ crates\rnitype-app\run.ps1 -- --demo --seconds 30
 crates\rnitype-app\run.ps1 -- --demo --settings --seconds 60
 ```
 
-- Tray → Settings… / Quit (หรือ `Ctrl+C` ใน terminal)
+- Tray → **คลิกซ้าย** = Settings · คลิกขวา = เมนู (Settings… / Quit) · หรือ `Ctrl+C` ใน terminal
 - ไม่มี `--demo` = HUD idle (รอ runtime จริง)
 - path มี apostrophe → ใช้ `run.ps1`; build.rs copy icon ไป `%TEMP%` ให้ `cargo test/check` ทำงานได้เอง
-- typography: เปลี่ยนใน Settings → HUD เปลี่ยนทันที (event `hud:style`) · ค่าถูกเก็บที่ `%APPDATA%\RniType\config.json`
+- typography/ขนาดวง: เปลี่ยนใน Settings → HUD เปลี่ยนทันที (`hud:style` + `hud:state`) · ค่าเก็บที่ `%APPDATA%\RniType\config.json`
 
 ### 4.5 UI feedback จาก owner (2026-11-15) — ✅ ปิดแล้ว (ADR-16)
 
@@ -153,11 +155,22 @@ crates\rnitype-app\run.ps1 -- --demo --settings --seconds 60
 | 2 | ฟอนต์ไทยไม่มีหัว | **IBM Plex Sans Thai** (4 น้ำหนัก) + Noto Sans Thai fallback + OFL ใน `ui/shared/fonts/` · เลิกใช้ Leelawadee เป็นค่าเริ่มต้น |
 | 3 | Settings → HUD | slider 0.8–2.0 (default 1.2) + 3 ฟอนต์ + preview + Reset → save ลง `config.json` ทันที |
 | 4 | Contract | `ui.hudTextScale` + `ui.hudFontFamily` (config v1) · event **`hud:style`** + command **`hud_style`** (ipc v1.1, additive) — [[16-hud-typography-and-fonts]] |
-| 5 | ตรวจรับ | `hud-typography.mjs` **24/24** + screenshot 100%/150% DPI + overlay จริง + Settings → `05-mockup/hud-shots/` · contrast ตัวอักษรจาง **6.87:1** |
+| 5 | ตรวจรับ | `hud-typography.mjs` **29/29** + screenshot 100%/150% DPI + overlay จริง + Settings → `05-mockup/hud-shots/` · contrast ตัวอักษรจาง **6.87:1** |
 
-**สิ่งที่ owner ควรดูก่อนปล่อย:** เปิด Settings เลื่อน text size 1.0 / 1.2 / 1.5 บนจอจริงของตัวเอง
-(3840×1080 + DPI ที่ใช้จริง) แล้วบอกว่า 1.2 พอดีหรืออยากได้ค่าเริ่มต้นอื่น — ค่าเดียวที่ต้องแก้คือ
-`ui.hudTextScale` ใน `config.schema.json` + `crates/rnitype-app/src/config.rs` + `hud.css` (`STYLE_DEFAULT`)
+### 4.5b UI feedback รอบ 2 (2026-11-15) — ✅ ปิดแล้ว (ADR-17)
+
+| สิ่งที่ owner ขอ | ผล |
+| --- | --- |
+| คำว่า **"ขีดล่าง"** ใต้ ุ ู → อยากได้สัญลักษณ์ | วาด **เส้นประสั้น** เหนือสระล่าง (ทำตาม ADR-12) · ลบคำออกจาก contract samples |
+| Active ต้องมี **animation ขยาย** | sector ปูดจากกลางวง (1.05–1.07) · ตัวอักษรขยายในที่ (1.1–1.3) · 0.2s ease-out |
+| **เปิด Settings ตรงไหน** | **คลิกซ้ายที่ไอคอน tray** หรือคลิกขวา → Settings… · หรือ `--settings` (ไอคอนอาจอยู่ในถาดซ่อน `^`) |
+| วงล้อ**ใหญ่ไปนิด** แต่ตัวอักษรต้องชัด | วง 408 → **340px (−17%)** · ตัวอักษร **ใหญ่ขึ้น** (group 13.8 → **16px**) · เพิ่ม **Ring size slider** ใน Settings |
+
+พร้อมแก้บั๊กตัววัด: `getBBox()` ไม่ serialize ผ่าน CDP → test เดิมรายงาน "ไม่ชนกัน" ทั้งที่ **วรรณยุกต์/กลาง ชนกัน 6%**
+ตอนนี้ใช้ **ink box** (ความกว้างจริง + ความสูงตามฟอนต์) และเพิ่ม 5 checks
+
+**ยังค้างให้ owner ยืนยัน:** เปิด Settings → เลื่อน Text size 1.2/1.4/1.6 และ Ring size 0.9/1.0/1.1 บนจอจริง
+แล้วบอกว่าเริ่มต้นที่ 1.4/1.0 พอดีไหม
 
 ### 4.6 เริ่ม session หน้า
 

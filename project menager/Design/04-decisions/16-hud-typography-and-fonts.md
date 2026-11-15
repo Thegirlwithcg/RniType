@@ -1,11 +1,14 @@
 ---
 title: ADR-16 — Typography ของ HUD (ขนาดตัวหนังสือ + ฟอนต์ไทยไม่มีหัว)
-status: accepted (P4 slice 3 + P5 slice 1)
+status: accepted (P4 slice 3 + P5 slice 1) — ขนาด/ค่าเริ่มต้นถูกปรับต่อใน ADR-17
 updated: 2026-11-15
 tags: [decision, hud, typography, thai, font, settings]
 ---
 
 # ADR-16 — Typography: text scale แยกจาก ring scale + IBM Plex Sans Thai
+
+> ตัวเลขขนาด/ค่าเริ่มต้นในไฟล์นี้เป็นของรอบแรก — ถูกแทนที่ด้วย [[17-hud-ring-geometry-and-active-animation]]
+> (ring 1.0 · text 1.4 · วงในกว้างขึ้น · ป้าย 2 บรรทัด) ส่วน *การตัดสินใจ* (2 ตัวคูณ, `hud:style`, ฟอนต์) ยังใช้อยู่
 
 ## บริบท
 
