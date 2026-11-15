@@ -57,8 +57,10 @@ updated: 2026-11-15
 | [[13-shift-toggle]] | ADR: Shift/LT กดครั้งเดียวล็อกตัวพิมพ์ใหญ่ + UI แสดง |
 | [[14-universal-languages]] | ADR: รองรับทุกภาษา (layout + IME), Settings window แยก, English UI, Reset |
 | [[15-gilrs-xinput-backend]] | ADR: WGI ไม่ส่ง event บนเครื่อง owner → ใช้ gilrs XInput backend |
+| [[16-hud-typography-and-fonts]] | ADR: ขนาดตัวหนังสือแยกจากขนาดวง + ฟอนต์ไทยไม่มีหัว (IBM Plex Sans Thai) + Settings→HUD |
 | [[hud-v0.9]] | บันทึก HUD: ภาพเทียบ A/B (v0.9) + สรุป v0.10 |
 | `05-mockup/hud-prototype/` | ม็อกอัป HUD v0.11 (เน้น EN+TH, หลายภาษา, Settings window, Keymap editor, pivot) |
+| `05-mockup/hud-shots/` | screenshot ตรวจรับ typography (100%/150% DPI), overlay จริง, Settings |
 | [[HANDOFF]] | สรุปสำหรับส่งต่อ session: สถานะ, งานถัดไป, ข้อจำกัด |
 
 ## TL;DR
@@ -73,10 +75,11 @@ updated: 2026-11-15
 | ภาษา | ทุก layout ที่ติดตั้งใน Windows — EN/TH ใช้ตารางออกแบบ, อื่นๆ map จาก QWERTY แล้วแก้ได้; IME ส่งคีย์ให้ OS ประกอบ · **ช่องภาษาอื่น**: 1 ภาษา = สลับทันที, หลายภาษา = `Lang`, ไม่มีภาษา = ซ่อน |
 | ตั้งค่า | หน้าต่างแยก ภาษาอังกฤษ (General · Languages · Keymap · HUD) + Reset all to defaults |
 | HUD | ตรึงที่ **pivot** (ไม่ตามเมาส์) — Nav = โหมดจัดตำแหน่ง UI |
+| Typography | ฟอนต์ไทย **ไม่มีหัว** = IBM Plex Sans Thai (fallback Noto Sans Thai) · **text size 0.8–2.0 (default 1.2)** แยกจากขนาดวง ([[16-hud-typography-and-fonts]]) |
 | ภาษาไทย | วรรณยุกต์ ่ ้ ๊ ๋ อยู่กลุ่ม ↘ เดียวกัน · สระล่าง ุ ู มีขีดกำกับใน HUD |
 | หลักการ HUD | วงใน = สิ่งที่ LS เลือก · วงนอก = สิ่งที่ RS เลือก · idle เหลือ pill สถานะ (เปิดวงตลอดได้) |
 | เทคโนโลยี | Rust + Tauri v2 + gilrs/SDL3 + SendInput (แผนสำรอง: C# .NET 8) — ดู [[03-stack-rust]] |
-| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay จริง merged** — 84 tests |
+| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay + typography · P5 slice 1 (Settings→HUD)** — 90 tests |
 
 ## หมายเหตุการทำงาน
 

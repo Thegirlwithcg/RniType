@@ -42,6 +42,15 @@ tags: [plan, testing]
 | `tools/smoke/test-hud.ps1` | วัดเวลา HUD ขึ้นหลัง state เปลี่ยน (จาก log timestamp) | loop ของ M3 |
 | `tools/smoke/run-all.ps1` | เรียกทั้ง 4 ตัว + สรุปตารางเดียว | ก่อน commit ทุกครั้ง |
 
+### 3.1 ที่มีอยู่จริงแล้ว (2026-11-15)
+
+| Script | ทำอะไร | ผลล่าสุด |
+| --- | --- | --- |
+| `tools/contracts/validate.mjs` | ตรวจ `hud-state.samples.json` + `config.sample.json` กับ schema | **10/10** |
+| `tools/tests/hud-smoke.mjs` | ขับม็อกอัป v0.11 ด้วย CDP (วง/คำสั่ง/โหมด/สถานะ) | **54/54** |
+| `tools/tests/hud-typography.mjs` | ตรวจขนาดขั้นต่ำ/การชนกัน/contrast/text scale + screenshot 100%–150% DPI | **24/24** |
+| `cargo test --workspace` | core 50 · win 34 · app 6 (config) | **90/90** |
+
 **ชุดประโยคทดสอบ**: ใช้ 500 phrases ของ MacKenzie & Soukoreff (มาตรฐานงานวิจัย text entry)
 → ผลของเราจะเทียบกับงานวิจัย (TwoStick 13–14.9 WPM) ได้ตรงๆ
 ชุดภาษาไทย: ประโยคภาษาไทย 50 ประโยค + คำที่พบบ่อย 200 คำ
@@ -51,6 +60,7 @@ tags: [plan, testing]
 | วันที่ | build | WPM EN | WPM TH | error % | latency (ms) | หมายเหตุ |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-15 | M0 | — | — | — | — | P0 ผ่าน: A XInput 16 ปุ่ม · B click-through · C SendInput ไทย (DualSense เลื่อน) |
+| 2026-11-15 | P4 slice 3 | — | — | — | — | Typography: group 13.8 / char 20.4–30 / pill 13.2 px · contrast 6.87:1 · 24/24 checks · ยังไม่มี WPM (รอ runtime) |
 
 ## 5. ความเสี่ยงและทางถอย
 
@@ -78,6 +88,8 @@ tags: [plan, testing]
 | 6 | Onboarding เรื่อง pivot/Nav | ผู้ใช้ย้าย UI ได้เองโดยไม่ต้องเปิดเอกสาร |
 | 7 | **Language support (v1)**: ตรวจ layout, QWERTY default, override, IME passthrough | เปิด RU/EL พิมพ์ได้, IME ประกอบข้อความเหมือนคีย์บอร์ดจริง |
 | 8 | **Settings window แยก** (English) + Reset all | ตั้งค่า/รีเซ็ตได้โดยไม่แตะ overlay |
+| 8a | Settings แท็บ HUD: text size / font / reset + persist | ✅ P5 slice 1 — [[16-hud-typography-and-fonts]] |
+| 8b | Settings แท็บ General / Languages / Keymap | P5 ถัดไป |
 
 ## 7. สิ่งที่ต้องทำก่อนเริ่ม M0
 

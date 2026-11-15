@@ -1,11 +1,11 @@
 ---
 title: HANDOFF — RniType (อ่านก่อนเริ่ม session ใหม่)
-status: v0.1
+status: v0.2
 updated: 2026-11-15
 tags: [handoff]
 ---
 
-# HANDOFF — RniType v0.1 (2026-11-15)
+# HANDOFF — RniType v0.2 (2026-11-15)
 
 > เอกสารนี้ทำให้ session ใหม่ทำงานต่อได้ใน \~5 นาที
 > อ่าน 8 หัวข้อนี้จบ = รู้ทุกอย่างที่จำเป็น
@@ -16,7 +16,7 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay จริง (full desktop + click-through + tray) — 84 tests** |
+| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay+typography · P5 slice 1 (Settings→HUD) — 90 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, fallback `sdl3`) + `SendInput` |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
 | งานถัดไป | Runtime wiring: จอย → core → injector → HUD ใน `rnitype-app` |
@@ -36,6 +36,8 @@ tags: [handoff]
 11. **ไม่ใช้ Godot** — [[02-engine-choice-godot]]
 12. **ภาษาหลัก = Rust + Tauri v2** — [[03-stack-rust]]
 13. ไฟล์ออกแบบอยู่ใน `Design/` + sub-folder (ตาม canvas)
+14. **Typography แยก 2 ตัวคูณ**: `hudScale` (วง, 1.2) ≠ `hudTextScale` (ตัวหนังสือ, 1.2) · ฟอนต์ไทย **ไม่มีหัว = IBM Plex Sans Thai** (fallback Noto Sans Thai) · ส่งค่าด้วย event `hud:style` ไม่ใช่ HudState · **Settings window (ภาษาอังกฤษ) มี slider + ฟอนต์** — [[16-hud-typography-and-fonts]]
+15. **pivot/pointer ใน HudState = พิกัดในหน้าต่าง overlay** (0,0 = virtual desktop) — app แปลงจากพิกัดหน้าจอ ก่อน emit
 
 ## 3. โครงสร้างไฟล์
 
@@ -56,9 +58,11 @@ project menager/
    │  └─ 04-state-machine-spec.md  ← ค่าเวลา/pseudocode
    ├─ 03-engineering/
    │  ├─ 01-architecture.md
-   │  └─ 02-roadmap-and-smoke-tests.md
+   │  ├─ 02-roadmap-and-smoke-tests.md
+   │  ├─ 03-parallel-execution-plan.md
+   │  └─ contracts/           ← P1 freeze: hud-state, config, ipc.md (v1.1)
    ├─ 04-decisions/
-   │  ├─ 01-open-questions.md ← Q1–Q16
+   │  ├─ 01-open-questions.md ← Q1–Q16 (Q17 ตอบแล้ว)
    │  ├─ 02-engine-choice-godot.md
    │  ├─ 03-stack-rust.md
    │  ├─ 04-en-vowel-and-8mode.md  ← ADR-04
@@ -71,12 +75,28 @@ project menager/
    │  ├─ 11-hud-pivot-nav.md        ← ADR-11 (HUD ตรึง pivot / Nav)
    │  ├─ 12-thai-tone-and-below-vowel.md ← ADR-12 (วรรณยุกต์ + ขีดกำกับ)
    │  ├─ 13-shift-toggle.md         ← ADR-13 (Shift toggle)
-   │  └─ 14-universal-languages.md  ← ADR-14 (หลายภาษา + Settings window)
-   └─ 05-mockup/hud-prototype/  ← ม็อกอัป HUD v0.11 (index.html + hud.js + styles.css)
+   │  ├─ 14-universal-languages.md  ← ADR-14 (หลายภาษา + Settings window)
+   │  ├─ 15-gilrs-xinput-backend.md ← ADR-15 (gilrs XInput)
+   │  └─ 16-hud-typography-and-fonts.md ← ADR-16 (ขนาดตัวหนังสือ + ฟอนต์ไม่มีหัว)
+   └─ 05-mockup/
+      ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (index.html + hud.js + styles.css)
+      └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings)
 ```
 
+### 3.1 ไฟล์โค้ดที่ใช้บ่อย
+
+| path | หน้าที่ |
+| --- | --- |
+| `crates/rnitype-app/src/main.rs` | overlay window (full virtual desktop, click-through) + tray + Settings + IPC |
+| `crates/rnitype-app/src/config.rs` | อ่าน/เขียน `%APPDATA%\RniType\config.json`, `ui_style()`, `validate_ui()` |
+| `ui/hud/{index.html,hud.css,hud.js}` | HUD จริง — วาดจาก `hud:state` เท่านั้น · typography จาก `hud:style` |
+| `ui/settings/*` | Settings window (P5 slice 1: แท็บ HUD) |
+| `ui/shared/{tokens.css,fonts.css,fonts.js,fonts/*.ttf}` | สี/fอนต์ที่ใช้ร่วมกัน (IBM Plex Sans Thai + Noto Sans Thai + OFL) |
+| `tools/tests/hud-typography.mjs` | ตรวจ typography + ถ่าย screenshot (24 checks) |
+| `tools/tests/browser.mjs` | helper เปิด Chrome headless ผ่าน CDP |
+
 รันม็อกอัป: เปิด `project menager/Design/05-mockup/hud-prototype/index.html` ในเบราว์เซอร์
-ทดสอบอัตโนมัติ: `node tools/tests/hud-smoke.mjs` (54 checks, ต้องมี Chrome)
+ทดสอบอัตโนมัติ: `node tools/tests/hud-smoke.mjs` (54 checks, ต้องมี Chrome) · `node tools/tests/hud-typography.mjs` (24 checks + screenshot)
 
 ## 4. งานถัดไป — ลำดับที่ต้องทำ
 
@@ -91,71 +111,61 @@ project menager/
 - C: `SendInput` Unicode พิมพ์ไทยลง Notepad ถูก
 - contracts + workspace + state player + 54/54 mockup checks
 
-### 4.2 P2/P3/P4 — slice 1 merged
+### 4.2 P2/P3/P4 — slice merged
 
 | Track | ทำแล้ว | เหลือ |
 | --- | --- | --- |
 | P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons (50 tests) | repeat, layer 2, double-tap/hold, quickbar, caret nav, mouse math, Nav pivot |
 | P3 win | SendInput Unicode/VK/mouse + partial-send guard (34 tests) | scancode/IME, exclusion/UIPI, runtime wiring |
-| P4 HUD | renderer ครบ mode + Tauri overlay เต็ม virtual desktop/click-through/tray | `hud:state` จาก runtime จริง, 60 Hz coalescing, latency, pivot per-monitor/mixed-DPI |
+| P4 HUD | renderer ครบ mode + overlay เต็ม virtual desktop/click-through/tray + **typography pass + ฟอนต์ไทยไม่มีหัว** | `hud:state` จาก runtime จริง, 60 Hz coalescing, latency, pivot per-monitor/mixed-DPI |
+| P5 Settings | **slice 1: หน้าต่าง Settings + แท็บ HUD (text size/font/reset) + config.json** | แท็บ General/Languages/Keymap, rescan HKL, keymap editor, profiles |
 
 ### 4.3 ขั้นถัดไป (เรียง)
 
 1. **Runtime wiring** ใน `rnitype-app`: `gilrs` XInput → `PadState` → `RuntimeEngine` → `SendInputInjector` → `hud:state` (~60 Hz) + `release_all()` เมื่อจอยหลุด/ปิด
 2. **P2 slice 3**: repeat/auto-repeat, layer 2, double-tap/hold, quickbar, caret nav
-3. **P5 Settings** + config + ตรวจภาษา/สร้าง keymap จาก HKL
+3. **P5 Settings ที่เหลือ** (General/Languages/Keymap) + ตรวจภาษา/สร้าง keymap จาก HKL
 4. **P6** วัด WPM/latency, ทดสอบคนจริง, installer/Steam/itch
 
 ### 4.4 รัน overlay ตอนนี้ (demo)
 
 ```powershell
+# overlay + state ตัวอย่าง (วน 9 สถานะ ทุก 3 วินาที)
 crates\rnitype-app\run.ps1 -- --demo --seconds 30
+
+# เพิ่ม --settings = เปิดหน้าต่าง Settings ตั้งแต่เริ่ม (ตรวจ typography/ฟอนต์)
+crates\rnitype-app\run.ps1 -- --demo --settings --seconds 60
 ```
 
-- Tray → Quit (หรือ `Ctrl+C` ใน terminal)
+- Tray → Settings… / Quit (หรือ `Ctrl+C` ใน terminal)
 - ไม่มี `--demo` = HUD idle (รอ runtime จริง)
 - path มี apostrophe → ใช้ `run.ps1`; build.rs copy icon ไป `%TEMP%` ให้ `cargo test/check` ทำงานได้เอง
+- typography: เปลี่ยนใน Settings → HUD เปลี่ยนทันที (event `hud:style`) · ค่าถูกเก็บที่ `%APPDATA%\RniType\config.json`
 
-### 4.5 UI feedback จาก owner (2026-11-15) — ต้องทำก่อน release
+### 4.5 UI feedback จาก owner (2026-11-15) — ✅ ปิดแล้ว (ADR-16)
 
 **ปัญหา:** ตัวหนังสือ HUD เล็กและอ่านไม่ชัด โดยเฉพาะบนจอ 3840×1080 และภาษาไทย
 **ขอ:** ภาษาไทยใช้ **ฟอนต์ไม่มีหัว (loopless)** และ Settings ต้องปรับขนาด/เลือกฟอนต์ได้
 
-**สภาพปัจจุบัน (ui/hud/hud.css):**
+| # | งาน | ผล |
+| --- | --- | --- |
+| 1 | Typography pass + default `hudScale` 1.2 + text scale แยก | group **13.8** (len-l 11.4) · char **20.4–30** · sub/badge **11** · pill **13.2** · ring 340→408 |
+| 2 | ฟอนต์ไทยไม่มีหัว | **IBM Plex Sans Thai** (4 น้ำหนัก) + Noto Sans Thai fallback + OFL ใน `ui/shared/fonts/` · เลิกใช้ Leelawadee เป็นค่าเริ่มต้น |
+| 3 | Settings → HUD | slider 0.8–2.0 (default 1.2) + 3 ฟอนต์ + preview + Reset → save ลง `config.json` ทันที |
+| 4 | Contract | `ui.hudTextScale` + `ui.hudFontFamily` (config v1) · event **`hud:style`** + command **`hud_style`** (ipc v1.1, additive) — [[16-hud-typography-and-fonts]] |
+| 5 | ตรวจรับ | `hud-typography.mjs` **24/24** + screenshot 100%/150% DPI + overlay จริง + Settings → `05-mockup/hud-shots/` · contrast ตัวอักษรจาง **6.87:1** |
 
-| จุด | ขนาดตอนนี้ |
-| --- | --- |
-| group label | 11px (len-m 9.5 / len-l 8) |
-| char | 15–27px |
-| sub / badge | 8–10.5px |
-| pill | 10.5px |
-| ring | 340px |
-
-**งานที่ต้องทำ (P4 slice 3 + P5):**
-
-1. **Typography pass** — เพิ่มขนาดขั้นต่ำ: group 14–15px · len 11–12px · char 20–34px · sub 11px · pill 13px · badge 11px
-   และเพิ่ม default `hudScale` เป็น ~1.2 (หรือขยาย ring 340 → 400) แล้วตรวจที่ 100%/125%/150% DPI
-2. **ฟอนต์ไทยไม่มีหัว** — ใช้ **IBM Plex Sans Thai** (loopless, OFL) เป็น primary
-   · **Noto Sans Thai** เป็น fallback · เก็บไฟล์ + LICENSE ใน `ui/shared/fonts/` แล้ว `@font-face`
-   · เลิกใช้ `Leelawadee UI` เป็นค่าเริ่มต้น
-3. **Settings → HUD** — เพิ่ม “Text size” (slider 0.8–2.0, default ~1.2) และ “Font”
-   (IBM Plex Sans Thai / Noto Sans Thai / System) · preview ทันที · persist ใน `config.json`
-4. **Contract** — เสนอเพิ่ม `ui.hudTextScale` + `ui.hudFontFamily` ใน `config.schema.json`
-   และให้ app ส่งค่า typography ไป HUD (ทางใดทางหนึ่ง: เพิ่มใน `HudState` หรือ event `hud:style`)
-   — ต้องตัดสินและ bump contract ให้ชัดก่อน implement
-5. **ตรวจรับ** — screenshot 100%/150% DPI + หน้าต่างเล็ก; อ่านวรรณยุกต์/สระล่างได้; ไม่มี label ถูกตัด;
-   contrast ตัวอักษรจาง ≥ 4.5:1
-
-**ข้อควรระวัง:** อย่าเพิ่ม `hudScale` อย่างเดียวโดยไม่เพิ่ม font size — วงจะใหญ่แต่ตัวหนังสือยังเล็ก
-ต้องมีตัวคูณ typography แยกจาก scale ของวง
+**สิ่งที่ owner ควรดูก่อนปล่อย:** เปิด Settings เลื่อน text size 1.0 / 1.2 / 1.5 บนจอจริงของตัวเอง
+(3840×1080 + DPI ที่ใช้จริง) แล้วบอกว่า 1.2 พอดีหรืออยากได้ค่าเริ่มต้นอื่น — ค่าเดียวที่ต้องแก้คือ
+`ui.hudTextScale` ใน `config.schema.json` + `crates/rnitype-app/src/config.rs` + `hud.css` (`STYLE_DEFAULT`)
 
 ### 4.6 เริ่ม session หน้า
 
 1. อ่าน HANDOFF นี้ + [[03-parallel-execution-plan]] §P4/P5
-2. งานหลัก: **runtime wiring** (จอย → core → injector → `hud:state`) หรือ **UI typography/font** ตามลำดับที่ owner เลือก
-3. ถ้าทำ UI: เริ่มจาก `ui/hud/hud.css` + `ui/shared/fonts/` + `ui/shared/tokens.css` แล้วต่อ Settings (P5)
-4. รัน checks: `cargo test --workspace` · `node tools/contracts/validate.mjs` · `node tools/tests/hud-smoke.mjs`
-5. ถ้าแตะ overlay: รัน `crates\rnitype-app\run.ps1 -- --demo --seconds 30` แล้วเก็บ screenshot/log
+2. งานหลัก: **runtime wiring** (จอย → core → injector → `hud:state`) — typography ปิดแล้ว
+3. ถ้าทำ Settings ต่อ: เริ่มจากแท็บ General แล้ว Languages/Keymap (contract อยู่ใน [[ipc]] §3)
+4. รัน checks: `cargo test --workspace` · `node tools/contracts/validate.mjs` · `node tools/tests/hud-smoke.mjs` · `node tools/tests/hud-typography.mjs`
+5. ถ้าแตะ overlay: รัน `crates\rnitype-app\run.ps1 -- --demo --settings --seconds 30` แล้วเก็บ screenshot/log
 
 ## 5. คำถามที่ยังค้าง (เจ้าของต้องตอบก่อนเขียนโค้ดเยอะ)
 
@@ -167,7 +177,7 @@ crates\rnitype-app\run.ps1 -- --demo --seconds 30
 | Q5 | X/Y/A/B | A=Space, B=Backspace, X=Enter, Y=Tab ✅ แนะนำ |
 | Q7 | layout ไทย | ความถี่ (ที่ออกแบบไว้) ก่อน, เลือก Kedmanee ได้ |
 | Q10 | รองรับจอยอื่นไหม | XInput สูงสุด 4 ตัว; SDL3 ภายหลังถ้าต้องการ DualSense เต็ม |
-| Q17 | ฟอนต์ไทย/ขนาดเริ่มต้น | IBM Plex Sans Thai (loopless) + text scale ~1.2 ✅ เสนอ |
+| Q17 | ฟอนต์ไทย/ขนาดเริ่มต้น | **ปิดแล้ว** — IBM Plex Sans Thai (loopless) + text scale 1.2 + ring scale 1.2 ([[16-hud-typography-and-fonts]]) |
 
 ที่เหลือ (Q3, Q6, Q8, Q9, Q11, Q12, Q13, Q14) มีข้อเสนอชัดเจนแล้วใน [[01-open-questions]] — ใช้ค่าเริ่มต้นได้เลย
 
@@ -178,13 +188,17 @@ crates\rnitype-app\run.ps1 -- --demo --seconds 30
 - โฟลเดอร์ vault = `D:\Erin's Works\Programming\RniType` — เขียนได้เฉพาะในนี้
 - MCP `nizylanote`: เรียก `vault_info` ก่อนเขียน, path เป็น relative + `/`
 - ตอบเป็นภาษาไทย, เก็บรูปแบบ Markdown/ตารางเดิม, ห้ามลบโน้ตโดยไม่ถูกขอ
-- **Git**: ยังไม่ commit — ทุกไฟล์เป็น untracked (`.nznote/`, `.opencode/` ก็ untracked)
-  → ก่อน commit ต้องตัดสินใจว่า 2 โฟลเดอร์นั้นควรอยู่ใน repo ไหม
+- **Git**: commit ล่าสุด `062f700` (docs) — งานรอบนี้ยังไม่ commit
+  (`.nznote/`, `.opencode/` อยู่ใน `.gitignore` แล้ว)
+- **เทอร์มินัลเป็น cp874** → log/ข้อความไทยใน console อาจเป็น `???` (ไม่ใช่บั๊ก) · ไฟล์ยังเป็น UTF-8
+- **Chrome headless**: `C:\Users\User\AppData\Local\ms-playwright\chromium-1208\chrome-win64\chrome.exe`
+  (ตั้ง `CHROME_PATH` ถ้าย้าย) · เครื่องนี้มี 2 จอ virtual desktop = 3840×1080 เริ่มที่ x = -1920
 
 ## 7. นิยาม "เสร็จ" ของ session ถัดไป
 
-1. spike A/B/C ผ่านครบ และมีตัวเลข/log จริงแนบ (ไม่ใช่ "น่าจะได้")
-2. มี `Cargo.toml` + module เปล่าที่ compile ผ่าน + `probe-pad.ps1` รันได้
+1. ทุก check ผ่านและมีตัวเลขแนบ (ไม่ใช่ "น่าจะได้"):
+   `cargo test --workspace` · `node tools/contracts/validate.mjs` · `node tools/tests/hud-smoke.mjs` · `node tools/tests/hud-typography.mjs`
+2. งานที่แตะ runtime ต้องมี log จริงจาก `run.ps1 -- --demo --settings --seconds N` + screenshot
 3. อัปเดตตารางวัดผลใน [[02-roadmap-and-smoke-tests]] (คอลัมน์ build/WPM/latency)
 4. ถ้าเปลี่ยนการตัดสินใจใด → เขียน ADR ใหม่ใน `04-decisions/` (อย่าแก้ ADR เก่า)
 
