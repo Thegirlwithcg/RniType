@@ -59,6 +59,7 @@ updated: 2026-11-15
 | [[15-gilrs-xinput-backend]] | ADR: WGI ไม่ส่ง event บนเครื่อง owner → ใช้ gilrs XInput backend |
 | [[16-hud-typography-and-fonts]] | ADR: ขนาดตัวหนังสือแยกจากขนาดวง + ฟอนต์ไทยไม่มีหัว (IBM Plex Sans Thai) + Settings→HUD |
 | [[17-hud-ring-geometry-and-active-animation]] | ADR: วง 340px/ตัวอักษร 16px, วงในกว้างขึ้น, ป้าย 2 บรรทัด, ขีดสระล่าง, active animation, Ring size slider |
+| [[18-runtime-wiring]] | ADR: จอย → core → injector → HUD จริง, tray Pause, `--fake-pad` |
 | [[hud-v0.9]] | บันทึก HUD: ภาพเทียบ A/B (v0.9) + สรุป v0.10 |
 | `05-mockup/hud-prototype/` | ม็อกอัป HUD v0.11 (เน้น EN+TH, หลายภาษา, Settings window, Keymap editor, pivot) |
 | `05-mockup/hud-shots/` | screenshot ตรวจรับ typography (100%/150% DPI), overlay จริง, Settings |
@@ -80,7 +81,7 @@ updated: 2026-11-15
 | ภาษาไทย | วรรณยุกต์ ่ ้ ๊ ๋ อยู่กลุ่ม ↘ เดียวกัน · สระล่าง ุ ู มีขีดกำกับใน HUD |
 | หลักการ HUD | วงใน = สิ่งที่ LS เลือก · วงนอก = สิ่งที่ RS เลือก · idle เหลือ pill สถานะ (เปิดวงตลอดได้) |
 | เทคโนโลยี | Rust + Tauri v2 + gilrs/SDL3 + SendInput (แผนสำรอง: C# .NET 8) — ดู [[03-stack-rust]] |
-| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay + typography · P5 slice 1 (Settings→HUD)** — 90 tests |
+| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay+typography · P5 slice 1 · runtime จอยจริง** — 108 tests |
 
 ## หมายเหตุการทำงาน
 

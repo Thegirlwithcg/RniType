@@ -16,10 +16,10 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay+typography+geometry · P5 slice 1 (Settings→HUD) — 91 tests** |
+| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay+typography+geometry · P5 slice 1 · runtime จอยจริง (fake-pad ผ่าน) — 108 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, fallback `sdl3`) + `SendInput` |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
-| งานถัดไป | Runtime wiring: จอย → core → injector → HUD ใน `rnitype-app` |
+| งานถัดไป | P2 slice 3 (mouse math, repeat, layer 2) — runtime wiring ปิดแล้ว |
 
 ## 2. การตัดสินใจที่ล็อกแล้ว (ห้ามถามซ้ำ)
 
@@ -79,7 +79,8 @@ project menager/
    │  ├─ 14-universal-languages.md  ← ADR-14 (หลายภาษา + Settings window)
    │  ├─ 15-gilrs-xinput-backend.md ← ADR-15 (gilrs XInput)
    │  └─ 16-hud-typography-and-fonts.md ← ADR-16 (ขนาดตัวหนังสือ + ฟอนต์ไม่มีหัว)
-   │  └─ 17-hud-ring-geometry-and-active-animation.md ← ADR-17 (วงเล็กลง/ชัดขึ้น + animation + ขีดสระล่าง)
+   │  ├─ 17-hud-ring-geometry-and-active-animation.md ← ADR-17 (วงเล็กลง/ชัดขึ้น + animation + ขีดสระล่าง)
+   │  └─ 18-runtime-wiring.md ← ADR-18 (จอย → core → injector → HUD + tray Pause)
    └─ 05-mockup/
       ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (index.html + hud.js + styles.css)
       └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings)
@@ -89,8 +90,10 @@ project menager/
 
 | path | หน้าที่ |
 | --- | --- |
-| `crates/rnitype-app/src/main.rs` | overlay window (full virtual desktop, click-through) + tray + Settings + IPC |
-| `crates/rnitype-app/src/config.rs` | อ่าน/เขียน `%APPDATA%\RniType\config.json`, `ui_style()`, `validate_ui()` |
+| `crates/rnitype-app/src/main.rs` | overlay window + tray + Settings + IPC + runtime loop |
+| `crates/rnitype-app/src/session.rs` | `Session`: engine → injector → `HudState` (ทดสอบได้ด้วย NullInjector) |
+| `crates/rnitype-app/src/input.rs` | `PadSource`: `GilrsSource` (จอยจริง) + `ScriptSource` (`--fake-pad`) |
+| `crates/rnitype-app/src/config.rs` | อ่าน/เขียน `%APPDATA%\RniType\config.json`, `ui_style()`, `hud_scale()`, `validate_ui()` |
 | `ui/hud/{index.html,hud.css,hud.js}` | HUD จริง — วาดจาก `hud:state` เท่านั้น · typography จาก `hud:style` |
 | `ui/settings/*` | Settings window (P5 slice 1: แท็บ HUD) |
 | `ui/shared/{tokens.css,fonts.css,fonts.js,fonts/*.ttf}` | สี/fอนต์ที่ใช้ร่วมกัน (IBM Plex Sans Thai + Noto Sans Thai + OFL) |
@@ -117,26 +120,46 @@ project menager/
 
 | Track | ทำแล้ว | เหลือ |
 | --- | --- | --- |
-| P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons (50 tests) | repeat, layer 2, double-tap/hold, quickbar, caret nav, mouse math, Nav pivot |
-| P3 win | SendInput Unicode/VK/mouse + partial-send guard (34 tests) | scancode/IME, exclusion/UIPI, runtime wiring |
-| P4 HUD | renderer ครบ mode + overlay เต็ม virtual desktop/click-through/tray + **typography pass + ฟอนต์ไทยไม่มีหัว** | `hud:state` จาก runtime จริง, 60 Hz coalescing, latency, pivot per-monitor/mixed-DPI |
+| P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons (52 tests) | pointer math, Nav pivot, repeat, layer 2, double-tap/hold, quickbar, caret nav |
+| P3 win | SendInput Unicode/VK/mouse + **Ctrl+ASCII→VK** (36 tests) | scancode/IME, exclusion/UIPI |
+| P4 HUD | renderer ครบ mode + overlay + typography + **`HudState` จาก engine จริง** | latency, pivot per-monitor/mixed-DPI |
+| Runtime | `input.rs` + `session.rs` + tray Pause ([[18-runtime-wiring]]) | ทดสอบจอยจริง |
 | P5 Settings | **slice 1: หน้าต่าง Settings + แท็บ HUD (text size/font/reset) + config.json** | แท็บ General/Languages/Keymap, rescan HKL, keymap editor, profiles |
 
 ### 4.3 ขั้นถัดไป (เรียง)
 
-1. **Runtime wiring** ใน `rnitype-app`: `gilrs` XInput → `PadState` → `RuntimeEngine` → `SendInputInjector` → `hud:state` (~60 Hz) + `release_all()` เมื่อจอยหลุด/ปิด
-2. **P2 slice 3**: repeat/auto-repeat, layer 2, double-tap/hold, quickbar, caret nav
+1. **P2 slice 3**: pointer math/accel (Mouse), Nav pivot movement, auto-repeat, layer 2, double-tap/hold, quickbar, caret nav
+2. **P3 ที่เหลือ**: exclusion list/UIPI, scancode/IME path, `timeBeginPeriod(1)` ถ้าต้องการ poll 250 Hz แม่นขึ้น
 3. **P5 Settings ที่เหลือ** (General/Languages/Keymap) + ตรวจภาษา/สร้าง keymap จาก HKL
 4. **P6** วัด WPM/latency, ทดสอบคนจริง, installer/Steam/itch
 
-### 4.4 รัน overlay ตอนนี้ (demo)
+### 4.3b Runtime wiring — ✅ ปิดแล้ว (ADR-18)
+
+| ชิ้น | สถานะ |
+| --- | --- |
+| `input.rs` — `PadSource` / `GilrsSource` / `ScriptSource` | ✅ |
+| `session.rs` — engine + injector + `HudState` (contract v1) | ✅ 20 unit tests |
+| loop 250 Hz → HUD ≤60 Hz เฉพาะเมื่อเปลี่ยน | ✅ |
+| Copy/Paste/Undo/Redo → Ctrl+C/V/Z/Y (**Ctrl+ASCII = VK** ไม่ใช่ Unicode) | ✅ |
+| จอยหลุด → `release_all` + Paused · กลับมา → resume (ยกเว้น emergency) | ✅ |
+| tray **Pause / Resume typing** | ✅ |
+| `--fake-pad` = จอยปลอมพิมพ์ซ้ำ (ตรวจทั้งท่อ) | ✅ ใช้ตรวจแล้ว |
+| **จอยจริง** | ⏳ เครื่องพัฒนาไม่พบจอย — ต้องรบกวน owner เสียบจอยแล้วรัน `run.ps1` |
+
+**สิ่งที่ owner ต้องลอง:** เสียบจอย Xbox → `crates\rnitype-app\run.ps1 -- --seconds 60` → เปิด Notepad
+แล้วลอง LS ขึ้น + RS ขึ้น (ควรได้ `a`) / A (Space) / D-pad ← + RS ลง (Copy) · tray → Pause
+
+### 4.4 รัน overlay ตอนนี้
 
 ```powershell
-# overlay + state ตัวอย่าง (วน 9 สถานะ ทุก 3 วินาที)
-crates\rnitype-app\run.ps1 -- --demo --seconds 30
+# จอยจริง (XInput) — HUD + พิมพ์/คลิกได้จริง
+crates\rnitype-app\run.ps1 -- --seconds 60
 
-# เพิ่ม --settings = เปิดหน้าต่าง Settings ตั้งแต่เริ่ม (ตรวจ typography/ฟอนต์)
-crates\rnitype-app\run.ps1 -- --demo --settings --seconds 60
+# ไม่มีจอย? ตรวจทั้งท่อด้วยจอยปลอม (จะพิมพ์ลงหน้าต่างที่ focus)
+crates\rnitype-app\run.ps1 -- --fake-pad --seconds 20
+
+# ดู HUD จาก state ตัวอย่าง (ไม่มี injector)
+crates\rnitype-app\run.ps1 -- --demo --settings --seconds 30
 ```
 
 - Tray → **คลิกซ้าย** = Settings · คลิกขวา = เมนู (Settings… / Quit) · หรือ `Ctrl+C` ใน terminal

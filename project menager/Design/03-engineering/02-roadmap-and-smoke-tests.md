@@ -49,7 +49,7 @@ tags: [plan, testing]
 | `tools/contracts/validate.mjs` | ตรวจ `hud-state.samples.json` + `config.sample.json` กับ schema | **10/10** |
 | `tools/tests/hud-smoke.mjs` | ขับม็อกอัป v0.11 ด้วย CDP (วง/คำสั่ง/โหมด/สถานะ) | **54/54** |
 | `tools/tests/hud-typography.mjs` | ตรวจขนาดขั้นต่ำ/การชนกัน/contrast/animation + screenshot 100%–150% DPI | **29/29** |
-| `cargo test --workspace` | core 50 · win 34 · app 7 (config) | **91/91** |
+| `cargo test --workspace` | core 52 · win 36 · app 20 (config/input/session) | **108/108** |
 
 **ชุดประโยคทดสอบ**: ใช้ 500 phrases ของ MacKenzie & Soukoreff (มาตรฐานงานวิจัย text entry)
 → ผลของเราจะเทียบกับงานวิจัย (TwoStick 13–14.9 WPM) ได้ตรงๆ
@@ -62,6 +62,7 @@ tags: [plan, testing]
 | 2026-11-15 | M0 | — | — | — | — | P0 ผ่าน: A XInput 16 ปุ่ม · B click-through · C SendInput ไทย (DualSense เลื่อน) |
 | 2026-11-15 | P4 slice 3 | — | — | — | — | Typography: group 13.8 / char 20.4–30 / pill 13.2 px · contrast 6.87:1 · 24/24 checks · ยังไม่มี WPM (รอ runtime) |
 | 2026-11-15 | P4 slice 4 | — | — | — | — | Ring 340px + text 16px (วงเล็กลง 17%) · active animation · ขีดสระล่าง · 29/29 checks |
+| 2026-11-15 | runtime | — | — | — | — | จอยจริง → core → injector → HUD · `--fake-pad` พิมพ์จริง 21 คีย์/9 วิ · 108 tests · ยังไม่ได้ทดสอบจอยจริง |
 
 ## 5. ความเสี่ยงและทางถอย
 
