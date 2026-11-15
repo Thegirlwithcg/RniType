@@ -48,8 +48,8 @@ tags: [plan, testing]
 | --- | --- | --- |
 | `tools/contracts/validate.mjs` | ตรวจ `hud-state.samples.json` + `config.sample.json` กับ schema | **10/10** |
 | `tools/tests/hud-smoke.mjs` | ขับม็อกอัป v0.11 ด้วย CDP (วง/คำสั่ง/โหมด/สถานะ) | **54/54** |
-| `tools/tests/hud-typography.mjs` | ตรวจขนาดขั้นต่ำ/การชนกัน/contrast/animation + screenshot 100%–150% DPI | **29/29** |
-| `cargo test --workspace` | core 52 · win 36 · app 20 (config/input/session) | **108/108** |
+| `tools/tests/hud-typography.mjs` | ตรวจขนาดขั้นต่ำ/การชนกัน/contrast/emphasis + screenshot 100%–150% DPI | **30/30** |
+| `cargo test --workspace` | core 52 · win 36 · app 21 (config/input/session) | **109/109** |
 
 **ชุดประโยคทดสอบ**: ใช้ 500 phrases ของ MacKenzie & Soukoreff (มาตรฐานงานวิจัย text entry)
 → ผลของเราจะเทียบกับงานวิจัย (TwoStick 13–14.9 WPM) ได้ตรงๆ
@@ -64,6 +64,7 @@ tags: [plan, testing]
 | 2026-11-15 | P4 slice 4 | — | — | — | — | Ring 340px + text 16px (วงเล็กลง 17%) · active animation · ขีดสระล่าง · 29/29 checks |
 | 2026-11-15 | runtime | — | — | — | — | จอยจริง → core → injector → HUD · `--fake-pad` พิมพ์จริง 21 คีย์/9 วิ · 108 tests · ยังไม่ได้ทดสอบจอยจริง |
 | 2026-11-15 | probe A | — | — | — | — | Xbox Controller: LS/RS ±1.00 · idle_peak 0.000 · LT/RT **ดิจิทัล** (LZ/RZ = 0.00) → `lt_analog` ใช้ไม่ได้กับจอยนี้ |
+| 2026-11-15 | UI r3 | — | — | — | — | ยกเลิก scale sector (วงเพี้ยน) · Shift→A-Z บนวง · 109 tests · typography 30/30 |
 
 ## 5. ความเสี่ยงและทางถอย
 

@@ -96,14 +96,14 @@
       "kind": "char",
       "active": 4,
       "labels": [
-        { "text": "g" },
-        { "text": "p" },
-        { "text": "b" },
-        { "text": "v" },
-        { "text": "k" },
-        { "text": "x" },
-        { "text": "y" },
-        { "text": "j" }
+        { "text": "G" },
+        { "text": "P" },
+        { "text": "B" },
+        { "text": "V" },
+        { "text": "K" },
+        { "text": "X" },
+        { "text": "Y" },
+        { "text": "J" }
       ]
     },
     "preview": { "char": "K", "count": 0 },

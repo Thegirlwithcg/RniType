@@ -16,7 +16,7 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay+typography+geometry · P5 slice 1 · runtime จอยจริง (fake-pad ผ่าน) — 108 tests** |
+| สถานะ | **P0/P1 ปิด · P2/P3 slice 1 · P4 overlay+typography · P5 slice 1 · runtime จอยจริง (fake-pad ผ่าน) — 109 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, fallback `sdl3`) + `SendInput` |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
 | งานถัดไป | P2 slice 3 (mouse math, repeat, layer 2) — runtime wiring ปิดแล้ว |
@@ -38,7 +38,8 @@ tags: [handoff]
 13. ไฟล์ออกแบบอยู่ใน `Design/` + sub-folder (ตาม canvas)
 14. **Typography แยก 2 ตัวคูณ**: `hudScale` (วง, **1.0 = 340px**) ≠ `hudTextScale` (ตัวหนังสือ, **1.4**) · ฟอนต์ไทย **ไม่มีหัว = IBM Plex Sans Thai** (fallback Noto Sans Thai) · ส่งค่าด้วย event `hud:style` ไม่ใช่ HudState · **Settings window (ภาษาอังกฤษ) มี slider ขนาดตัวอักษร + ขนาดวง + ฟอนต์** — [[16-hud-typography-and-fonts]] · [[17-hud-ring-geometry-and-active-animation]]
 15. **pivot/pointer ใน HudState = พิกัดในหน้าต่าง overlay** (0,0 = virtual desktop) — app แปลงจากพิกัดหน้าจอ ก่อน emit
-16. **ป้ายกลุ่มไทยยาว ≥ 7 grapheme = 2 บรรทัด** · สระล่าง ุ ู มี **ขีดเส้นประ** (ไม่ใช่คำว่า "ขีดล่าง") · ช่องที่ active **ขยาย** (sector ปูดจากกลางวง, ตัวอักษรขยายในที่) — [[17-hud-ring-geometry-and-active-animation]]
+16. **ป้ายกลุ่มไทยยาว ≥ 7 grapheme = 2 บรรทัด** · สระล่าง ุ ู มี **ขีดเส้นประ** (ไม่ใช่คำว่า "ขีดล่าง") · ช่องที่ active เน้นด้วย **สี/stroke/ขนาดฟอนต์เท่านั้น — ห้าม `transform: scale`** (ทำให้ wedge ทับกัน วงเพี้ยน) — [[17-hud-ring-geometry-and-active-animation]] · [[19-revert-sector-scaling-and-shift-labels]]
+17. **`shiftLock` เปิด → ตัวอักษร a-z บนวงเป็น A-Z** (แอปแปลงก่อนส่ง) + `status.text = "ตัวใหญ่"` — [[13-shift-toggle]] · [[19-revert-sector-scaling-and-shift-labels]]
 
 ## 3. โครงสร้างไฟล์
 
@@ -80,7 +81,8 @@ project menager/
    │  ├─ 15-gilrs-xinput-backend.md ← ADR-15 (gilrs XInput)
    │  └─ 16-hud-typography-and-fonts.md ← ADR-16 (ขนาดตัวหนังสือ + ฟอนต์ไม่มีหัว)
    │  ├─ 17-hud-ring-geometry-and-active-animation.md ← ADR-17 (วงเล็กลง/ชัดขึ้น + animation + ขีดสระล่าง)
-   │  └─ 18-runtime-wiring.md ← ADR-18 (จอย → core → injector → HUD + tray Pause)
+   │  ├─ 18-runtime-wiring.md ← ADR-18 (จอย → core → injector → HUD + tray Pause)
+   │  └─ 19-revert-sector-scaling-and-shift-labels.md ← ADR-19 (ยกเลิก scale sector + Shift→ตัวใหญ่)
    └─ 05-mockup/
       ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (index.html + hud.js + styles.css)
       └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings)
@@ -198,10 +200,20 @@ crates\rnitype-app\run.ps1 --demo --settings --seconds 30
 **owner ยืนยันแล้ว (2026-11-15): Graphics default = Text size 1.4 · Ring size 1.0**
 (ไม่ต้องแก้อะไร — `config.rs`, `config.schema.json`, `hud.css` และ Settings ใช้ค่านี้อยู่แล้ว)
 
+### 4.5c UI feedback รอบ 3 (2026-11-15) — ✅ ปิดแล้ว (ADR-19)
+
+| สิ่งที่ owner แจ้ง | ผล |
+| --- | --- |
+| **"Animation ทำให้วงล้อเพี้ยน"** | ยกเลิก `transform: scale` ของ sector ทั้งหมด (wedge 45° ขยายเป็น ~48° → ชิ้นทับกัน) · active ใช้ **สี + stroke + ขนาดฟอนต์** แทน · เพิ่ม check กัน regression `ไม่มี transform บน sector` |
+| **"กด Shift แล้วตัวอักษร EN ไม่เป็นตัวใหญ่"** | ฝั่งแอปแปลง label `a–z → A–Z` ตาม `shiftLock` (กฎเดียวกับตอนส่งคีย์จริง) ใช้กับวงตัวอักษร + preview กลางวง + `status.text = "ตัวใหญ่"` · sample/demo ปรับให้ตรงกฎ |
+
+> ถ้าอยากได้ motion กลับมาแบบไม่เพี้ยน: ขยาย glow/shadow · ขยายทั้ง `<g>` ของ ring ·
+> หรือทำ outer ring โหว่ (clip) — ดูท้าย [[19-revert-sector-scaling-and-shift-labels]]
+
 ### 4.6 เริ่ม session หน้า
 
 1. อ่าน HANDOFF นี้ + [[03-parallel-execution-plan]] §P4/P5
-2. งานหลัก: **runtime wiring** (จอย → core → injector → `hud:state`) — typography ปิดแล้ว
+2. งานหลัก: **P2 slice 3** — pointer math/accel (Mouse), Nav pivot, auto-repeat, layer 2, double-tap/hold
 3. ถ้าทำ Settings ต่อ: เริ่มจากแท็บ General แล้ว Languages/Keymap (contract อยู่ใน [[ipc]] §3)
 4. รัน checks: `cargo test --workspace` · `node tools/contracts/validate.mjs` · `node tools/tests/hud-smoke.mjs` · `node tools/tests/hud-typography.mjs`
 5. ถ้าแตะ overlay: รัน `crates\rnitype-app\run.ps1 --demo --settings --seconds 30` แล้วเก็บ screenshot/log

@@ -142,8 +142,8 @@ try {
   const charMin = Math.min(...rings.char.map((c) => c.size));
   const charMax = Math.max(...rings.char.map((c) => c.size));
   check(
-    'char 22–28px (ทุกช่อง)',
-    charMin >= 22 && charMax <= 28,
+    'char 22–32px (ทุกช่อง)',
+    charMin >= 22 && charMax <= 32,
     `${charMin.toFixed(2)}–${charMax.toFixed(2)}px`,
   );
 
@@ -184,25 +184,40 @@ try {
   const charCollisions = collisions(rings.char);
   check('ตัวอักษรในวงนอกไม่ชนกัน', charCollisions.length === 0, charCollisions.join(', '));
 
-  /* ---- animation: ช่องที่ active ต้องขยาย (ADR-17) ---- */
-  const anim = await browser.evaluate(`(() => {
-    const scaleOf = (sel) => {
-      const el = document.querySelector(sel);
-      if (!el) return null;
-      const m = getComputedStyle(el).transform;
-      const parts = m.match(/matrix\\(([^,]+),/);
-      return parts ? parseFloat(parts[1]) : 1;
-    };
+  /* ---- emphasis ของช่องที่ active (ADR-19: ไม่ใช้ transform — วงไม่เพี้ยน) ---- */
+  const emphasis = await browser.evaluate(`(() => {
+    const sec = document.querySelector('.sector--char.is-selected');
+    const dim = document.querySelector('.char-text.is-dim');
+    const sel = document.querySelector('.char-text.is-selected');
+    const group = document.querySelector('.sector--group.is-armed');
+    const normal = document.querySelector('.sector--char:not(.is-selected)');
+    const px = (el) => (el ? parseFloat(getComputedStyle(el).fontSize) : 0);
+    const num = (el, prop) => (el ? parseFloat(getComputedStyle(el)[prop]) || 0 : 0);
     return {
-      sector: scaleOf('.sector--char.is-selected'),
-      char: scaleOf('.char-text.is-selected'),
-      group: scaleOf('.sector--group.is-armed'),
-      selected: document.querySelectorAll('.sector--char.is-selected').length,
+      selSize: px(sel),
+      dimSize: px(dim),
+      selStroke: num(sec, 'strokeWidth'),
+      normalStroke: num(normal, 'strokeWidth'),
+      groupStroke: num(group, 'strokeWidth'),
+      transform: sec ? getComputedStyle(sec).transform : 'none',
     };
   })()`);
-  check('ช่องที่เลือกขยาย (sector > 1.02)', anim.sector > 1.02, `scale ${anim.sector}`);
-  check('ตัวอักษรที่เลือกขยาย (char > 1.15)', anim.char > 1.15, `scale ${anim.char}`);
-  check('กลุ่มที่เลือกขยาย (group > 1.02)', anim.group > 1.02, `scale ${anim.group}`);
+  check(
+    'ตัวอักษรที่เลือกใหญ่กว่าช่องอื่น ≥ 1.15×',
+    emphasis.dimSize > 0 && emphasis.selSize / emphasis.dimSize >= 1.15,
+    `${emphasis.selSize.toFixed(1)} / ${emphasis.dimSize.toFixed(1)}px`,
+  );
+  check(
+    'sector ที่เลือกเน้นด้วย stroke หนาขึ้น',
+    emphasis.selStroke > emphasis.normalStroke,
+    `${emphasis.selStroke} > ${emphasis.normalStroke}`,
+  );
+  check('กลุ่มที่เลือกมีสีเด่น (ไม่ scale)', emphasis.groupStroke > 0, `stroke ${emphasis.groupStroke}`);
+  check(
+    'ไม่มี transform บน sector (วงไม่เพี้ยน)',
+    emphasis.transform === 'none',
+    emphasis.transform,
+  );
 
   /* ---- contrast ของตัวอักษรจาง ---- */
   const contrast = await browser.evaluate(`(() => {

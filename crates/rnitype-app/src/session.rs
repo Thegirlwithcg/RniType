@@ -187,16 +187,19 @@ impl Session {
         let group = engine.typing_group();
         let sector = engine.typing_sector();
         let typing = engine.mode() == Mode::Type && engine.wheel().is_none();
+        let shift_lock = engine.shift_lock();
 
         let (inner, outer) = self.rings(mode, lang, group, sector, typing);
         let preview = if typing {
             match (group, sector) {
-                (Some(g), Some(s)) => label_of(lookup(lang, g, s)),
+                (Some(g), Some(s)) => shifted(label_of(lookup(lang, g, s)), shift_lock),
                 _ => String::new(),
             }
         } else {
             String::new()
         };
+        // ADR-13: ล็อกตัวใหญ่แล้ว pill ต้องบอก (HUD แสดงเป็นข้อความใน pill)
+        let status_text = if shift_lock && typing { "ตัวใหญ่" } else { "" };
 
         json!({
             "version": 1,
@@ -228,7 +231,7 @@ impl Session {
                 "y": f64::from(self.pointer.1) - f64::from(origin.1),
                 "visible": self.pointer_visible,
             },
-            "status": { "text": "", "badges": Vec::<String>::new() },
+            "status": { "text": status_text, "badges": Vec::<String>::new() },
         })
     }
 
@@ -282,9 +285,10 @@ impl Session {
 
         let outer = match (mode, typing, group) {
             (m, true, Some(group)) if m.starts_with("type-") => {
+                let shift_lock = engine.shift_lock();
                 let labels: Vec<Value> = table(lang)[group.index()]
                     .iter()
-                    .map(|key| json!({ "text": label_of(*key) }))
+                    .map(|key| json!({ "text": shifted(label_of(*key), shift_lock) }))
                     .collect();
                 let active = sector.map_or(-1, |dir| dir.index() as i32);
                 json!({ "kind": "char", "active": active, "labels": labels })
@@ -302,6 +306,17 @@ fn shortcut(ch: char) -> Action {
         shift: false,
         ctrl: true,
     })
+}
+
+/// ADR-13: `shiftLock` เปิด → ป้าย a–z บนวงแสดงเป็น A–Z (ตัวอักษรอื่น/ไทยคงเดิม)
+/// กฎเดียวกับ `RuntimeEngine::with_shift_lock` ตอนส่งคีย์จริง
+fn shifted(text: String, shift_lock: bool) -> String {
+    if !shift_lock {
+        return text;
+    }
+    text.chars()
+        .map(|ch| if ch.is_ascii_lowercase() { ch.to_ascii_uppercase() } else { ch })
+        .collect()
 }
 
 fn hud_mode(mode: Mode, wheel: Option<WheelKind>, lang: Lang) -> &'static str {
@@ -562,6 +577,24 @@ mod tests {
         );
         type_char(&mut session, (0.0, 0.9), (0.0, 0.9));
         assert_eq!(session.sent(), 1);
+    }
+
+    #[test]
+    fn shift_lock_uppercases_the_ring_labels_and_the_preview() {
+        let (mut session, _) = session();
+        // LT แตะ = toggle ตัวพิมพ์ใหญ่ (ADR-13)
+        let mut p = pad((0.0, 0.9), (0.0, 0.0));
+        p.buttons.lt = true;
+        session.step(&p, 4);
+        session.step(&pad((0.0, 0.9), (0.0, 0.0)), 4);
+        // LS ↑ + RS ↑ = ช่องแรกของกลุ่ม AEIOU
+        session.step(&pad((0.0, 0.9), (0.0, 0.9)), 4);
+
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["shiftLock"], true);
+        assert_eq!(hud["outer"]["labels"][0]["text"], "A");
+        assert_eq!(hud["preview"]["char"], "A");
+        assert_eq!(hud["status"]["text"], "ตัวใหญ่");
     }
 
     #[test]

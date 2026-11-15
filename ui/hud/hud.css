@@ -31,12 +31,14 @@
   --fs-group-m: calc(10.2px * var(--hud-text-scale));
   --fs-group-l: calc(9.2px * var(--hud-text-scale));
   --fs-char: calc(18px * var(--hud-text-scale));
+  --fs-char-selected: calc(22.5px * var(--hud-text-scale));
   --fs-char-dim: calc(17px * var(--hud-text-scale));
   --fs-sub: calc(8.6px * var(--hud-text-scale));
   --fs-badge: calc(8.6px * var(--hud-text-scale));
   --fs-pill: calc(10px * var(--hud-text-scale));
   --fs-pill-badge: calc(9px * var(--hud-text-scale));
   --fs-cmd: calc(10px * var(--hud-text-scale));
+  --fs-cmd-selected: calc(11.5px * var(--hud-text-scale));
   --fs-lang: calc(10.5px * var(--hud-text-scale));
   --fs-preview: calc(19px * var(--hud-text-scale));
   --fs-repeat: calc(9px * var(--hud-text-scale));
@@ -115,49 +117,27 @@ html, body {
 
 /* ---------------- sectors ---------------- */
 
-/* ทุก sector ขยายจาก "ศูนย์กลางวง" (view-box 50% 50%) → ดูเหมือนปูดออกจากกลาง
-   ตอนถูกเลือก (ADR-17: active ต้องขยับ ไม่ใช่นิ่ง) */
-.sector,
-.cmd-sector,
-.lang-sector {
-  transform-box: view-box;
-  transform-origin: 50% 50%;
-}
-
+/* ADR-19: ไม่ขยาย sector ด้วย transform — การ scale wedge 45° ทำให้แต่ละชิ้น
+   กินมุมเกิน 45° แล้วทับกัน (วงดูเพี้ยน) · active = สี + stroke เท่านั้น */
 .sector {
   fill: rgba(23, 28, 40, 0.55);
   stroke: rgba(255, 255, 255, 0.055);
   stroke-width: 1;
-  transition: fill 0.18s linear, stroke 0.18s linear, opacity 0.25s var(--ease-soft),
-    transform 0.2s var(--ease-out);
+  transition: fill 0.18s linear, stroke 0.18s linear, opacity 0.25s var(--ease-soft);
 }
 
 .sector--group.is-armed {
   fill: rgba(124, 197, 255, 0.16);
   stroke: rgba(124, 197, 255, 0.45);
-  transform: scale(1.07);
 }
 
 .sector--char.is-selected {
   fill: rgba(169, 139, 255, 0.26);
   stroke: rgba(184, 160, 255, 0.85);
   stroke-width: 1.5;
-  transform: scale(1.05);
 }
 
 /* ---------------- labels ---------------- */
-
-/* ข้อความขยายจากศูนย์กลางของตัวเอง (ไม่ใช่ศูนย์กลางวง) */
-.sector-label,
-.char-text,
-.cmd-label,
-.lang-label,
-.slot-sub,
-.slot-badge,
-.char-guide {
-  transform-box: fill-box;
-  transform-origin: 50% 50%;
-}
 
 .sector-label {
   fill: #93a0b8;
@@ -166,7 +146,7 @@ html, body {
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  transition: fill 0.18s, transform 0.2s var(--ease-out);
+  transition: fill 0.18s;
 }
 
 .sector-label--group { font-size: var(--fs-group); letter-spacing: 0.02em; }
@@ -174,7 +154,7 @@ html, body {
 .sector-label--group.len-l { font-size: var(--fs-group-l); }
 .sector-label--group.is-two-line { font-size: var(--fs-group-m); }
 .sector-label--group.is-muted { fill: #8d98ad; }
-.sector-label--group.is-armed { fill: #e6f4ff; transform: scale(1.1); }
+.sector-label--group.is-armed { fill: #e6f4ff; }
 .sector--group.is-armed + .sector-label { fill: #cfe8ff; }
 
 .char-text {
@@ -184,12 +164,12 @@ html, body {
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  transition: fill 0.16s, transform 0.2s var(--ease-out), filter 0.2s;
+  transition: fill 0.16s, font-size 0.2s var(--ease-out), filter 0.2s;
 }
 .char-text.is-selected {
   fill: #ffffff;
+  font-size: var(--fs-char-selected);
   font-weight: 700;
-  transform: scale(1.3);
   filter: drop-shadow(0 0 12px rgba(169, 139, 255, 0.95));
 }
 .char-text.is-dim { fill: #94a0b6; font-size: var(--fs-char-dim); }
@@ -223,26 +203,24 @@ html, body {
   fill: rgba(18, 23, 34, 0.78);
   stroke: rgba(255, 255, 255, 0.08);
   stroke-width: 1;
-  transition: fill 0.15s linear, stroke 0.15s linear, transform 0.2s var(--ease-out);
+  transition: fill 0.15s linear, stroke 0.15s linear;
 }
 .cmd-sector.is-selected {
   fill: rgba(124, 197, 255, 0.34);
   stroke: rgba(160, 220, 255, 0.95);
   stroke-width: 1.6;
-  transform: scale(1.07);
 }
 
 .lang-sector {
   fill: rgba(18, 24, 36, 0.8);
   stroke: rgba(255, 255, 255, 0.08);
   stroke-width: 1;
-  transition: fill 0.15s linear, stroke 0.15s linear, transform 0.2s var(--ease-out);
+  transition: fill 0.15s linear, stroke 0.15s linear;
 }
 .lang-sector.is-selected {
   fill: rgba(124, 197, 255, 0.34);
   stroke: rgba(160, 220, 255, 0.95);
   stroke-width: 1.6;
-  transform: scale(1.07);
 }
 
 .cmd-label {
@@ -252,9 +230,9 @@ html, body {
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  transition: fill 0.15s linear, transform 0.2s var(--ease-out);
+  transition: fill 0.15s linear, font-size 0.2s var(--ease-out);
 }
-.cmd-label.is-selected { fill: #ffffff; transform: scale(1.16); }
+.cmd-label.is-selected { fill: #ffffff; font-size: var(--fs-cmd-selected); }
 
 .lang-label {
   fill: #dbe3f2;
@@ -264,9 +242,9 @@ html, body {
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  transition: fill 0.15s linear, transform 0.2s var(--ease-out);
+  transition: fill 0.15s linear;
 }
-.lang-label.is-selected { fill: #ffffff; transform: scale(1.14); }
+.lang-label.is-selected { fill: #ffffff; }
 
 .slot-sub {
   fill: #93a0b6;

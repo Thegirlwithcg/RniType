@@ -1,11 +1,14 @@
 ---
 title: ADR-17 — วงเล็กลง ตัวอักษรใหญ่ขึ้น + animation ตอนเลือก + ขีดกำกับสระล่าง
-status: accepted (P4 slice 4)
+status: accepted (P4 slice 4) — §5 (animation) ถูกยกเลิกใน ADR-19
 updated: 2026-11-15
 tags: [decision, hud, typography, thai, animation, settings]
 ---
 
 # ADR-17 — Ring ที่เล็กลงแต่ชัดขึ้น, active animation, และเลิกใช้คำว่า "ขีดล่าง"
+
+> **อัปเดต:** §5 (ขยาย sector ด้วย transform) ถูกยกเลิกใน [[19-revert-sector-scaling-and-shift-labels]]
+> เพราะทำให้ wedge ทับกันจนวงเพี้ยน · ส่วน geometry/ขนาด/ป้าย 2 บรรทัด/ขีดสระล่าง ยังใช้อยู่
 
 ## บริบท (feedback รอบ 2 จาก owner, 2026-11-15)
 
