@@ -1,6 +1,6 @@
 ---
 title: ADR-15 — ใช้ gilrs XInput backend แทน WGI
-status: accepted — 2026-11-15 (เหลือยืนยัน LS/RS click)
+status: accepted — 2026-11-15
 updated: 2026-11-15
 tags: [decision, input, gilrs, xinput]
 ---
@@ -45,7 +45,7 @@ gilrs = { version = "0.11", default-features = false, features = ["xinput"] }
 
 ## งานค้าง
 
-- [ ] กด LS/RS click (L3/R3) แล้วยืนยันว่า probe เห็นครบ 16 ปุ่ม
+- [x] กด LS/RS click (L3/R3) แล้วยืนยันว่า probe เห็นครบ 16 ปุ่ม
 - [ ] ทดสอบ hotplug (ถอด/ต่อจอยระหว่างรัน)
 - [ ] DualSense ก่อน release — ถ้าต้องใช้ฟีเจอร์เฉพาะ ให้เพิ่ม SDL3 backend
 - [ ] Per-device deadzone calibration (P3)

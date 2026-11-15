@@ -1,6 +1,6 @@
 ---
 title: แผนทำงานหลังม็อกอัป — M0–M5 และ P0–P6
-status: active v0.3 — P1 ปิดแล้ว
+status: active v0.4 — P0 + P1 ปิดแล้ว
 updated: 2026-11-15
 tags: [plan, execution, parallel, agents]
 ---
@@ -65,7 +65,7 @@ tags: [plan, execution, parallel, agents]
 | contracts (HUD/config/IPC) | `node tools/contracts/validate.mjs` → **10/10** | ✅ P1 |
 | workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
 | state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
-| probe จอย (Spike A) | XInput: แกน ±1.0 ครบ · 8 sectors · ปุ่ม 14/16 | 🟡 เหลือ LS/RS click · DualSense เลื่อน |
+| probe จอย (Spike A) | XInput: แกน ±1.0 · 8 sectors · ปุ่ม 16/16 | ✅ ผ่าน 2026-11-15 · DualSense เลื่อน |
 | Spike B (Tauri overlay) | ใส ✅ · ย้ายจอ ✅ · click-through ✅ · focus ✅ (`match=true` 4/4) | ✅ ผ่าน 2026-11-15 |
 | Spike C (SendInput ไทย) | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูก | ✅ ผ่าน 2026-11-15 |
 | injector / mouse / app shell | — | ❌ |
@@ -314,7 +314,7 @@ P1 Contracts + workspace  ←── owner เคาะ Q1/Q2/Q5
 ## 9. 5 อย่างที่ต้องทำก่อนเปิด subagent
 
 1. ✅ **Commit baseline** — commit `00a6668` (`.nznote/`, `.opencode/`, `target/` ถูก ignore)
-2. ⏳ **เหลือ Spike A** — B/C ผ่านแล้ว; XInput ให้แกน/8 sectors/ปุ่ม 14/16 → กด LS/RS click ให้ครบแล้วปิด A (ดู [[15-gilrs-xinput-backend]])
+2. ✅ **P0 ผ่าน 3/3** — A (XInput 16 ปุ่ม) · B (click-through) · C (SendInput ไทย); DualSense เลื่อนก่อน release
 3. ✅ **P1 contracts** — `project menager/Design/03-engineering/contracts/` + `tools/contracts/validate.mjs`
 4. ✅ **แยก workspace** — core / win / app / probe + `ui/hud` / `ui/shared` + `NullInjector`
 5. ⏳ **แตก brief 4 track** พร้อมไฟล์ที่ถือ + เกณฑ์ผ่าน + คำสั่งตรวจ แล้วค่อย spawn

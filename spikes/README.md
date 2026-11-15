@@ -67,12 +67,50 @@ cargo run --release --manifest-path spikes/sendinput/Cargo.toml
 
 | Gate | ผล | หลักฐาน / หมายเหตุ |
 | --- | --- | --- |
-| **A — จอย** | 🟡 **เกือบผ่าน (XInput)** | แกน LS/RS เต็ม ±1.0 ✅ · 8 sectors ✅ · ปุ่ม 14/16 (เหลือ **LS/RS click**) · idle drift 0.194 · **DualSense เลื่อน** |
+| **A — จอย** | ✅ **ผ่าน (XInput)** | แกน ±1.0 ครบ · 8 sectors · ปุ่ม **16/16** (LS/RS จากรอบ 3) · DualSense เลื่อน |
 | **B — Tauri overlay** | ✅ **ผ่าน** | โปร่งใส ✅ · ย้ายจอ ✅ · click-through ✅ · target เป็น foreground ✅ (`match=true` 4/4) |
 | **C — SendInput ไทย** | ✅ **ผ่าน** | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูกทุกตัว |
 
-**สรุป P0: 2/3 ผ่าน (B, C)** — เหลือ A อย่างเดียว
-B ผ่านแล้ว = Tauri overlay ใช้เป็น HUD ได้ ไม่ต้องถอย egui
+**สรุป P0: 3/3 ผ่าน** (DualSense เลื่อนไปก่อน release) → เปิด P2–P5 ได้
+
+### A — หลักฐานรวม 2 รอบ
+
+รอบ 2 — แกน/8 sectors/ปุ่ม 14 ตัว:
+
+```text
+--- สรุป (20.00214 s) ---
+[0] Xbox Controller
+  LSx  range -1.00 .. +0.99
+  LSy  range -0.99 .. +1.00
+  RSx  range -0.99 .. +0.95
+  RSy  range -0.98 .. +0.94
+  LZ   range +0.00 .. +0.00
+  RZ   range +0.00 .. +0.00
+  idle_peak=0.194  max_magnitude=1.00
+  buttons: A/South, B/East, D-Down, D-Left, D-Right, D-Up, LB, LT, Menu, RB, RT, View, X/West, Y/North
+  sectors: ← ↑ → ↓ ↖ ↗ ↘ ↙
+```
+
+รอบ 3 — กด LS/RS click:
+
+```text
+--- สรุป (20.002575 s) ---
+[0] Xbox Controller
+  LSx  range -0.22 .. +0.61
+  LSy  range -0.79 .. +0.00
+  RSx  range -0.25 .. +0.00
+  RSy  range -0.97 .. +0.00
+  LZ   range +0.00 .. +0.00
+  RZ   range +0.00 .. +0.00
+  idle_peak=0.040 (deadzone 0.15 OK)  max_magnitude=1.00
+  buttons: LS, RS
+  sectors: ↓ ↘
+```
+
+**สรุป A:** รวมสองรอบได้ **16/16 ปุ่ม + แกนเต็ม + 8 sectors**
+- `LZ/RZ = 0` เป็นปกติของ XInput (trigger เป็น digital ที่ LT/RT) — เพียงพอสำหรับ Shift/คลิกขวา
+- `idle_peak` ต่างกัน 0.040–0.194 → P3 ต้องทำ **per-device deadzone calibration** (ห้ามขยับ `ls_activate`)
+- ดู [[15-gilrs-xinput-backend]] สำหรับเหตุผลที่เปลี่ยนจาก WGI
 
 ### หลักฐาน C — พิมพ์ไทยลง Notepad
 
@@ -99,61 +137,17 @@ click_through=false exstyle=0x40118
 **ตีความ B:** ทั้ง 4 รอบ target ได้รับคลิกและเป็น foreground → ผ่านเกณฑ์
 `exstyle=0xC0138` = `WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | ...` ตามที่ต้องการ
 
-### ผลดิบ A — รอบ 2 (เหมือนรอบแรก)
-
-```text
---- สรุป (20.003643 s) ---
-[0] Xbox 360 Controller for Windows
-  LSx  range +0.00 .. +0.00
-  LSy  range +0.00 .. +0.00
-  RSx  range +0.00 .. +0.00
-  RSy  range +0.00 .. +0.00
-  LZ   range +0.00 .. +0.00
-  RZ   range +0.00 .. +0.00
-  idle_peak=0.000 (deadzone 0.15 OK)  max_magnitude=0.00
-  buttons: -
-  sectors: -
-```
-
-**ตีความ A:** `joy.cpl` แสดงค่าครบทุกปุ่ม → ตัดสาเหตุฮาร์ดแวร์ออก
-และ XInput ให้ค่าครบ ยืนยันว่า **WGI backend คือปัญหา** ไม่ใช่จอย
-
-### ผลดิบ A — XInput (2026-11-15)
-
-```text
---- สรุป (20.00214 s) ---
-[0] Xbox Controller
-  LSx  range -1.00 .. +0.99
-  LSy  range -0.99 .. +1.00
-  RSx  range -0.99 .. +0.95
-  RSy  range -0.98 .. +0.94
-  LZ   range +0.00 .. +0.00
-  RZ   range +0.00 .. +0.00
-  idle_peak=0.194  max_magnitude=1.00
-  buttons: A/South, B/East, D-Down, D-Left, D-Right, D-Up, LB, LT, Menu, RB, RT, View, X/West, Y/North
-  sectors: ← ↑ → ↓ ↖ ↗ ↘ ↙
-```
-
-**สิ่งที่ผ่าน:** แกนทั้ง 4 เต็มช่วง, 8 sectors ครบ, trigger/ปุ่มหน้า/D-pad/View/Menu ครบ
-**สิ่งที่เหลือ:**
-1. **LS/RS click (L3/R3)** ยังไม่โผล่ — probe ยังไม่ได้รับตอนกด (ปุ่มฝังในก้านAnalog กดแรงหน่อย)
-2. `LZ/RZ = 0` เป็นเรื่องปกติของ XInput (trigger เป็น digital ที่ LT/RT) — เพียงพอสำหรับ Shift/คลิกขวา
-3. `idle_peak=0.194` สูงกว่า deadzone 0.15 — หลัง normalize เหลือ ~0.05 ซึ่งต่ำกว่า `ls_release` 0.25
-   แต่ควรเพิ่ม **per-device deadzone calibration** ใน P3 (ห้ามขยับ `ls_activate` หนีปัญหา)
-
-**ลำดับตรวจต่อ:**
-1. รัน XInput อีกครั้ง แล้ว **กด LS/RS click ให้ครบ** → ต้องเห็น `LS`, `RS` ใน `buttons:`
-2. ถ้าครบ → ปิด Spike A
-3. ถ้าไม่ครบ → ตรวจว่า XInput เห็น L3/R3 ไหมใน `joy.cpl`; ถ้าเห็นแต่ probe ไม่เห็น → บันทึกเป็นข้อจำกัดของ backend
-
 ## ขั้นถัดไป
 
-1. **A — ทดสอบ XInput** (default) แล้วดูว่ามี event ไหม; ถ้ายัง 0 → ทำ spike `sdl3`
-2. **B — ปิดได้ ✅**
-3. **C — ปิดได้ ✅**
+**P0 ปิดแล้ว** → เปิด P2–P5 ตาม [[03-parallel-execution-plan]]
+
+1. **P2 — Core behaviors** (Track A): วงคำสั่ง, วงภาษา, mode arbiter, repeat, layer 2, mouse math, Nav
+2. **P3 — Windows runtime** (Track B): injector จริง, loop 250 Hz, tray, config + deadzone calibration
+3. **P4 — HUD overlay** (Track C): พอร์ต mockup ลง Tauri ตาม contract
+4. **P5 — Settings + languages** (Track D)
 
 ## เกณฑ์เปิด P2–P5
 
-- [ ] A ผ่าน: Xbox ครบ 16 ปุ่ม (เหลือ LS/RS click) + แกน 8 ทิศ (DualSense เลื่อนไปก่อน release)
+- [x] A ผ่าน: Xbox 16 ปุ่ม + แกน 8 ทิศ (DualSense เลื่อนไปก่อน release)
 - [x] B ผ่าน: click-through ได้ + target เป็น foreground
 - [x] C ผ่าน: SendInput ไทยลง Notepad ถูกต้อง

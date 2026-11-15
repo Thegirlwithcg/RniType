@@ -50,7 +50,7 @@ tags: [plan, testing]
 
 | วันที่ | build | WPM EN | WPM TH | error % | latency (ms) | หมายเหตุ |
 | --- | --- | --- | --- | --- | --- | --- |
-| — | M0 | — | — | — | — | ยังไม่เริ่ม |
+| 2026-11-15 | M0 | — | — | — | — | P0 ผ่าน: A XInput 16 ปุ่ม · B click-through · C SendInput ไทย (DualSense เลื่อน) |
 
 ## 5. ความเสี่ยงและทางถอย
 
