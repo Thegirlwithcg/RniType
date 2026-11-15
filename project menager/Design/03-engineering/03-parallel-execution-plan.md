@@ -66,8 +66,8 @@ tags: [plan, execution, parallel, agents]
 | workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
 | state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
 | probe จอย (Spike A) | `crates/rnitype-probe` มีโค้ด | 🟡 ยังไม่รันกับจอยจริง |
-| Spike B (Tauri overlay) | — | ❌ |
-| Spike C (SendInput ไทย) | — | ❌ |
+| Spike B (Tauri overlay) | `spikes/overlay` · รันได้ โปร่งใส + เห็น 2 จอ | 🟡 รอทดสอบ click-through/ไม่แย่ง focus/DPI |
+| Spike C (SendInput ไทย) | `spikes/sendinput` · build ผ่าน | 🟡 ยังไม่รันจริง |
 | injector / mouse / app shell | — | ❌ |
 | HUD overlay จริง | มีแต่ HTML mockup | ❌ |
 | Settings window + config | — | ❌ |
@@ -307,13 +307,14 @@ P1 Contracts + workspace  ←── owner เคาะ Q1/Q2/Q5
 | ใช้โมเดลเดิมหลาย session → จุดบอดซ้ำกัน | กลาง | สลับ reviewer เป็นอีกโมเดลเมื่อทำได้ + spec-only prompt + test ที่เขียนก่อน implement |
 | Integration hell ตอนท้าย | สูง | walking skeleton จบ P3 + merge รายวัน |
 | Agent แก้เกินขอบเขต | กลาง | ระบุไฟล์ที่ถือใน brief + ห้ามแตะ `Cargo.toml` ราก |
+| path มี `'` (Erin's Works) → Tauri RC2135 | สูง | dev ใช้ `spikes/overlay/run.ps1` (icon ไป `%TEMP%` + `TAURI_CONFIG`); release build ใน CI path สะอาด |
 
 ---
 
 ## 9. 5 อย่างที่ต้องทำก่อนเปิด subagent
 
 1. ✅ **Commit baseline** — commit `00a6668` (`.nznote/`, `.opencode/`, `target/` ถูก ignore)
-2. ⏳ **Owner รัน probe A** กับ Xbox + DS5 แล้วเก็บ log → กรอกตารางวัดผล
+2. ⏳ **Owner รัน A/B/C** — โค้ดพร้อมที่ `spikes/` (A มีแล้ว, B/C compile ผ่าน) → กรอกตารางใน `spikes/README.md`
 3. ✅ **P1 contracts** — `project menager/Design/03-engineering/contracts/` + `tools/contracts/validate.mjs`
 4. ✅ **แยก workspace** — core / win / app / probe + `ui/hud` / `ui/shared` + `NullInjector`
 5. ⏳ **แตก brief 4 track** พร้อมไฟล์ที่ถือ + เกณฑ์ผ่าน + คำสั่งตรวจ แล้วค่อย spawn

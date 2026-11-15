@@ -1,0 +1,21 @@
+[workspace]
+
+[package]
+name = "rnitype-spike-overlay"
+version = "0.1.0"
+edition = "2021"
+description = "Spike B: Tauri v2 overlay โปร่งใส คลิกทะลุ ไม่แย่ง focus"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+] }

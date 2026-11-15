@@ -25,7 +25,7 @@ mono_crash.*.json
 # *.pck
 
 # Rust
-/target/
+**/target/
 **/*.rs.bk
 
 # Node
@@ -38,3 +38,6 @@ Thumbs.db
 # Personal vault metadata + machine-specific agent config
 .nznote/
 .opencode/
+
+# Tauri generated ACL schemas
+spikes/overlay/src-tauri/gen/
