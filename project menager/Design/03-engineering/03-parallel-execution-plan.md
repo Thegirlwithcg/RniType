@@ -65,7 +65,7 @@ tags: [plan, execution, parallel, agents]
 | contracts (HUD/config/IPC) | `node tools/contracts/validate.mjs` → **10/10** | ✅ P1 |
 | workspace split | `crates/rnitype-{core,win,app,probe}` + `ui/` | ✅ P1 |
 | state player | `node tools/state-player/serve.mjs` → HUD ไม่ต้องมีแอป | ✅ P1 |
-| probe จอย (Spike A) | เห็น Xbox 360 Controller แต่ axes/buttons = 0 | 🟡 ยังไม่ผ่าน (รอทดสอบซ้ำ + DualSense) |
+| probe จอย (Spike A) | เห็น Xbox 360 Controller แต่ axes/buttons = 0 | 🟡 รอทดสอบซ้ำ (Xbox) · DualSense เลื่อน |
 | Spike B (Tauri overlay) | ใส ✅ · ย้ายจอ ✅ · click-through ❌ · focus ❌ | ❌ ไม่ผ่าน (รอ target harness) |
 | Spike C (SendInput ไทย) | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูก | ✅ ผ่าน 2026-11-15 |
 | injector / mouse / app shell | — | ❌ |
@@ -98,7 +98,7 @@ tags: [plan, execution, parallel, agents]
 
 | งาน | ผลลัพธ์ | เกณฑ์ผ่าน |
 | --- | --- | --- |
-| A. `gilrs` กับ Xbox + DualSense | log แกน/ปุ่ม/deadzone/drift | เห็นครบ 8 ปุ่ม + trigger + แกน 4 ทิศ, ระบุรุ่นได้ |
+| A. `gilrs` กับ Xbox (DualSense เลื่อน) | log แกน/ปุ่ม/deadzone/drift | Xbox: เห็นครบ 8 ปุ่ม + trigger + แกน 4 ทิศ · **DualSense: ก่อน release** |
 | B. Tauri overlay โปร่งใส | หน้าต่างทดสอบ 2 จอ 150% | คลิกทะลุ, ไม่แย่ง focus, ไม่กระพริบ |
 | C. `SendInput` ภาษาไทย | พิมพ์ "กขคง" ลง Notepad | ตัวอักษรถูกทุกตัว (Unicode path) |
 
@@ -314,7 +314,7 @@ P1 Contracts + workspace  ←── owner เคาะ Q1/Q2/Q5
 ## 9. 5 อย่างที่ต้องทำก่อนเปิด subagent
 
 1. ✅ **Commit baseline** — commit `00a6668` (`.nznote/`, `.opencode/`, `target/` ถูก ignore)
-2. ⏳ **Owner รัน A/B** — C ผ่านแล้ว; A ต้องขยับจอยจริง + ทดสอบ DualSense, B ต้องผ่าน target harness → กรอก `spikes/README.md`
+2. ⏳ **Owner รัน A/B** — C ผ่านแล้ว; A ต้องขยับจอยจริง (Xbox; DualSense เลื่อน), B ต้องผ่าน target harness → กรอก `spikes/README.md`
 3. ✅ **P1 contracts** — `project menager/Design/03-engineering/contracts/` + `tools/contracts/validate.mjs`
 4. ✅ **แยก workspace** — core / win / app / probe + `ui/hud` / `ui/shared` + `NullInjector`
 5. ⏳ **แตก brief 4 track** พร้อมไฟล์ที่ถือ + เกณฑ์ผ่าน + คำสั่งตรวจ แล้วค่อย spawn

@@ -24,7 +24,7 @@ tags: [plan, testing]
 
 | Milestone | ขอบเขต | เกณฑ์ผ่าน (exit criteria) | ประมาณ |
 | --- | --- | --- | --- |
-| **M0 Spike** | อ่านค่าจอย, ตรวจชนิดจอย, log แกนดิบ | เห็นค่า LS/RS/trigger/ปุ่ม ครบทั้ง Xbox และ DualSense, ระบุรุ่นได้ | 1–2 วัน |
+| **M0 Spike** | อ่านค่าจอย, ตรวจชนิดจอย, log แกนดิบ | เห็นค่า LS/RS/trigger/ปุ่มครบ **Xbox** · **DualSense เลื่อนไปทดสอบก่อน release** (ยังไม่มีฮาร์ดแวร์) · ระบุรุ่นได้ | 1–2 วัน |
 | **M1 Typing core** | normalizer + state machine + keymap EN + injector | พิมพ์ประโยค 20 คำใน Notepad ได้ถูกต้อง 100%, วัด WPM ได้ | 3–4 วัน |
 | **M2 Mouse** | pointer + accel + คลิก + recenter หลายจอ | ข้ามจอ 1920 px < 1.5 s, ชี้ target 32 px สำเร็จ > 80% | 2–3 วัน |
 | **M2.5 HUD polish** | variant B (idle เหลือ pill, วงโผล่เมื่อดัน LS), วงคำสั่งวงใน, เปลี่ยนกลุ่มด้วย LS | mockup v0.9 ผ่าน 35 checks; ผู้ใช้ใหม่เปิดวงคำสั่ง/สลับโหมดได้ < 2 s; ไม่มี feedback ซ้ำซ้อน | 1–2 วัน |

@@ -12,8 +12,11 @@
 cargo run -p rnitype-probe -- --seconds 20 --raw
 ```
 
-ผ่านเมื่อ: เห็น LS/RS/trigger/ปุ่มครบทั้ง **Xbox** และ **DualSense**, deadzone/drift นิ่ง
+ผ่านเมื่อ (รอบนี้): **Xbox** เห็น LS/RS/trigger/ปุ่มครบ + deadzone/drift นิ่ง
 ผลที่ต้องจด: ชื่อจอย, ปุ่มที่ขาด, ค่า drift สูงสุด
+
+> **DualSense: เลื่อนไปก่อน** (owner ยังไม่มีฮาร์ดแวร์ให้ลอง)
+> ต้องทดสอบก่อน release — บันทึกไว้ใน [[02-roadmap-and-smoke-tests]] M0
 
 **ถ้าเจอ `pads: 0`** — probe จะรอจอย 15 วินาที ลองเปิดจอย/กดปุ่ม guide ระหว่างนั้น
 ถ้ายังไม่เจอ: ต่อ USB ก่อน → ปิด Steam Input/DS4Windows → ดู Device Manager → ค่อยลอง Bluetooth
@@ -60,7 +63,7 @@ cargo run --release --manifest-path spikes/sendinput/Cargo.toml
 
 | Gate | วันที่ | ผล | หลักฐาน / หมายเหตุ |
 | --- | --- | --- | --- |
-| **A — จอย** | 2026-11-15 | 🟡 **ยังไม่ผ่าน** | เห็น `Xbox 360 Controller for Windows` แต่ axes/buttons = 0 ทั้งหมด · ยังไม่ได้ทดสอบ DualSense |
+| **A — จอย** | 2026-11-15 | 🟡 **ยังไม่ผ่าน** | เห็น `Xbox 360 Controller for Windows` แต่ axes/buttons = 0 ทั้งหมด · **DualSense เลื่อน** (ยังไม่มีฮาร์ดแวร์) |
 | **B — overlay** | 2026-11-15 | ❌ **ไม่ผ่าน** | ใส ✅ · ย้ายจอ ✅ · click-through ❌ · focus ❌ |
 | **C — SendInput** | 2026-11-15 | ✅ **ผ่าน** | พิมพ์ `กขคง Hello ไทย 123` ลง Notepad ถูกทุกตัว |
 
@@ -117,6 +120,6 @@ cargo run --release --manifest-path spikes/sendinput/Cargo.toml
 
 ## เกณฑ์เปิด P2–P5
 
-- [ ] A ผ่าน: Xbox + DualSense, input ครบ 16 ปุ่ม + แกน 8 ทิศ
+- [ ] A ผ่าน: Xbox ครบ 16 ปุ่ม + แกน 8 ทิศ (DualSense เลื่อนไปก่อน release)
 - [ ] B ผ่าน: click-through ได้ + target เป็น foreground
 - [x] C ผ่าน: SendInput ไทยลง Notepad ถูกต้อง
