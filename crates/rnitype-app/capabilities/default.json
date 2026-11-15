@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "RniType HUD overlay — read-only + lifecycle (ipc.md §3)",
+  "windows": ["hud"],
+  "permissions": ["core:default"]
+}

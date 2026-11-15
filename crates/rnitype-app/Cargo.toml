@@ -4,8 +4,20 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Runtime + tray + config (P3) — ยังเป็น skeleton ใน P1"
+description = "RniType runtime — Tauri overlay (HUD) + tray + config"
 
 [dependencies]
 rnitype-core = { path = "../rnitype-core" }
 rnitype-win = { path = "../rnitype-win" }
+tauri = { version = "2", features = ["tray-icon", "image-ico"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+] }
