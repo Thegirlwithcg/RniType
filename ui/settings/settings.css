@@ -627,6 +627,34 @@ input[type="range"]:focus-visible {
   text-align: center;
 }
 
+/* ---------------- practice / benchmark ---------------- */
+
+.bench__target {
+  margin: 0 0 var(--s-3);
+  font-family: var(--hud-font);
+  font-size: 17px;
+  line-height: 1.6;
+  user-select: none;
+}
+
+#benchInput {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--separator);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: var(--hud-font);
+  font-size: 16px;
+  line-height: 1.5;
+  resize: vertical;
+}
+#benchInput:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 1px;
+}
+
 /* ---------------- actions ---------------- */
 
 .actions {

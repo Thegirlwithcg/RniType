@@ -17,7 +17,10 @@
 //! หรือผ่าน `crates/rnitype-app/run.ps1 --demo --seconds 8`
 //! (run.ps1 แก้ปัญหา path ที่มี apostrophe ให้ RC.EXE อ่าน icon ได้)
 
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(not(debug_assertions), not(feature = "console")),
+    windows_subsystem = "windows"
+)]
 
 mod config;
 mod input;
@@ -167,7 +170,8 @@ fn main() {
             reset_config,
             get_keymap,
             set_keymap_cell,
-            reset_keymap
+            reset_keymap,
+            record_bench
         ])
         .setup(move |app| setup_overlay(app, &options, &demo_states))
         .run(tauri::generate_context!())
@@ -1312,6 +1316,71 @@ fn reset_keymap(
             json!({ "ok": false, "error": { "code": "LANG_NOT_FOUND", "message": message } })
         }
     }
+}
+
+/// Practice tab — บันทึกผลทดสอบ error rate ลง `%APPDATA%\RniType\bench.jsonl`
+#[tauri::command]
+fn record_bench(
+    lang: String,
+    target: String,
+    typed: String,
+    errors: u32,
+    error_percent: f64,
+    wpm: f64,
+    seconds: f64,
+) -> Value {
+    let target_chars = target.chars().count();
+    let typed_chars = typed.chars().count();
+    if target_chars == 0 || target_chars > 500 || typed_chars > 500 {
+        return json!({
+            "ok": false,
+            "error": { "code": "CONFIG_INVALID", "message": "ข้อความยาวเกิน 500 ตัวอักษร" }
+        });
+    }
+
+    let record = json!({
+        "at": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0),
+        "lang": lang,
+        "target": target,
+        "typed": typed,
+        "chars": typed_chars,
+        "errors": errors,
+        "errorPercent": (error_percent.clamp(0.0, 100.0) * 10.0).round() / 10.0,
+        "wpm": (wpm.clamp(0.0, 300.0) * 10.0).round() / 10.0,
+        "seconds": (seconds.clamp(0.0, 3600.0) * 10.0).round() / 10.0,
+    });
+
+    if let Some(path) = config::config_path().map(|path| path.with_file_name("bench.jsonl")) {
+        let write = (|| -> std::io::Result<()> {
+            if let Some(dir) = path.parent() {
+                std::fs::create_dir_all(dir)?;
+            }
+            use std::io::Write;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)?;
+            writeln!(file, "{record}")?;
+            Ok(())
+        })();
+        if let Err(err) = write {
+            eprintln!("[bench] เขียน {} ไม่ได้: {err}", path.display());
+        }
+    }
+
+    println!(
+        "[bench] lang={} chars={} errors={} error={:.1}% wpm={:.1} secs={:.1}",
+        record["lang"].as_str().unwrap_or("?"),
+        typed_chars,
+        record["errors"],
+        record["errorPercent"].as_f64().unwrap_or(0.0),
+        record["wpm"].as_f64().unwrap_or(0.0),
+        record["seconds"].as_f64().unwrap_or(0.0)
+    );
+    json!({ "ok": true, "data": record })
 }
 
 /// General tab — ตัวเลข usage ล่าสุด (chars/WPM/latency/uptime)

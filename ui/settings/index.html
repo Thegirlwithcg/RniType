@@ -24,6 +24,7 @@
         <button type="button" class="nav__item" data-tab="languages">Languages</button>
         <button type="button" class="nav__item" data-tab="hud">HUD</button>
         <button type="button" class="nav__item" data-tab="keymap">Keymap</button>
+        <button type="button" class="nav__item" data-tab="practice">Practice</button>
       </nav>
       <p class="sidebar__note">Settings apply immediately.</p>
     </aside>
@@ -169,6 +170,51 @@
         <footer class="actions">
           <button id="mapResetGroup" type="button" class="btn">Reset group</button>
           <button id="mapResetLang" type="button" class="btn">Reset language</button>
+        </footer>
+      </section>
+
+      <!-- ======================= Practice ======================= -->
+      <section class="pane" data-panel="practice" hidden>
+        <header class="content__head">
+          <h1>Practice</h1>
+          <p class="lead">Type the reference text with the controller. Errors come from edit distance against the target.</p>
+        </header>
+
+        <div class="row">
+          <div class="row__body">
+            <label for="benchLang">Text language</label>
+            <p class="hint">Click <b>Start</b>, then type with the controller. Keys go to the focused field.</p>
+          </div>
+          <select id="benchLang" class="select"></select>
+        </div>
+
+        <section class="group">
+          <p class="bench__target" id="benchTarget"></p>
+          <textarea id="benchInput" rows="3" spellcheck="false" autocomplete="off" aria-label="Typed text"></textarea>
+        </section>
+
+        <div class="status-grid status-grid--4">
+          <div class="stat">
+            <span class="stat__label">Elapsed</span>
+            <b id="benchElapsed">0.0 s</b>
+          </div>
+          <div class="stat">
+            <span class="stat__label">WPM</span>
+            <b id="benchWpm">0.0</b>
+          </div>
+          <div class="stat">
+            <span class="stat__label">Errors</span>
+            <b id="benchErrors">0</b>
+          </div>
+          <div class="stat">
+            <span class="stat__label">Error rate</span>
+            <b id="benchRate">0.0%</b>
+          </div>
+        </div>
+
+        <footer class="actions">
+          <button id="benchStart" type="button" class="btn">Start / restart</button>
+          <button id="benchClear" type="button" class="btn">Clear</button>
         </footer>
       </section>
 

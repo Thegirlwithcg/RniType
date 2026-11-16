@@ -28,6 +28,9 @@ mono_crash.*.json
 **/target/
 **/*.rs.bk
 
+# Installer outputs
+dist/
+
 # Node
 node_modules/
 

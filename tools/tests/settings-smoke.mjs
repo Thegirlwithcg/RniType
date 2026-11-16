@@ -29,7 +29,8 @@ try {
   /* ---------------- tabs ---------------- */
 
   const tabs = await browser.evaluate(`Array.from(document.querySelectorAll('[data-tab]')).map((b) => b.dataset.tab)`);
-  check('sidebar has General/Languages/HUD/Keymap tabs', JSON.stringify(tabs) === '["general","languages","hud","keymap"]', tabs.join(','));
+  check('sidebar has General/Languages/HUD/Keymap/Practice tabs',
+    JSON.stringify(tabs) === '["general","languages","hud","keymap","practice"]', tabs.join(','));
 
   const keymapAvailable = await browser.evaluate(
     `document.querySelector('[data-tab="keymap"]')?.textContent.trim() === 'Keymap'`
@@ -197,6 +198,49 @@ try {
   check('Layer 2 shows uppercase letters', layer2 === 'A', layer2);
 
   await browser.screenshot(path.join(SHOTS, 'settings-keymap.png'));
+
+  /* ---------------- Practice / error rate ---------------- */
+
+  await browser.evaluate(`document.querySelector('[data-tab="practice"]').click()`);
+  await sleep(150);
+  const target = await browser.evaluate(`document.getElementById('benchTarget').textContent`);
+  check('Practice shows a reference phrase', target.length > 20, `${target.length} chars`);
+
+  const exact = await browser.evaluate(`
+    (() => {
+      const input = document.getElementById('benchInput');
+      input.value = document.getElementById('benchTarget').textContent;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return {
+        errors: document.getElementById('benchErrors').textContent,
+        rate: document.getElementById('benchRate').textContent,
+      };
+    })()
+  `);
+  check('typing the exact reference gives 0 errors', exact.errors === '0' && exact.rate === '0.0%', JSON.stringify(exact));
+
+  const wrong = await browser.evaluate(`
+    (() => {
+      const input = document.getElementById('benchInput');
+      input.value = 'the quick brown fax';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return {
+        errors: Number(document.getElementById('benchErrors').textContent),
+        rate: document.getElementById('benchRate').textContent,
+      };
+    })()
+  `);
+  check('wrong text raises the edit-distance error count', wrong.errors >= 12, `errors=${wrong.errors} rate=${wrong.rate}`);
+
+  await browser.evaluate(`document.getElementById('benchStart').click()`);
+  await sleep(100);
+  const started = await browser.evaluate(`
+    document.getElementById('benchInput').value === '' &&
+    document.activeElement === document.getElementById('benchInput')
+  `);
+  check('Start clears the field and focuses it for controller typing', started === true);
+
+  await browser.screenshot(path.join(SHOTS, 'settings-practice.png'));
 
   const exceptions = browser.exceptions.length;
   check('no runtime exceptions', exceptions === 0, exceptions ? browser.exceptions.join(' | ') : '');

@@ -116,6 +116,16 @@
     mapHint: $('mapHint'),
     mapResetGroup: $('mapResetGroup'),
     mapResetLang: $('mapResetLang'),
+    // Practice
+    benchLang: $('benchLang'),
+    benchTarget: $('benchTarget'),
+    benchInput: $('benchInput'),
+    benchElapsed: $('benchElapsed'),
+    benchWpm: $('benchWpm'),
+    benchErrors: $('benchErrors'),
+    benchRate: $('benchRate'),
+    benchStart: $('benchStart'),
+    benchClear: $('benchClear'),
     // HUD
     slider: $('textScale'),
     sliderValue: $('textScaleValue'),
@@ -209,6 +219,7 @@
     });
     if (name === 'languages' && !languagesLoaded) rescan();
     if (name === 'keymap') loadKeymap();
+    if (name === 'practice' && dom.benchLang.options.length === 0) renderBenchLanguages();
     if (name === 'general') refreshStats();
   }
 
@@ -693,6 +704,128 @@
 
   dom.mapResetGroup.addEventListener('click', () => resetMap(mapGroup));
   dom.mapResetLang.addEventListener('click', () => resetMap(null));
+
+  /* ---------------- Practice / error rate ---------------- */
+
+  const PHRASES = {
+    en: 'the quick brown fox jumps over the lazy dog',
+    th: 'การพิมพ์ด้วยจอยต้องใช้ความคุ้นเคยและฝึกฝนอย่างสม่ำเสมอ',
+    ru: 'быстрая коричневая лиса прыгает через ленивую собаку',
+    el: 'η γρήγορη καφέ αλεπού πηδάει πάνω από τον τεμπέλη σκύλο',
+  };
+
+  let benchStartedAt = 0;
+  let benchFinished = true;
+  let benchTimer = 0;
+
+  function editDistance(a, b) {
+    if (a === b) return 0;
+    const left = Array.from(a);
+    const right = Array.from(b);
+    let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+    for (let i = 1; i <= left.length; i++) {
+      const current = [i];
+      for (let j = 1; j <= right.length; j++) {
+        const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+        current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
+      }
+      previous = current;
+    }
+    return previous[right.length];
+  }
+
+  function benchTargetText() {
+    return PHRASES[dom.benchLang.value] || PHRASES.en;
+  }
+
+  function renderBench() {
+    dom.benchTarget.textContent = benchTargetText();
+    const typed = dom.benchInput.value;
+    const target = benchTargetText();
+    const errors = editDistance(typed, target);
+    const rate = (errors / Math.max(Array.from(target).length, 1)) * 100;
+    const elapsed = benchStartedAt ? (performance.now() - benchStartedAt) / 1000 : 0;
+    const words = Array.from(typed).length / 5;
+    const wpm = elapsed > 0.5 ? words / (elapsed / 60) : 0;
+
+    dom.benchElapsed.textContent = `${elapsed.toFixed(1)} s`;
+    dom.benchWpm.textContent = wpm.toFixed(1);
+    dom.benchErrors.textContent = String(errors);
+    dom.benchRate.textContent = `${Math.min(rate, 100).toFixed(1)}%`;
+
+    if (!benchFinished && typed === target) finishBench(typed, target, errors, rate, wpm, elapsed);
+  }
+
+  async function finishBench(typed, target, errors, rate, wpm, elapsed) {
+    benchFinished = true;
+    clearInterval(benchTimer);
+    benchTimer = 0;
+    dom.benchElapsed.textContent = `${elapsed.toFixed(1)} s`;
+    dom.benchWpm.textContent = wpm.toFixed(1);
+    dom.benchRate.textContent = `${Math.min(rate, 100).toFixed(1)}%`;
+    setStatus('Practice recorded');
+
+    if (previewOnly || !invoke) return;
+    try {
+      const result = await invoke('record_bench', {
+        lang: dom.benchLang.value,
+        target,
+        typed,
+        errors,
+        errorPercent: Math.min(rate, 100),
+        wpm,
+        seconds: elapsed,
+      });
+      if (!result || result.ok !== true) {
+        setStatus('Could not record practice result', 'error');
+      }
+    } catch (err) {
+      setStatus(`Could not record: ${err && err.message ? err.message : err}`, 'error');
+    }
+  }
+
+  function startBench() {
+    clearInterval(benchTimer);
+    dom.benchInput.value = '';
+    benchFinished = false;
+    benchStartedAt = performance.now();
+    renderBench();
+    dom.benchInput.focus();
+    benchTimer = setInterval(renderBench, 200);
+  }
+
+  dom.benchLang.addEventListener('change', () => {
+    benchFinished = true;
+    benchStartedAt = 0;
+    clearInterval(benchTimer);
+    benchTimer = 0;
+    dom.benchInput.value = '';
+    renderBench();
+    dom.benchTarget.textContent = benchTargetText();
+  });
+
+  dom.benchInput.addEventListener('input', renderBench);
+  dom.benchStart.addEventListener('click', startBench);
+  dom.benchClear.addEventListener('click', () => {
+    benchFinished = true;
+    benchStartedAt = 0;
+    clearInterval(benchTimer);
+    benchTimer = 0;
+    dom.benchInput.value = '';
+    renderBench();
+  });
+
+  function renderBenchLanguages() {
+    dom.benchLang.replaceChildren();
+    Object.keys(PHRASES).forEach((code) => {
+      const option = document.createElement('option');
+      option.value = code;
+      option.textContent = code.toUpperCase();
+      dom.benchLang.append(option);
+    });
+    if (langs.some((row) => row.code === 'th')) dom.benchLang.value = 'th';
+    dom.benchTarget.textContent = benchTargetText();
+  }
 
   /* ---------------- HUD ---------------- */
 
