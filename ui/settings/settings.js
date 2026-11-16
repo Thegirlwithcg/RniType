@@ -44,6 +44,10 @@
     statusTyping: $('statusTyping'),
     statusVersion: $('statusVersion'),
     pauseToggle: $('pauseToggle'),
+    statChars: $('statChars'),
+    statWpm: $('statWpm'),
+    statLatency: $('statLatency'),
+    statUptime: $('statUptime'),
     exclusionList: $('exclusionList'),
     exclusionForm: $('exclusionForm'),
     exclusionInput: $('exclusionInput'),
@@ -142,6 +146,7 @@
       pane.hidden = pane.dataset.panel !== name;
     });
     if (name === 'languages' && !languagesLoaded) rescan();
+    if (name === 'general') refreshStats();
   }
 
   dom.nav.forEach((button) => {
@@ -161,8 +166,48 @@
     dom.pauseToggle.checked = Boolean(status.paused);
   }
 
-  function renderExclusions() {
-    const list = exclusions();
+  function formatMs(micros) {
+    if (!Number.isFinite(micros)) return '—';
+    const ms = micros / 1000;
+    if (ms < 1) return `${ms.toFixed(3)} ms`;
+    return ms < 10 ? `${ms.toFixed(2)} ms` : `${ms.toFixed(1)} ms`;
+  }
+
+  function formatUptime(secs) {
+    if (!Number.isFinite(secs)) return '—';
+    const total = Math.max(0, Math.floor(secs));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const seconds = total % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    if (hours > 0) return `${hours}h ${pad(minutes)}m ${pad(seconds)}s`;
+    if (minutes > 0) return `${minutes}m ${pad(seconds)}s`;
+    return `${seconds}s`;
+  }
+
+  function renderStats(data) {
+    if (!data || typeof data !== 'object') return;
+    dom.statChars.textContent = String(data.chars ?? 0);
+    dom.statWpm.textContent = Number.isFinite(data.wpm) ? data.wpm.toFixed(1) : '0.0';
+    if (Number.isFinite(data.stepAvgUs)) {
+      dom.statLatency.textContent = `${formatMs(data.stepAvgUs)} / ${formatMs(data.stepMaxUs)}`;
+    }
+    dom.statUptime.textContent = formatUptime(data.uptimeSecs);
+  }
+
+  async function refreshStats() {
+    if (previewOnly || activeTab !== 'general' || !invoke) return;
+    try {
+      const result = await invoke('get_stats');
+      if (result && result.ok === true) renderStats(result.data);
+    } catch {
+      /* ยังไม่มี runtime loop — ปล่อยค่าเดิม */
+    }
+  }
+
+  setInterval(refreshStats, 1000);
+
+  function renderExclusions() {    const list = exclusions();
     dom.exclusionList.replaceChildren();
     if (list.length === 0) {
       const empty = document.createElement('li');
@@ -514,6 +559,7 @@
     setStatus('');
     // เตรียมรายการภาษาไว้เลย — เปิดแท็บ Languages แล้วเห็นทันที (และ log ยืนยันว่า scan ได้)
     rescan();
+    refreshStats();
 
     // ค่าเปลี่ยนจากที่อื่น (tray / profile / อีกหน้าต่าง) → ตามให้ทัน
     if (listen) {

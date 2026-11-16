@@ -57,6 +57,10 @@ pub struct Session {
     paused_mode: Option<Mode>,
     /// จำนวนคีย์ที่ส่งออกแล้ว (log/สถิติ)
     sent: u32,
+    /// ตัวอักษรที่พิมพ์สำเร็จทั้ง session (WPM lifetime)
+    chars: u64,
+    /// เวลาของ commit ในหน้าต่าง 60 วิ (คำนวณ WPM)
+    commits: std::collections::VecDeque<std::time::Instant>,
 }
 
 impl Session {
@@ -91,6 +95,8 @@ impl Session {
             guard: None,
             paused_mode: None,
             sent: 0,
+            chars: 0,
+            commits: std::collections::VecDeque::new(),
         };
         session.refresh_languages();
         session
@@ -102,6 +108,38 @@ impl Session {
 
     pub fn sent(&self) -> u32 {
         self.sent
+    }
+
+    /// ตัวอักษรที่พิมพ์สำเร็จทั้ง session
+    pub fn chars(&self) -> u64 {
+        self.chars
+    }
+
+    /// WPM จาก commits ใน 60 วินาทีสุดท้าย (5 ตัวอักษร = 1 คำ)
+    pub fn wpm(&self) -> f64 {
+        crate::stats::wpm(self.commits.len(), 60.0)
+    }
+
+    /// เก็บ commit ของตัวอักษร + ตัดรายการที่เก่ากว่า 60 วิ
+    fn note_commit(&mut self) {
+        self.chars = self.chars.saturating_add(1);
+        let now = std::time::Instant::now();
+        self.commits.push_back(now);
+        if let Some(cutoff) = now.checked_sub(std::time::Duration::from_secs(60)) {
+            while self.commits.front().is_some_and(|time| *time < cutoff) {
+                self.commits.pop_front();
+            }
+        }
+    }
+
+    /// ตัวเลขสำหรับ test (Settings อ่าน payload ที่ loop ประกอบเอง)
+    #[cfg(test)]
+    pub fn stats(&self) -> Value {
+        json!({
+            "chars": self.chars,
+            "wpm": (self.wpm() * 10.0).round() / 10.0,
+            "actions": self.sent,
+        })
     }
 
     /// ตั้งตำแหน่ง pointer ที่ HUD ใช้ (ตอนเริ่มแอป = ตำแหน่งจริงของ OS)
@@ -305,6 +343,12 @@ impl Session {
                 eprintln!("[session] ส่ง {effect:?} ไม่สำเร็จ: {err}");
             }
             self.sent = self.sent.saturating_add(1);
+            // WPM นับเฉพาะตัวอักษรที่พิมพ์ (Key::Char) — ปุ่ม named/ลูกศรไม่นับ
+            if let Action::Key(press) = effect
+                && matches!(press.key, Key::Char(_))
+            {
+                self.note_commit();
+            }
             out.push(effect);
         }
 
@@ -494,7 +538,8 @@ fn guard_text(reason: BlockReason) -> &'static str {
     }
 }
 
-fn shortcut(ch: char) -> Action {    Action::Key(KeyPress {
+fn shortcut(ch: char) -> Action {
+    Action::Key(KeyPress {
         key: Key::Char(ch),
         shift: false,
         ctrl: true,
@@ -653,6 +698,27 @@ mod tests {
         session.step(&pad(ls, rs), 4);
         session.step(&pad(ls, (0.0, 0.0)), 4);
         session.step(&pad(ls, (0.0, 0.0)), 64)
+    }
+
+    #[test]
+    fn typing_a_letter_counts_toward_wpm() {
+        let (mut session, _) = session();
+        assert_eq!(session.chars(), 0);
+        assert_eq!(session.wpm(), 0.0);
+
+        type_char(&mut session, (0.0, 0.9), (0.0, 0.9));
+        assert_eq!(session.chars(), 1);
+        assert_eq!(session.stats()["chars"], 1);
+        // 1 ตัวอักษรในหน้าต่าง 60 วิ = 0.2 WPM (5 ตัวอักษร/คำ)
+        assert!((session.wpm() - 0.2).abs() < 1e-9);
+        assert_eq!(session.stats()["wpm"], 0.2);
+
+        // ปุ่มอื่น (Space) ไม่นับเป็นตัวอักษรของ WPM
+        let mut p = pad((0.0, 0.0), (0.0, 0.0));
+        p.buttons.a = true;
+        session.step(&p, 4);
+        assert_eq!(session.chars(), 1);
+        assert_eq!(session.stats()["actions"], 2);
     }
 
     #[test]

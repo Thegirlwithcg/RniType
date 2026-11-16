@@ -82,9 +82,7 @@ pub fn typing_langs() -> [&'static str; 2] {
 #[cfg(windows)]
 pub fn installed_languages() -> Vec<LanguageInfo> {
     use windows_sys::Win32::Globalization::{GetLocaleInfoW, LOCALE_SENGLISHDISPLAYNAME};
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        GetKeyboardLayoutList, GetKeyboardLayoutNameW, HKL,
-    };
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetKeyboardLayoutList, HKL};
 
     // SAFETY: เรียก API แบบ query; buffer เป็นของเราทั้งหมด
     unsafe {
@@ -101,21 +99,15 @@ pub fn installed_languages() -> Vec<LanguageInfo> {
 
         let mut out: Vec<LanguageInfo> = Vec::new();
         for hkl in layouts {
-            let mut name = [0u16; 9];
-            if GetKeyboardLayoutNameW(name.as_mut_ptr()) == 0 {
-                continue;
-            }
-            let end = name.iter().position(|&unit| unit == 0).unwrap_or(name.len());
-            let klid = OsString::from_wide(&name[..end])
-                .to_string_lossy()
-                .to_ascii_uppercase();
-            if klid.is_empty() || out.iter().any(|item| item.klid == klid) {
-                continue;
-            }
-
             // low word ของ HKL = language identifier
             let lang_id = (hkl as usize as u32 & 0xFFFF) as u16;
             let code = language_code(lang_id);
+            // `GetKeyboardLayoutNameW` คืน layout ของ thread ที่เรียก (ไม่ใช่ HKL ที่ส่ง)
+            // → ใช้ lang id เป็น id แทน (พอสำหรับ dedupe/แสดงผล; layout variant เดียวกันยุบรวม)
+            let klid = format!("{lang_id:08X}");
+            if out.iter().any(|item| item.klid == klid) {
+                continue;
+            }
 
             // MAKELCID(lang_id, SORT_DEFAULT) = lang_id (sort 0)
             let mut label = [0u16; 128];

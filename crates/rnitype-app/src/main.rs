@@ -22,6 +22,7 @@
 mod config;
 mod input;
 mod session;
+mod stats;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -91,6 +92,8 @@ struct AppState {
     device: std::sync::Mutex<String>,
     /// มีจอยต่ออยู่หรือไม่ (ค่าล่าสุดที่ runtime เห็น)
     connected: AtomicBool,
+    /// ตัวเลขล่าสุดของ session (chars/WPM/action latency) — Settings อ่านผ่าน `get_stats`
+    stats: std::sync::Mutex<Value>,
 }
 
 impl AppState {
@@ -105,6 +108,7 @@ impl AppState {
             config_rev: std::sync::atomic::AtomicU64::new(0),
             device: std::sync::Mutex::new(String::new()),
             connected: AtomicBool::new(false),
+            stats: std::sync::Mutex::new(Value::Null),
         }
     }
 
@@ -155,6 +159,7 @@ fn main() {
             get_config,
             save_config,
             get_status,
+            get_stats,
             set_paused,
             rescan_languages,
             set_language_enabled,
@@ -634,6 +639,11 @@ fn run_loop(
     let own_elevated = rnitype_win::target::own_elevated();
     let mut last_guard_ms = 0u64;
     let mut last_config_rev = handle.state::<AppState>().config_rev.load(Ordering::Relaxed);
+    let mut last_stats_push_ms = 0u64;
+    let mut last_stats_log_ms = 0u64;
+    let mut step_sum_us: u128 = 0;
+    let mut step_count = 0u64;
+    let mut step_max_us = 0u64;
     if own_elevated {
         println!("[guard] แอปรันแบบ admin — UIPI guard จะไม่บล็อกหน้าต่าง elevated");
     }
@@ -760,9 +770,51 @@ fn run_loop(
         }
 
         if session.guard().is_none() {
-            for action in session.step(&pad, dt) {
+            let step_start = Instant::now();
+            let actions = session.step(&pad, dt);
+            let elapsed_us = step_start.elapsed().as_micros() as u64;
+            step_sum_us += u128::from(elapsed_us);
+            step_count += 1;
+            step_max_us = step_max_us.max(elapsed_us);
+            for action in actions {
                 log_action(&action);
             }
+        }
+
+        // สถิติ: อัปเดตให้ Settings ทุก 1 วิ · log ทุก 10 วิ (WPM = 5 ตัวอักษร/คำ)
+        if now.saturating_sub(last_stats_push_ms) >= 1_000 {
+            last_stats_push_ms = now;
+            let avg_us = if step_count > 0 {
+                (step_sum_us / u128::from(step_count)) as u64
+            } else {
+                0
+            };
+            let uptime = start.elapsed().as_secs();
+            let payload = json!({
+                "chars": session.chars(),
+                "wpm": (session.wpm() * 10.0).round() / 10.0,
+                "actions": session.sent(),
+                "stepAvgUs": avg_us,
+                "stepMaxUs": step_max_us,
+                "uptimeSecs": uptime,
+            });
+            *handle.state::<AppState>().stats.lock().unwrap() = payload;
+
+            if now.saturating_sub(last_stats_log_ms) >= 10_000 {
+                last_stats_log_ms = now;
+                println!(
+                    "[stats] chars={} wpm={:.1} actions={} step avg={} max={} uptime={}",
+                    session.chars(),
+                    session.wpm(),
+                    session.sent(),
+                    stats::format_ms(avg_us),
+                    stats::format_ms(step_max_us),
+                    stats::format_uptime(uptime)
+                );
+            }
+            step_sum_us = 0;
+            step_count = 0;
+            step_max_us = 0;
         }
 
         // HUD ≤ 60 Hz และเฉพาะเมื่อ payload เปลี่ยน (ipc.md §1)
@@ -1023,6 +1075,13 @@ fn save_config(
 #[tauri::command]
 fn get_status(state: tauri::State<'_, AppState>) -> Value {
     json!({ "ok": true, "data": status_payload(&state) })
+}
+
+/// General tab — ตัวเลข usage ล่าสุด (chars/WPM/latency/uptime)
+#[tauri::command]
+fn get_stats(state: tauri::State<'_, AppState>) -> Value {
+    let data = state.stats.lock().unwrap().clone();
+    json!({ "ok": true, "data": data })
 }
 
 /// General tab — พัก/กลับมาพิมพ์จาก Settings (เท่ากับเมนู tray)

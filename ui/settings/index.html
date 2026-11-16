@@ -64,6 +64,29 @@
           </div>
         </section>
 
+        <section class="group" aria-labelledby="usageTitle">
+          <h2 id="usageTitle" class="group__title">Usage</h2>
+          <div class="status-grid status-grid--4">
+            <div class="stat">
+              <span class="stat__label">Characters</span>
+              <b id="statChars">0</b>
+            </div>
+            <div class="stat">
+              <span class="stat__label">WPM · 60 s</span>
+              <b id="statWpm">0.0</b>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Action latency</span>
+              <b id="statLatency">—</b>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Uptime</span>
+              <b id="statUptime">—</b>
+            </div>
+          </div>
+          <p class="hint">WPM uses the standard 5 characters per word over the last 60 seconds. Action latency is controller sample → SendInput (average / worst of the last second).</p>
+        </section>
+
         <section class="group" aria-labelledby="exclusionTitle">
           <h2 id="exclusionTitle" class="group__title">Exclusion list</h2>
           <p class="hint">When one of these apps has focus, RniType stops sending keys and the HUD shows why. Names match the .exe file; <code>*</code> and <code>?</code> wildcards work.</p>

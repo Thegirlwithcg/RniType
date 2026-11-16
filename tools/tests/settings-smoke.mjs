@@ -46,6 +46,13 @@ try {
   const device = await browser.evaluate(`document.getElementById('statusDevice').textContent`);
   check('status shows a connected controller in preview', device.includes('Xbox'), device);
 
+  const usageLabels = await browser.evaluate(
+    `Array.from(document.querySelectorAll('[data-panel="general"] .status-grid--4 .stat__label')).map((el) => el.textContent)`
+  );
+  check('usage cards show chars/WPM/latency/uptime',
+    JSON.stringify(usageLabels) === '["Characters","WPM · 60 s","Action latency","Uptime"]',
+    usageLabels.join(' · '));
+
   await browser.evaluate(`document.getElementById('pauseToggle').click()`);
   await sleep(100);
   const paused = await browser.evaluate(
