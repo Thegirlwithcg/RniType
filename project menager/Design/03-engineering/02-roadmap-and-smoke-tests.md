@@ -66,6 +66,7 @@ tags: [plan, testing]
 | 2026-11-15 | probe A | — | — | — | — | Xbox Controller: LS/RS ±1.00 · idle_peak 0.000 · LT/RT **ดิจิทัล** (LZ/RZ = 0.00) → `lt_analog` ใช้ไม่ได้กับจอยนี้ |
 | 2026-11-15 | UI r3 | — | — | — | — | ยกเลิก scale sector (วงเพี้ยน) · Shift→A-Z บนวง · 109 tests · typography 30/30 |
 | 2026-11-16 | P2 slice 3 | — | — | — | — | Mouse math (1600 px/s · gamma 1.7 · smooth 0.5) · Nav pivot 900/320 · repeat 350/90 ms · layer 2 · double-tap/hold · 145 tests · ยังไม่วัด WPM |
+| 2026-11-16 | UX refresh | — | — | — | — | ADR-22: Apple-style tokens · HUD plate .88 (no blur) · active 0 ms · pill 28px · Settings sidebar 760×640 · hud-smoke 54/54 · typography 30/30 |
 
 ## 5. ความเสี่ยงและทางถอย
 

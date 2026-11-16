@@ -15,11 +15,11 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2 slice 3 · P3/P4/P5 slice 1 · runtime จอยจริงต่อได้และพิมพ์ได้ — 145 tests** |
+| สถานะ | **P0/P1 ปิด · P2 slice 3 · visual refresh (ADR-22) · P3/P4/P5 slice 1 · runtime จอยจริงต่อได้และพิมพ์ได้ — 145 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, XInput) + `SendInput` |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
 | งานถัดไป | **P2 slice 4**: quick bar (LB) + caret nav (R3) + sticky drag (RB 2 taps) + pivot clamp |
-| ค้างยืนยัน | owner ต้อง retest หลังแก้ "UI ค้างจอ" (ADR-20) — ดู §4.7 |
+| ค้างยืนยัน | owner ต้อง retest หลังแก้ "UI ค้างจอ" (ADR-20) — ดู §4.8 |
 
 ## 2. การตัดสินใจที่ล็อกแล้ว (ห้ามถามซ้ำ)
 
@@ -42,6 +42,7 @@ tags: [handoff]
 18. **HUD ต้องได้ state เสมอ**: resend ตอน handshake + heartbeat 2 วิ · **ห้ามเปิดแอปซ้ำ** (named mutex) — [[20-hud-state-delivery]]
 19. **Ctrl + ตัวอักษร ASCII = VirtualKey** (ไม่ใช่ Unicode) ไม่งั้น Copy/Paste/Undo/Redo ไม่ทำงาน — [[18-runtime-wiring]]
 20. **P2 slice 3**: Mouse = สูตร deadzone 0.15/gamma 1.7/vmax 1600/smoothing 0.5 (LT ×0.3 · LB ×1.8) · Nav LS 900 / RS 320 px/s · auto-repeat 350/90 ms (ดัน RS กลับทิศเดิมหลัง commit) · layer 2 = RB/RT (ค้าง = ชั่วคราว · แตะ < 280 ms โดยไม่พิมพ์ = ล็อก) · A double-tap 280 ms = Enter (Space แรกออกแล้ว) · B hold 400 ms = Ctrl+Backspace · Y hold = Esc — [[21-mouse-nav-repeat-layer2]]
+21. **Visual language (ADR-22)**: accent เดียว **Apple blue `#0A84FF`** · mode = Type blue / Mouse orange / Nav purple · HUD = แผ่นทึบ `.88` + ขอบสองชั้น **ไม่มี `backdrop-filter`** · active wedge = fill + stroke 2px + dim อื่น **0 ms** · pill 28px + dot สีโหมด + idle 3 วิ · Settings = sidebar 200px + inset group (760×640) · motion 80/140 ms + reduced-motion — [[05-visual-language]] · [[22-visual-refresh-apple-style]]
 
 ## 3. โครงสร้างไฟล์
 
@@ -57,19 +58,22 @@ project menager/
    │  ├─ 01-interaction-model.md
    │  ├─ 02-keymap-en-th.md   ← ตาราง 8×8 EN/TH (สำคัญที่สุด)
    │  ├─ 03-mouse-and-navigation.md
-   │  └─ 04-state-machine-spec.md  ← ค่าเวลา/pseudocode
+   │  ├─ 04-state-machine-spec.md  ← ค่าเวลา/pseudocode
+   │  ├─ 05-visual-language.md     ← สรุป UX/UI ที่ใช้จริง (ADR-22)
+   │  └─ 05a-claude-ux-consult.md  ← คำตอบดิบจาก Claude (2026-11-16)
    ├─ 03-engineering/
    │  ├─ 01-architecture.md
    │  ├─ 02-roadmap-and-smoke-tests.md   ← ตารางวัดผล
    │  ├─ 03-parallel-execution-plan.md
    │  └─ contracts/           ← P1 freeze: hud-state.schema, config.schema, ipc.md (v1.1), samples
-   ├─ 04-decisions/           ← ADR-01…ADR-21 (ดูรายการใน README)
+   ├─ 04-decisions/           ← ADR-01…ADR-22 (ดูรายการใน README)
    │  ├─ 16-hud-typography-and-fonts.md      ← ADR-16 typography + `hud:style`
    │  ├─ 17-hud-ring-geometry-and-active-animation.md ← ADR-17 geometry (§5 ถูกยกเลิก)
    │  ├─ 18-runtime-wiring.md ← ADR-18 จอย → core → injector → HUD
    │  ├─ 19-revert-sector-scaling-and-shift-labels.md ← ADR-19 เลิก scale + Shift→A-Z
    │  ├─ 20-hud-state-delivery.md ← ADR-20 resend/heartbeat/single instance
-   │  └─ 21-mouse-nav-repeat-layer2.md ← ADR-21 mouse/Nav math · repeat · layer 2 · double-tap/hold
+   │  ├─ 21-mouse-nav-repeat-layer2.md ← ADR-21 mouse/Nav math · repeat · layer 2 · double-tap/hold
+   │  └─ 22-visual-refresh-apple-style.md ← ADR-22 tokens/HUD plate/Settings sidebar
    └─ 05-mockup/
       ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (อ้างอิงดีไซน์ ไม่ใช่ของจริง)
       └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings, runtime)
@@ -108,7 +112,7 @@ project menager/
 | --- | --- | --- |
 | P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons + **slice 3: mouse math, Nav pivot, auto-repeat, layer 2, double-tap/hold** (84 tests) | quickbar, caret nav, sticky drag, pivot clamp/DPI |
 | P3 win | SendInput Unicode/VK/mouse + **HWheel** + Ctrl+ASCII→VK (36 tests) | scancode/IME, exclusion/UIPI |
-| P4 HUD | renderer ครบ mode + overlay + typography + `HudState` จริง (+ `layer`/`repeat`/`pointer`) (30 checks) | latency, pivot per-monitor/mixed-DPI |
+| P4 HUD | renderer ครบ mode + overlay + typography + **visual refresh ADR-22** (plate/active/pill/mode colours) + `HudState` จริง (+ `layer`/`repeat`/`pointer`) (30 checks) | latency, pivot per-monitor/mixed-DPI |
 | Runtime | `input.rs` + `session.rs` + tray Pause + resend/heartbeat + single instance + **mouse/Nav recenter/reset** | ทดสอบ mouse/Nav กับจอยจริง |
 | P5 Settings | slice 1: หน้าต่าง + แท็บ HUD + persist config | แท็บ General/Languages/Keymap, rescan HKL, profiles |
 
@@ -158,7 +162,19 @@ node tools/tests/hud-typography.mjs         # 30/30 + screenshot
 | กด Shift ตัวอักษร EN ไม่เป็นตัวใหญ่ | แอปส่ง label ดิบ (ตัวเล็ก) | แปลง `a–z→A–Z` ที่ฝั่งแอป + `status.text = "ตัวใหญ่"` |
 | UI ค้างจอตลอดเวลา | state ชุดแรกยิงก่อน HUD พร้อม + dedupe → ไม่มี resend | `hud_ready` บังคับ resend + heartbeat 2 วิ + single instance |
 
-### 4.7 งานค้างยืนยัน (เริ่ม session หน้าด้วยข้อนี้)
+### 4.7 UX/UI refresh (2026-11-16) — ✅ ปิดแล้ว (ADR-22)
+
+| เรื่อง | ผล |
+| --- | --- |
+| Owner ขอ UX/UI ทันสมัยแบบ Apple/macOS | ปรึกษา Claude Fable 5.2 (medium) ผ่าน CLI → [[05a-claude-ux-consult]] · สรุปที่ [[05-visual-language]] |
+| Design tokens กระจัดกระจาย | `ui/shared/tokens.css` เป็นแหล่งเดียว: Settings/HUD/mode/radius/spacing/elevation/motion + alias เดิม |
+| HUD อ่านยากบนพื้นหลังสว่าง | แผ่นทึบ `.88` + ขอบสองชั้น (ขาวใน/ดำนอก) · **เอา `backdrop-filter` ออก** |
+| Active state ต้องเร็ว | fill accent + stroke 2px + dim glyph อื่น .45 · highlight **0 ms** · ไม่ scale wedge |
+| Mode สับสน | Type = blue · Mouse = orange · Nav = purple · pill มี dot สีโหมด + badge Shift/Layer |
+| Pill ดูเป็น dev tool | 28px · radius 999 · 12–14px/600 · idle 3 วิ → opacity .6 (heartbeat 2 วิ ไม่รีเซ็ต timer) |
+| Settings ดูเก่า | sidebar 200px + inset group + row 44px + preview ใหม่ · window 760×640 (min 680×480) |
+
+### 4.8 งานค้างยืนยัน (เริ่ม session หน้าด้วยข้อนี้)
 
 1. **owner retest หลัง ADR-20**: `run.ps1 --seconds 120` → เปิด Notepad → LS↑ + RS↑ = `ก` → **ปล่อยจอยแล้ววงต้องหาย** (เหลือ pill)
    - ถ้ายังค้าง: เก็บ `--pad-log` + ต่อ CDP ดู DOM (สูตรอยู่ §6) แล้วรายงาน `data-rings` กับ `#innerRing` child count
@@ -168,6 +184,8 @@ node tools/tests/hud-typography.mjs         # 30/30 + screenshot
    - Nav (`↘ Place UI`): LS/RS ขยับ pivot, RS click กลับจุดเริ่มต้น
    - Type: แตะ RB = ล็อก layer 2 (ตัวอักษรเป็น A–H) · กด RB ค้างแล้วพิมพ์ = ชั่วคราว · ค้าง RS ทิศเดิมหลังพิมพ์ = repeat (HUD `×n`)
    - A แตะ 2 ครั้ง = Enter · กด B ค้าง 400 ms = ลบทั้งคำ · กด Y ค้าง = Esc
+5. **Visual refresh (ADR-22)**: เปิด Settings → ตรวจ sidebar/inset group/preview · เปิด HUD แล้วดูว่าแผ่น `.88` อ่านชัดบนทั้งพื้นมืด/สว่าง · pill มี dot สีโหมดและจางหลัง idle 3 วิ
+   - ถ้าอยากให้แผ่นบางลง/เข้มขึ้น ปรับ `--hud-plate` ที่ `ui/shared/tokens.css` แล้วแจ้งค่าที่ชอบ
 
 ## 5. คำถามที่ยังค้าง
 

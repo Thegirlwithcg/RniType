@@ -170,6 +170,7 @@ tags: [plan, execution, parallel, agents]
 > **slice 1 ✅ `bd98777`** — state-driven renderer ครบทุก mode (type/cmd/lang/mouse/nav/disabled)
 > **slice 2 ✅ `2354912`** — Tauri overlay เต็ม virtual desktop, click-through/no-focus, tray Quit, `hud:state` demo
 > **slice 3 (next, owner feedback 2026-11-15)** — typography/readability: ตัวหนังสือใหญ่ขึ้น + ฟอนต์ไทยไม่มีหัว (IBM Plex Sans Thai) + text scale
+> **visual refresh ✅ 2026-11-16 (ADR-22)** — tokens เดียว · HUD plate `.88` (no blur) · active 0 ms · pill 28px · Settings sidebar 760×640
 > เหลือ: pivot per-monitor/mixed-DPI, 60 Hz coalescing + latency, real runtime wiring
 
 | งาน | เกณฑ์ผ่าน |

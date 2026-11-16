@@ -63,6 +63,7 @@ updated: 2026-11-15
 | [[19-revert-sector-scaling-and-shift-labels]] | ADR: ยกเลิก transform บน sector (วงเพี้ยน) + Shift เปลี่ยนตัวอักษรบนวงเป็นตัวใหญ่ |
 | [[20-hud-state-delivery]] | ADR: HUD ต้องได้ state เสมอ (resend ตอน handshake + heartbeat 2 วิ) + ห้ามเปิดแอปซ้ำ |
 | [[21-mouse-nav-repeat-layer2]] | ADR: Mouse/Nav math, auto-repeat 350/90, layer 2 (RB/RT), A double-tap, B/Y hold |
+| [[22-visual-refresh-apple-style]] | ADR: tokens/HUD plate/Settings sidebar — Apple/macOS-inspired visual refresh |
 | [[hud-v0.9]] | บันทึก HUD: ภาพเทียบ A/B (v0.9) + สรุป v0.10 |
 | `05-mockup/hud-prototype/` | ม็อกอัป HUD v0.11 (เน้น EN+TH, หลายภาษา, Settings window, Keymap editor, pivot) |
 | `05-mockup/hud-shots/` | screenshot ตรวจรับ typography (100%/150% DPI), overlay จริง, Settings |
@@ -84,7 +85,7 @@ updated: 2026-11-15
 | ภาษาไทย | วรรณยุกต์ ่ ้ ๊ ๋ อยู่กลุ่ม ↘ เดียวกัน · สระล่าง ุ ู มีขีดกำกับใน HUD |
 | หลักการ HUD | วงใน = สิ่งที่ LS เลือก · วงนอก = สิ่งที่ RS เลือก · idle เหลือ pill สถานะ (เปิดวงตลอดได้) |
 | เทคโนโลยี | Rust + Tauri v2 + gilrs/SDL3 + SendInput (แผนสำรอง: C# .NET 8) — ดู [[03-stack-rust]] |
-| สถานะ | **P0/P1 ปิด · P2 slice 3 · P3/P4/P5 slice 1 · runtime จอยจริง** — 145 tests |
+| สถานะ | **P0/P1 ปิด · P2 slice 3 · visual refresh (ADR-22) · P3/P4/P5 slice 1 · runtime จอยจริง** — 145 tests |
 
 ## หมายเหตุการทำงาน
 
