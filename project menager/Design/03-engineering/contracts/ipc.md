@@ -3,6 +3,7 @@
 > P1 freeze · version 1 · 2026-11-15
 > v1.1 (2026-11-15) — เพิ่ม `hud:style` (event) + `hud_style` (command) สำหรับ typography · additive ไม่แตะ payload เดิม (ADR-16)
 > v1.2 (2026-11-16) — ระบุรูปแถวของ `rescan_languages` / `set_language_enabled` และ `get_status` ที่ P5 slice 2 ใช้ (additive, ADR-25)
+> v1.3 (2026-11-16) — เพิ่ม `get_stats` (chars/WPM/action latency/uptime) สำหรับ Usage cards (additive, ADR-26)
 > ไฟล์นี้คือสัญญาที่ P3 (runtime), P4 (HUD), P5 (Settings) ต้องยึด
 > เปลี่ยนชื่อ/รูป payload = ต้อง bump `version` และแจ้ง lead
 
@@ -45,6 +46,7 @@
 | `import_profile` | `{ json }` | `Config` |
 | `set_paused` | `{ paused: bool }` | `{ paused: bool }` |
 | `get_status` | — | `app:status` payload |
+| `get_stats` | — | `{ chars, wpm, actions, stepAvgUs, stepMaxUs, uptimeSecs }` |
 | `open_settings` | `{ tab?: "general"\|"languages"\|"keymap"\|"hud" }` | `{ ok: true }` |
 
 ### HUD (read-only + lifecycle)
@@ -123,6 +125,21 @@ Settings ──invoke save_config──▶ app ──validate──▶ config.js
 
 `get_status` คืน payload เดียวกับ event `app:status` · `set_paused { paused }` คืน payload นั้น
 หลังเปลี่ยน (Settings ใช้แทนการคลิก tray)
+
+### `get_stats` — Usage cards (ADR-26)
+
+```json
+{
+  "chars": 75,
+  "wpm": 15.0,
+  "actions": 75,
+  "stepAvgUs": 4,
+  "stepMaxUs": 846,
+  "uptimeSecs": 51
+}
+```
+
+`wpm` = 5 ตัวอักษร/คำ จาก commits ใน 60 วิ · `step*Us` = เวลา `session.step` (µs) ต่อวินาทีล่าสุด
 
 ## 6. Error codes
 

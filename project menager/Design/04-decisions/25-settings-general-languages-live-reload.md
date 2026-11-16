@@ -32,7 +32,8 @@ P5 slice 1 เปิดหน้าต่าง Settings ได้ แต่ม�
 ### 2. Languages tab
 
 - `rnitype-win/src/language.rs` ใหม่:
-  - `GetKeyboardLayoutList` → HKL → `GetKeyboardLayoutNameW` (KLID) + `GetLocaleInfoW(ENGLISHDISPLAYNAME)`
+  - `GetKeyboardLayoutList` → HKL → language id (low word) + `GetLocaleInfoW(ENGLISHDISPLAYNAME)`
+  - `klid` = lang id 8 หลัก (`00000409`) — ไม่ใช้ `GetKeyboardLayoutNameW` เพราะ API นั้นคืน layout ของ thread ผู้เรียก ไม่ใช่ HKL ในลิสต์ (เจอบั๊กตอน E2E: ทุกแถวได้ KLID เดียวกัน)
   - `code` จาก language id (en/th/ru/el/ja/ko/zh, อื่น ๆ `0xNNNN`)
   - `kind`: JA/ZH/KO = `ime` · อื่น = `layout` (ADR-14 §1)
 - **EN/TH แสดงเสมอ** แม้ Windows ไม่ได้ติดตั้ง layout — เพราะตาราง 8×8 อยู่ในแอป

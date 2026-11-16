@@ -49,7 +49,7 @@ tags: [plan, testing]
 | `tools/contracts/validate.mjs` | ตรวจ `hud-state.samples.json` + `config.sample.json` กับ schema | **12/12** |
 | `tools/tests/hud-smoke.mjs` | ขับม็อกอัป v0.11 ด้วย CDP (วง/คำสั่ง/โหมด/สถานะ) | **54/54** |
 | `tools/tests/hud-typography.mjs` | ตรวจขนาดขั้นต่ำ/การชนกัน/contrast/emphasis + quick bar/caret + screenshot 100%–150% DPI | **36/36** |
-| `cargo test --workspace` | core 98 · win 56 · app 47 (config/input/session) | **201/201** |
+| `cargo test --workspace` | core 98 · win 56 · app 51 (config/input/session/stats) | **205/205** |
 
 **ชุดประโยคทดสอบ**: ใช้ 500 phrases ของ MacKenzie & Soukoreff (มาตรฐานงานวิจัย text entry)
 → ผลของเราจะเทียบกับงานวิจัย (TwoStick 13–14.9 WPM) ได้ตรงๆ
@@ -70,6 +70,7 @@ tags: [plan, testing]
 | 2026-11-16 | P2 slice 4 | — | — | — | — | ADR-23: Quick bar LB (8 ช่อง + Alt+Tab) · caret R3 (350/90 ms, R3×2 = select) · sticky drag RB×2 · pivot clamp 172×scale · **166 tests** · contracts 12/12 · typography 36/36 |
 | 2026-11-16 | P3 slice 2 | — | — | — | — | ADR-24: exclusion/UIPI guard (250 ms) · scancode auto ตาม HKL + Unicode fallback · `timeBeginPeriod(1)` · tray unpause คืน mode · **188 tests** · log `[timer] เปิด`/`[inject] auto scancode` |
 | 2026-11-16 | P5 slice 2 | — | — | — | — | ADR-25: General (status/pause/exclusion UI) · Languages (HKL scan, EN/TH built-in, IME badge) · `config_rev` live reload · reset แยกส่วน · **201 tests** · settings-smoke **19/19** · E2E ปิด TH → `languages=0` |
+| 2026-11-16 | P6 slice 1 | 3.0\* | — | — | avg 0.005 / max 0.748 (action) | ADR-26: WPM 60 วิ (5 ตัวอักษร/คำ) · action latency avg/max · `[stats]` ทุก 10 วิ · Usage cards · **205 tests** · settings-smoke **20/20** · \*fake-pad steady ~15–17 WPM (ยังไม่ใช่ผู้ใช้จริง) |
 
 ## 5. ความเสี่ยงและทางถอย
 
