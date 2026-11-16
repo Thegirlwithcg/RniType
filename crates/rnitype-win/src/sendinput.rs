@@ -8,20 +8,22 @@
 
 use std::mem::size_of;
 
-use rnitype_core::{Action, MouseButton};
+use rnitype_core::{Action, Key, MouseButton};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
+    INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY,
+    KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, KEYEVENTF_UNICODE, MAPVK_VK_TO_VSC,
     MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
     MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
-    MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
+    MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL, MOUSEINPUT,
+    MapVirtualKeyExW, SendInput, VkKeyScanExW, GetKeyboardLayout, HKL,
 };
 use windows_sys::Win32::Foundation::POINT;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
-    SM_YVIRTUALSCREEN,
+    GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowThreadProcessId,
+    SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
 
-use crate::plan::{self, HeldState, Input, ScreenRect};
+use crate::plan::{self, HeldState, Input, ScanChord, ScreenRect};
 use crate::{InjectError, Injector};
 
 impl ScreenRect {
@@ -63,14 +65,31 @@ pub fn cursor_position() -> Option<(f32, f32)> {
 ///
 /// ยังต้องเรียก `release_all()` เองตอนจอยหลุด/ปิดแอป — `Drop` เป็นแค่ safety net
 /// ที่พยายามปล่อยให้ (ไม่สน error) และ**รันบน thread ที่ drop injector**
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SendInputInjector {
     held: HeldState,
+    /// เปิด scancode path อัตโนมัติเมื่อ layout เป้าหมายพิมพ์ตัวนั้นได้ (ADR-23)
+    scancode: bool,
+}
+
+impl Default for SendInputInjector {
+    fn default() -> Self {
+        Self {
+            held: HeldState::default(),
+            scancode: true,
+        }
+    }
 }
 
 impl SendInputInjector {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// ปิด/เปิด scancode path (ปิด = Unicode ทุกตัวอักษร เหมือน P3 slice 1)
+    pub fn with_scancode(mut self, enabled: bool) -> Self {
+        self.scancode = enabled;
+        self
     }
 
     /// สถานะที่กดค้างอยู่ (ไว้ debug/HUD)
@@ -89,7 +108,13 @@ impl Drop for SendInputInjector {
 impl Injector for SendInputInjector {
     fn apply(&mut self, action: Action) -> Result<(), InjectError> {
         // query ทุกครั้ง: จอเพิ่ม/ถอด/ย้าย ระหว่างรันแล้วยังถูก
-        let inputs = plan::plan(action, ScreenRect::virtual_desktop());
+        let screen = ScreenRect::virtual_desktop();
+        let chord = if self.scancode {
+            scancode_chord(action)
+        } else {
+            None
+        };
+        let inputs = plan::plan_scancode(action, screen, chord);
         if inputs.is_empty() {
             // Command/SetMode/SetLang/SetLayer/MovePivot/Noop = แอปจัดการเอง
             return Ok(());
@@ -119,8 +144,88 @@ impl Injector for SendInputInjector {
     }
 }
 
-/// ส่ง plan ทั้งก้อนใน `SendInput` ครั้งเดียว (ลำดับภายในคงเดิม)
+/// เลือกใช้ scancode สำหรับ `Key::Char` เมื่อ layout เป้าหมายพิมพ์ตัวนั้นได้
 ///
+/// - Ctrl/Alt chord → คงไว้ที่ plan เดิม (Ctrl+ASCII = VK)
+/// - ตัวอักษรนอก BMP / layout พิมพ์ไม่ได้ → `None` = Unicode fallback
+fn scancode_chord(action: Action) -> Option<ScanChord> {
+    let Action::Key(press) = action else {
+        return None;
+    };
+    if press.ctrl || press.alt {
+        return None;
+    }
+    let Key::Char(ch) = press.key else {
+        return None;
+    };
+    scan_chord_for(ch, foreground_layout())
+}
+
+/// HKL ของ thread ที่เป็นเจ้าของหน้าต่าง foreground (ถ้าไม่มี → thread เรา)
+fn foreground_layout() -> HKL {
+    // SAFETY: API ทั้งคู่อ่านค่าจาก OS เท่านั้น
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if !hwnd.is_null() {
+            let tid = GetWindowThreadProcessId(hwnd, std::ptr::null_mut());
+            if tid != 0 {
+                let hkl = GetKeyboardLayout(tid);
+                if !hkl.is_null() {
+                    return hkl;
+                }
+            }
+        }
+        GetKeyboardLayout(0)
+    }
+}
+
+/// แปลงอักขระเป็น `(scancode, ต้อง Shift?)` ใน layout ที่กำหนด
+///
+/// ใช้ `VkKeyScanExW` (char → VK + shift state) แล้ว `MapVirtualKeyExW` (VK → scan)
+/// คืน `None` เมื่อ layout พิมพ์ตัวนั้นไม่ได้ หรือต้องใช้ Ctrl/AltGr
+fn scan_chord_for(ch: char, hkl: HKL) -> Option<ScanChord> {
+    let code = u32::from(ch);
+    if code > 0xFFFF {
+        return None;
+    }
+    // SAFETY: ทั้งสองฟังก์ชันเป็น query ล้วน ไม่เก็บ pointer
+    unsafe {
+        let mapped = VkKeyScanExW(code as u16, hkl);
+        if mapped == -1 {
+            return None;
+        }
+        let value = mapped as u32;
+        let vk = value & 0xFF;
+        let state = (value >> 8) & 0xFF;
+        if state & 0b110 != 0 {
+            // Ctrl / AltGr chord — ปล่อยให้ Unicode path จัดการ
+            return None;
+        }
+        let scan = MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, hkl) as u16;
+        if scan == 0 {
+            return None;
+        }
+        Some(ScanChord {
+            scan,
+            extended: is_extended_vk(vk as u16),
+            shift: state & 1 != 0,
+        })
+    }
+}
+
+/// VK ที่ต้องส่ง `KEYEVENTF_EXTENDEDKEY` (ปุ่มลูกศร/numpad บางตัว)
+fn is_extended_vk(vk: u16) -> bool {
+    matches!(
+        vk,
+        0x21..=0x28 // PageUp/Down, End, Home, Left, Up, Right, Down
+            | 0x2D | 0x2E // Insert, Delete
+            | 0x6F // Divide
+            | 0x90 // NumLock
+            | 0xA3 | 0xA5 // Right Ctrl, Right Alt
+    )
+}
+
+/// ส่ง plan ทั้งก้อนใน `SendInput` ครั้งเดียว (ลำดับภายในคงเดิม)
 /// คืนจำนวน event ที่ OS รับจริงเมื่อสำเร็จ; ถ้าล้มเหลวคืน `(sent, error)`
 /// เพื่อให้ caller จำ prefix ที่ถูก insert ไปแล้วได้
 fn send(inputs: &[Input]) -> Result<u32, (u32, InjectError)> {
@@ -167,6 +272,24 @@ fn to_win_input(input: &Input) -> INPUT {
                     wVk: code,
                     wScan: 0,
                     dwFlags: keyup_flag(up),
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        },
+        Input::ScanCode {
+            scan,
+            extended,
+            up,
+        } => INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: 0,
+                    wScan: scan,
+                    dwFlags: KEYEVENTF_SCANCODE
+                        | if extended { KEYEVENTF_EXTENDEDKEY } else { 0 }
+                        | keyup_flag(up),
                     time: 0,
                     dwExtraInfo: 0,
                 },
@@ -319,5 +442,96 @@ mod tests {
     #[test]
     fn new_injector_holds_nothing() {
         assert!(SendInputInjector::new().held().is_empty());
+    }
+
+    /* ---------------- P3 slice 2: scancode path ---------------- */
+
+    #[test]
+    fn scancode_input_sets_the_scan_flag() {
+        let down = keyboard(&Input::ScanCode {
+            scan: 0x1E,
+            extended: false,
+            up: false,
+        });
+        assert_eq!(down.wVk, 0);
+        assert_eq!(down.wScan, 0x1E);
+        assert_eq!(down.dwFlags, KEYEVENTF_SCANCODE);
+
+        let up = keyboard(&Input::ScanCode {
+            scan: 0x1E,
+            extended: false,
+            up: true,
+        });
+        assert_eq!(up.dwFlags, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP);
+
+        let extended = keyboard(&Input::ScanCode {
+            scan: 0x4B,
+            extended: true,
+            up: false,
+        });
+        assert_eq!(
+            extended.dwFlags,
+            KEYEVENTF_SCANCODE | KEYEVENTF_EXTENDEDKEY
+        );
+    }
+
+    fn load_layout(id: &str) -> HKL {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::LoadKeyboardLayoutW;
+        let wide: Vec<u16> = id.encode_utf16().chain(std::iter::once(0)).collect();
+        // SAFETY: ส่ง string ที่มี null terminator; ไม่ activate layout
+        unsafe { LoadKeyboardLayoutW(wide.as_ptr(), 0) }
+    }
+
+    #[test]
+    fn scan_chord_maps_english_letters_and_shift() {
+        let en = load_layout("00000409");
+        if en.is_null() {
+            return; // เครื่องนี้โหลด layout EN ไม่ได้ — ข้าม (ไม่ใช่ failure ของ logic)
+        }
+        let upper = scan_chord_for('A', en).expect("EN ต้องพิมพ์ A ได้");
+        assert_eq!(upper.shift, true);
+        assert_eq!(upper.scan, 0x1E, "A = physical key ที่ scan 0x1E");
+
+        let lower = scan_chord_for('a', en).expect("EN ต้องพิมพ์ a ได้");
+        assert_eq!(lower.shift, false);
+        assert_eq!(lower.scan, upper.scan);
+    }
+
+    #[test]
+    fn scan_chord_respects_the_target_layout() {
+        let en = load_layout("00000409");
+        let th = load_layout("0000041E");
+        if en.is_null() || th.is_null() {
+            return;
+        }
+        // ไทย 'ก' มีใน layout ไทย แต่ไม่มีใน EN → fallback Unicode เมื่อเป้าหมายเป็น EN
+        assert!(scan_chord_for('ก', th).is_some());
+        assert_eq!(scan_chord_for('ก', en), None);
+    }
+
+    #[test]
+    fn foreground_layout_is_always_available() {
+        assert!(!foreground_layout().is_null());
+    }
+
+    #[test]
+    fn scancode_is_not_used_for_ctrl_chords_or_named_keys() {
+        use rnitype_core::{Key as CoreKey, KeyPress};
+
+        let ctrl_c = Action::Key(KeyPress {
+            key: CoreKey::Char('c'),
+            shift: false,
+            ctrl: true,
+            alt: false,
+        });
+        assert_eq!(scancode_chord(ctrl_c), None);
+
+        let tab = Action::Key(KeyPress {
+            key: CoreKey::Named(rnitype_core::NamedKey::Tab),
+            shift: false,
+            ctrl: false,
+            alt: false,
+        });
+        assert_eq!(scancode_chord(tab), None);
     }
 }

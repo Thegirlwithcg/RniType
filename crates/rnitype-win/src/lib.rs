@@ -9,6 +9,8 @@
 use rnitype_core::Action;
 
 pub mod plan;
+pub mod target;
+pub mod timer;
 
 #[cfg(windows)]
 mod sendinput;

@@ -54,6 +54,8 @@ struct Options {
     fake_pad: bool,
     /// log ค่าจอยทุก 250 ms (ใช้หาสาเหตุว่าจอยส่งค่าอะไรเข้ามา)
     pad_log: bool,
+    /// บังคับ Unicode path (ปิด scancode auto) — ใช้เมื่อเกม/IME มีปัญหา
+    no_scancode: bool,
 }
 
 impl Default for Options {
@@ -64,6 +66,7 @@ impl Default for Options {
             settings: false,
             fake_pad: false,
             pad_log: false,
+            no_scancode: false,
         }
     }
 }
@@ -181,6 +184,7 @@ fn parse_options() -> Options {
             "--settings" => options.settings = true,
             "--fake-pad" => options.fake_pad = true,
             "--pad-log" => options.pad_log = true,
+            "--no-scancode" => options.no_scancode = true,
             "--seconds" => {
                 if let Some(value) = args.next() {
                     match value.parse::<u64>() {
@@ -200,7 +204,7 @@ fn parse_options() -> Options {
             }
             "--help" | "-h" => {
                 println!(
-                    "[app] usage: rnitype-app [--demo] [--fake-pad] [--pad-log] [--settings] [--seconds N]"
+                    "[app] usage: rnitype-app [--demo] [--fake-pad] [--pad-log] [--settings] [--no-scancode] [--seconds N]"
                 );
             }
             other => eprintln!("[app] ไม่รู้จักตัวเลือก: {other:?}"),
@@ -429,7 +433,15 @@ fn spawn_runtime(
     let handle = app.clone();
     let fake_pad = options.fake_pad;
     let pad_log = options.pad_log;
+    let no_scancode = options.no_scancode;
     std::thread::spawn(move || {
+        // 250 Hz ต้องใช้ sleep ละเอียด 1 ms (Windows ปกติ ~15 ms)
+        let timer = rnitype_win::timer::TimerResolution::new(1);
+        println!(
+            "[timer] 1 ms resolution: {}",
+            if timer.is_active() { "เปิด" } else { "ไม่สำเร็จ (loop จะหยาบขึ้น)" }
+        );
+        let _timer = timer;
         let source: Box<dyn PadSource> = if fake_pad {
             println!("[pad] ใช้จอยปลอม (--fake-pad) — ⚠ จะพิมพ์ลงหน้าต่างที่ focus อยู่ตอนนี้");
             Box::new(ScriptSource::typing_script(&[
@@ -450,7 +462,15 @@ fn spawn_runtime(
         };
 
         let config = handle.state::<AppState>().config.lock().unwrap().clone();
-        let mut session = build_session(&config, desktop);
+        let mut session = build_session(&config, desktop, no_scancode);
+        println!(
+            "[inject] key path: {}",
+            if no_scancode {
+                "Unicode (บังคับด้วย --no-scancode)"
+            } else {
+                "auto: scancode เมื่อ layout เป้าหมายพิมพ์ได้ · Unicode fallback"
+            }
+        );
         println!(
             "[pad] พร้อม: {} · language={:?} · languages={:?}",
             if source.name().is_empty() { "ยังไม่พบจอย" } else { "ต่อแล้ว" },
@@ -463,7 +483,7 @@ fn spawn_runtime(
 }
 
 /// สร้าง engine + session จาก config (`defaults.typing`, `languages`)
-fn build_session(config: &Value, desktop: (i32, i32, u32, u32)) -> Session {
+fn build_session(config: &Value, desktop: (i32, i32, u32, u32), no_scancode: bool) -> Session {
     let typing = config.get("defaults").and_then(|d| d.get("typing"));
     let dwell = typing
         .and_then(|t| t.get("commitDwellMs"))
@@ -486,7 +506,13 @@ fn build_session(config: &Value, desktop: (i32, i32, u32, u32)) -> Session {
     let (px, py) = primary_monitor_center();
 
     // pivot/pointer home = กลางจอหลัก (RS click ใน Mouse/Nav = กลับมาที่นี่)
-    let mut session = Session::with_homes(engine, make_injector(), enabled, (px, py), (px, py));
+    let mut session = Session::with_homes(
+        engine,
+        make_injector(no_scancode),
+        enabled,
+        (px, py),
+        (px, py),
+    );
     // HUD เริ่มที่ตำแหน่ง pointer จริง ไม่ใช่กลางจอ (กันจุด pointer เพี้ยนทั้ง session)
     if let Some(position) = rnitype_win::cursor_position() {
         session.set_pointer(position);
@@ -528,12 +554,12 @@ fn enabled_languages(config: &Value) -> Vec<Lang> {
 }
 
 #[cfg(windows)]
-fn make_injector() -> Box<dyn Injector + Send> {
-    Box::new(rnitype_win::SendInputInjector::new())
+fn make_injector(no_scancode: bool) -> Box<dyn Injector + Send> {
+    Box::new(rnitype_win::SendInputInjector::new().with_scancode(!no_scancode))
 }
 
 #[cfg(not(windows))]
-fn make_injector() -> Box<dyn Injector + Send> {
+fn make_injector(_no_scancode: bool) -> Box<dyn Injector + Send> {
     Box::new(rnitype_win::NullInjector::default())
 }
 
@@ -557,6 +583,11 @@ fn run_loop(
     let mut last_json = String::new();
     let mut had_pad = false;
     let mut was_paused = false;
+    let own_elevated = rnitype_win::target::own_elevated();
+    let mut last_guard_ms = 0u64;
+    if own_elevated {
+        println!("[guard] แอปรันแบบ admin — UIPI guard จะไม่บล็อกหน้าต่าง elevated");
+    }
 
     loop {
         let now = start.elapsed().as_millis() as u64;
@@ -570,10 +601,40 @@ fn run_loop(
                 if paused { "พักการพิมพ์ (tray)" } else { "กลับมาพิมพ์" }
             );
             if paused {
-                session.release_all();
-                session.on_pad_lost();
+                session.pause();
+            } else {
+                session.unpause();
             }
             was_paused = paused;
+        }
+
+        // exclusion list / UIPI — ตรวจทุก 250 ms (ไม่ต้อง query process token ทุกเฟรม 250 Hz)
+        if now.saturating_sub(last_guard_ms) >= 250 {
+            last_guard_ms = now;
+            let exclusion = {
+                let app_state = handle.state::<AppState>();
+                let config = app_state.config.lock().unwrap();
+                config::exclusion_list(&config)
+            };
+            let target = rnitype_win::target::foreground_target();
+            let reason =
+                rnitype_win::target::guard_reason(target.as_ref(), &exclusion, own_elevated);
+            if reason != session.guard() {
+                match reason {
+                    Some(rnitype_win::target::BlockReason::Exclusion) => println!(
+                        "[guard] หยุดส่งคีย์: {} อยู่ใน exclusion list",
+                        target
+                            .as_ref()
+                            .and_then(|target| target.exe.clone())
+                            .unwrap_or_default()
+                    ),
+                    Some(rnitype_win::target::BlockReason::AdminRequired) => {
+                        println!("[guard] หยุดส่งคีย์: หน้าต่างเป้าหมาย elevated — รันแอปแบบ admin")
+                    }
+                    None => println!("[guard] กลับมาส่งคีย์ได้"),
+                }
+                session.set_guard(reason);
+            }
         }
 
         let sample = source.sample(now);
@@ -628,8 +689,10 @@ fn run_loop(
             );
         }
 
-        for action in session.step(&pad, dt) {
-            log_action(&action);
+        if session.guard().is_none() {
+            for action in session.step(&pad, dt) {
+                log_action(&action);
+            }
         }
 
         // HUD ≤ 60 Hz และเฉพาะเมื่อ payload เปลี่ยน (ipc.md §1)

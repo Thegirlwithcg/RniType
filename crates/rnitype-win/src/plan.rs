@@ -50,6 +50,12 @@ pub enum Input {
         vk: u16,
         up: bool,
     },
+    /// คีย์จริงผ่าน scancode (`KEYEVENTF_SCANCODE`) — ให้เกม/IME เห็นเหมือนพิมพ์จริง
+    ScanCode {
+        scan: u16,
+        extended: bool,
+        up: bool,
+    },
     /// เมาส์ relative (`MOUSEEVENTF_MOVE`)
     MouseMove {
         dx: i32,
@@ -80,6 +86,13 @@ impl Input {
         match *self {
             Input::Unicode { unit, .. } => Some(Input::Unicode { unit, up: true }),
             Input::VirtualKey { vk, .. } => Some(Input::VirtualKey { vk, up: true }),
+            Input::ScanCode {
+                scan, extended, ..
+            } => Some(Input::ScanCode {
+                scan,
+                extended,
+                up: true,
+            }),
             Input::MouseButton { button, .. } => Some(Input::MouseButton {
                 button,
                 down: false,
@@ -165,6 +178,51 @@ pub fn plan(action: Action, screen: ScreenRect) -> Vec<Input> {
         | Action::ResetPivot
         | Action::Noop => {}
     }
+    out
+}
+
+/// scancode ที่ต้องใช้เพื่อให้ได้อักขระ 1 ตัวใน layout เป้าหมาย
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ScanChord {
+    pub scan: u16,
+    pub extended: bool,
+    /// ต้องกด Shift ค้างด้วยหรือไม่ (ตัวพิมพ์ใหญ่/สัญลักษณ์)
+    pub shift: bool,
+}
+
+/// เหมือน [`plan`] แต่ถ้าเป็น `Key::Char` และมี [`ScanChord`] จะใช้ scancode path
+///
+/// `chord = None` = layout เป้าหมายพิมพ์ตัวนั้นไม่ได้ → fallback Unicode ตามเดิม
+pub fn plan_scancode(action: Action, screen: ScreenRect, chord: Option<ScanChord>) -> Vec<Input> {
+    let Some(chord) = chord else {
+        return plan(action, screen);
+    };
+    let Action::Key(press) = action else {
+        return plan(action, screen);
+    };
+    if !matches!(press.key, Key::Char(_)) {
+        return plan(action, screen);
+    }
+
+    let mods = KeyPress {
+        key: press.key,
+        shift: press.shift || chord.shift,
+        ctrl: press.ctrl,
+        alt: press.alt,
+    };
+    let mut out = Vec::with_capacity(4);
+    push_modifiers(&mut out, mods, true);
+    out.push(Input::ScanCode {
+        scan: chord.scan,
+        extended: chord.extended,
+        up: false,
+    });
+    out.push(Input::ScanCode {
+        scan: chord.scan,
+        extended: chord.extended,
+        up: true,
+    });
+    push_modifiers(&mut out, mods, false);
     out
 }
 
@@ -317,7 +375,9 @@ impl HeldState {
     pub(crate) fn track(&mut self, plan: &[Input]) {
         for input in plan {
             match *input {
-                Input::Unicode { up, .. } | Input::VirtualKey { up, .. } => {
+                Input::Unicode { up, .. }
+                | Input::VirtualKey { up, .. }
+                | Input::ScanCode { up, .. } => {
                     if up {
                         if let Some(pos) = self.keys.iter().rposition(|held| same_key(held, input))
                         {
@@ -370,6 +430,18 @@ fn same_key(a: &Input, b: &Input) -> bool {
     match (a, b) {
         (Input::Unicode { unit: a, .. }, Input::Unicode { unit: b, .. }) => a == b,
         (Input::VirtualKey { vk: a, .. }, Input::VirtualKey { vk: b, .. }) => a == b,
+        (
+            Input::ScanCode {
+                scan: a,
+                extended: a_ext,
+                ..
+            },
+            Input::ScanCode {
+                scan: b,
+                extended: b_ext,
+                ..
+            },
+        ) => a == b && a_ext == b_ext,
         _ => false,
     }
 }
@@ -602,6 +674,117 @@ mod tests {
                     up: true
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn plan_scancode_uses_the_chord_and_wraps_required_shift() {
+        let chord = ScanChord {
+            scan: 0x1E,
+            extended: false,
+            shift: false,
+        };
+        assert_eq!(
+            plan_scancode(tap(Key::Char('a'), false, false), full_hd(), Some(chord)),
+            vec![
+                Input::ScanCode {
+                    scan: 0x1E,
+                    extended: false,
+                    up: false
+                },
+                Input::ScanCode {
+                    scan: 0x1E,
+                    extended: false,
+                    up: true
+                },
+            ]
+        );
+
+        // ตัวพิมพ์ใหญ่: chord ต้อง Shift แม้ KeyPress.shift = false
+        let upper = ScanChord {
+            shift: true,
+            ..chord
+        };
+        assert_eq!(
+            plan_scancode(tap(Key::Char('A'), false, false), full_hd(), Some(upper)),
+            vec![
+                Input::VirtualKey {
+                    vk: vk::SHIFT,
+                    up: false
+                },
+                Input::ScanCode {
+                    scan: 0x1E,
+                    extended: false,
+                    up: false
+                },
+                Input::ScanCode {
+                    scan: 0x1E,
+                    extended: false,
+                    up: true
+                },
+                Input::VirtualKey {
+                    vk: vk::SHIFT,
+                    up: true
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn plan_scancode_falls_back_to_unicode_without_a_chord() {
+        assert_eq!(
+            plan_scancode(tap(Key::Char('ก'), false, false), full_hd(), None),
+            vec![
+                Input::Unicode {
+                    unit: 0x0E01,
+                    up: false
+                },
+                Input::Unicode {
+                    unit: 0x0E01,
+                    up: true
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn plan_scancode_ignores_chords_for_named_keys() {
+        let chord = ScanChord {
+            scan: 0x1E,
+            extended: false,
+            shift: false,
+        };
+        assert_eq!(
+            plan_scancode(tap(Key::Named(NamedKey::Tab), false, false), full_hd(), Some(chord)),
+            vec![
+                Input::VirtualKey {
+                    vk: vk::TAB,
+                    up: false
+                },
+                Input::VirtualKey {
+                    vk: vk::TAB,
+                    up: true
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn held_state_tracks_scancode_keys() {
+        let press = Input::ScanCode {
+            scan: 0x1E,
+            extended: false,
+            up: false,
+        };
+        let mut held = HeldState::default();
+        held.track(&[press]);
+        assert_eq!(
+            held.release_plan(),
+            vec![Input::ScanCode {
+                scan: 0x1E,
+                extended: false,
+                up: true
+            }]
         );
     }
 

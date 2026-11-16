@@ -18,6 +18,7 @@ use rnitype_core::{
     Action, Command, GestureState, Key, KeyPress, Lang, Mode, MouseButton, PadState, QuickAction,
 };
 use rnitype_win::Injector;
+use rnitype_win::target::BlockReason;
 use serde_json::{Value, json};
 
 /// ค่าที่ HUD ต้องใช้แต่ไม่ใช่ state ของ engine (มาจาก config)
@@ -50,6 +51,10 @@ pub struct Session {
     pointer_home: (f32, f32),
     /// ขอบเขต pivot ที่ปลอดภัย (พิกัดหน้าจอ) — `None` = ไม่จำกัด
     pivot_clamp: Option<((f32, f32), (f32, f32))>,
+    /// เหตุผลที่หยุดส่ง input ชั่วคราว (exclusion / UIPI) — HUD แสดงเป็น `disabled`
+    guard: Option<BlockReason>,
+    /// mode ที่ต้องกลับไปหลังพักจาก tray
+    paused_mode: Option<Mode>,
     /// จำนวนคีย์ที่ส่งออกแล้ว (log/สถิติ)
     sent: u32,
 }
@@ -83,6 +88,8 @@ impl Session {
             pointer: pointer_home,
             pointer_home,
             pivot_clamp: None,
+            guard: None,
+            paused_mode: None,
             sent: 0,
         };
         session.refresh_languages();
@@ -116,6 +123,52 @@ impl Session {
                 (point.0.clamp(minx, maxx), point.1.clamp(miny, maxy))
             }
             None => point,
+        }
+    }
+
+    /// ตั้ง/ล้าง guard จาก exclusion list หรือ UIPI (ADR-24)
+    ///
+    /// - เข้า guard: ปล่อยทุกอย่างที่ค้าง + ยกเลิก gesture (ไม่แตะ mode เดิม)
+    /// - ออก guard: ยกเลิก gesture อีกครั้ง เพื่อบังคับให้ปล่อย LS ก่อนพิมพ์ต่อ
+    pub fn set_guard(&mut self, reason: Option<BlockReason>) {
+        if reason.is_some() && self.guard.is_none() {
+            self.release_all();
+            let mode = self.engine.mode();
+            if mode != Mode::Disabled {
+                self.engine.set_mode(mode);
+            }
+        } else if reason.is_none() && self.guard.is_some() {
+            let mode = self.engine.mode();
+            if mode != Mode::Disabled {
+                self.engine.set_mode(mode);
+            }
+        }
+        self.guard = reason;
+    }
+
+    pub fn guard(&self) -> Option<BlockReason> {
+        self.guard
+    }
+
+    /// พักการพิมพ์ (tray): จำ mode เดิมไว้แล้วเข้า `Disabled`
+    ///
+    /// ถ้าถูกปิดด้วย emergency อยู่แล้ว (`disabled_remaining_ms > 0`) จะไม่รีเซ็ตตัวจับเวลา
+    pub fn pause(&mut self) {
+        self.release_all();
+        let mode = self.engine.mode();
+        if mode != Mode::Disabled {
+            self.paused_mode = Some(mode);
+            self.engine.set_mode(Mode::Disabled);
+        }
+    }
+
+    /// กลับมาพิมพ์หลังพัก — คืน mode เดิม
+    pub fn unpause(&mut self) {
+        if let Some(mode) = self.paused_mode.take() {
+            self.engine.set_mode(mode);
+        } else if self.engine.mode() == Mode::Disabled && self.engine.disabled_remaining_ms() == 0
+        {
+            self.engine.set_mode(Mode::Type);
         }
     }
 
@@ -267,17 +320,29 @@ impl Session {
     pub fn hud_state(&self, style: HudStyle, origin: (i32, i32)) -> Value {
         let engine = &self.engine;
         let lang = engine.lang();
-        let caret = engine.caret_active();
-        let mode = hud_mode(engine.mode(), engine.wheel(), lang, caret);
+        let blocked = self.guard.is_some();
+        let caret = engine.caret_active() && !blocked;
+        let mode = if blocked {
+            "disabled"
+        } else {
+            hud_mode(engine.mode(), engine.wheel(), lang, caret)
+        };
 
         let group = engine.typing_group();
         let sector = engine.typing_sector();
-        let typing = engine.mode() == Mode::Type && engine.wheel().is_none() && !caret;
+        let typing = engine.mode() == Mode::Type && engine.wheel().is_none() && !caret && !blocked;
         let shift_lock = engine.shift_lock();
         let layer = engine.layer();
         let repeating = engine.gesture_state() == GestureState::Repeating;
 
-        let (inner, outer) = self.rings(mode, lang, group, sector, typing, layer);
+        let (inner, outer) = if blocked {
+            (
+                json!({ "kind": "none", "active": -1, "labels": [] }),
+                json!({ "kind": "none", "active": -1, "labels": [] }),
+            )
+        } else {
+            self.rings(mode, lang, group, sector, typing, layer)
+        };
         let preview = if typing {
             match (group, sector) {
                 (Some(g), Some(s)) => lookup_layer(lang, layer, g, s)
@@ -289,7 +354,9 @@ impl Session {
             String::new()
         };
         // ADR-13: ล็อกตัวใหญ่แล้ว pill ต้องบอก (HUD แสดงเป็นข้อความใน pill)
-        let status_text = if caret {
+        let status_text = if let Some(reason) = self.guard {
+            guard_text(reason)
+        } else if caret {
             if engine.caret_selecting() {
                 "เลือกข้อความ"
             } else {
@@ -335,7 +402,7 @@ impl Session {
             "pointer": {
                 "x": f64::from(self.pointer.0) - f64::from(origin.0),
                 "y": f64::from(self.pointer.1) - f64::from(origin.1),
-                "visible": engine.mode() == Mode::Mouse,
+                "visible": engine.mode() == Mode::Mouse && !blocked,
             },
             "status": { "text": status_text, "badges": badges },
         })
@@ -419,8 +486,15 @@ impl Session {
     }
 }
 
-fn shortcut(ch: char) -> Action {
-    Action::Key(KeyPress {
+/// ข้อความใน pill เมื่อถูก guard — HUD `disabled` ต้องบอกเหตุผล (spec)
+fn guard_text(reason: BlockReason) -> &'static str {
+    match reason {
+        BlockReason::Exclusion => "แอปนี้อยู่ในรายการกัน",
+        BlockReason::AdminRequired => "ต้องรันแบบ admin",
+    }
+}
+
+fn shortcut(ch: char) -> Action {    Action::Key(KeyPress {
         key: Key::Char(ch),
         shift: false,
         ctrl: true,
@@ -527,11 +601,19 @@ mod tests {
 
     /// injector ที่เก็บ action ไว้ให้ test อ่าน (ข้าม injector จริง)
     #[derive(Clone, Default)]
-    struct SharedInjector(Arc<Mutex<Vec<Action>>>);
+    struct SharedInjector {
+        sent: Arc<Mutex<Vec<Action>>>,
+        releases: Arc<Mutex<u32>>,
+    }
 
     impl Injector for SharedInjector {
         fn apply(&mut self, action: Action) -> Result<(), rnitype_win::InjectError> {
-            self.0.lock().unwrap().push(action);
+            self.sent.lock().unwrap().push(action);
+            Ok(())
+        }
+
+        fn release_all(&mut self) -> Result<(), rnitype_win::InjectError> {
+            *self.releases.lock().unwrap() += 1;
             Ok(())
         }
     }
@@ -579,7 +661,7 @@ mod tests {
         let actions = type_char(&mut session, (0.0, 0.9), (0.0, 0.9));
         assert_eq!(actions.len(), 1, "ต้องส่ง 1 คีย์: {actions:?}");
         assert_eq!(
-            *shared.0.lock().unwrap(),
+            *shared.sent.lock().unwrap(),
             vec![Action::Key(KeyPress {
                 key: Key::Char('a'),
                 shift: false,
@@ -843,7 +925,7 @@ mod tests {
         assert_eq!(hud["pointer"]["visible"], true);
         assert!(
             shared
-                .0
+                .sent
                 .lock()
                 .unwrap()
                 .contains(&Action::MouseMoveAbs { x: 1000, y: 500 })
@@ -1047,5 +1129,92 @@ mod tests {
         let hud = session.hud_state(HudStyle::default(), (0, 0));
         assert_eq!(hud["pivot"]["x"], 300.0);
         assert_eq!(hud["pivot"]["y"], 200.0);
+    }
+
+    /* ---------------- P3 slice 2: guard / pause ---------------- */
+
+    #[test]
+    fn exclusion_guard_shows_disabled_with_reason_and_keeps_engine_mode() {
+        let (mut session, _) = session();
+        switch_mode(&mut session, (0.9, 0.0));
+        assert_eq!(session.engine().mode(), Mode::Mouse);
+
+        session.set_guard(Some(BlockReason::Exclusion));
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["mode"], "disabled");
+        assert_eq!(hud["status"]["text"], "แอปนี้อยู่ในรายการกัน");
+        assert_eq!(hud["inner"]["kind"], "none");
+        assert_eq!(hud["outer"]["kind"], "none");
+        assert_eq!(hud["pointer"]["visible"], false);
+        // engine ยังจำ mode เดิมไว้ (กลับมาแล้วทำงานต่อได้)
+        assert_eq!(session.engine().mode(), Mode::Mouse);
+
+        session.set_guard(None);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["mode"], "mouse");
+        assert_eq!(hud["status"]["text"], "");
+    }
+
+    #[test]
+    fn admin_required_guard_uses_its_own_message() {
+        let (mut session, _) = session();
+        session.set_guard(Some(BlockReason::AdminRequired));
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["mode"], "disabled");
+        assert_eq!(hud["status"]["text"], "ต้องรันแบบ admin");
+    }
+
+    #[test]
+    fn entering_guard_releases_held_mouse_buttons() {
+        let (mut session, shared) = session();
+        switch_mode(&mut session, (0.9, 0.0));
+        // แตะ RB 2 ครั้ง = ล็อกปุ่มซ้ายค้าง
+        let mut rb = pad((0.0, 0.0), (0.0, 0.0));
+        rb.buttons.rb = true;
+        session.step(&rb, 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+        session.step(&rb, 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+        assert!(session.engine().sticky_drag());
+
+        session.set_guard(Some(BlockReason::Exclusion));
+        assert!(
+            *shared.releases.lock().unwrap() >= 1,
+            "เข้า guard ต้องเรียก release_all ปล่อยปุ่มที่ค้าง"
+        );
+    }
+
+    #[test]
+    fn pause_remembers_the_mode_and_unpause_restores_it() {
+        let (mut session, _) = session();
+        switch_mode(&mut session, (0.9, 0.0));
+        assert_eq!(session.engine().mode(), Mode::Mouse);
+
+        session.pause();
+        assert_eq!(session.engine().mode(), Mode::Disabled);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["mode"], "disabled");
+
+        session.unpause();
+        assert_eq!(session.engine().mode(), Mode::Mouse);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["mode"], "mouse");
+    }
+
+    #[test]
+    fn pause_during_emergency_does_not_clear_the_deadman_timer() {
+        let (mut session, _) = session();
+        let mut both = pad((0.0, 0.0), (0.0, 0.0));
+        both.buttons.lb = true;
+        both.buttons.rb = true;
+        for _ in 0..16 {
+            session.step(&both, 100);
+        }
+        assert_eq!(session.engine().mode(), Mode::Disabled);
+        let before = session.engine().disabled_remaining_ms();
+        assert!(before > 0);
+
+        session.pause();
+        assert_eq!(session.engine().disabled_remaining_ms(), before);
     }
 }

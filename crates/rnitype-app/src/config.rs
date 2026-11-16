@@ -109,6 +109,24 @@ pub fn hud_opacity(config: &Value) -> f64 {
         .unwrap_or(0.92)
 }
 
+/// รายการ exe ที่ห้ามส่งคีย์ (`system.exclusion`) — trim และตัดค่าว่าง
+pub fn exclusion_list(config: &Value) -> Vec<String> {
+    config
+        .get("system")
+        .and_then(|system| system.get("exclusion"))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// settings ของ HUD ที่ถูกต้อง (ใช้ตอน save) — คืน error แบบ ipc.md
 pub fn validate_ui(config: &Value) -> Result<(), String> {
     let ui = config
@@ -223,5 +241,14 @@ mod tests {
             assert!(config.get(key).is_some(), "ขาด key {key}");
         }
         assert_eq!(config["version"], 1);
+    }
+
+    #[test]
+    fn exclusion_list_reads_and_cleans_the_config() {
+        assert!(exclusion_list(&json!({})).is_empty());
+        let list = exclusion_list(&json!({
+            "system": { "exclusion": [" game.exe ", "", "C:\\x\\tool.exe"] }
+        }));
+        assert_eq!(list, vec!["game.exe", "C:\\x\\tool.exe"]);
     }
 }
