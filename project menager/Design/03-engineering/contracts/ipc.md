@@ -2,6 +2,7 @@
 
 > P1 freeze · version 1 · 2026-11-15
 > v1.1 (2026-11-15) — เพิ่ม `hud:style` (event) + `hud_style` (command) สำหรับ typography · additive ไม่แตะ payload เดิม (ADR-16)
+> v1.2 (2026-11-16) — ระบุรูปแถวของ `rescan_languages` / `set_language_enabled` และ `get_status` ที่ P5 slice 2 ใช้ (additive, ADR-25)
 > ไฟล์นี้คือสัญญาที่ P3 (runtime), P4 (HUD), P5 (Settings) ต้องยึด
 > เปลี่ยนชื่อ/รูป payload = ต้อง bump `version` และแจ้ง lead
 
@@ -37,7 +38,7 @@
 | `get_config` | — | `Config` |
 | `save_config` | `{ config: Config }` | `{ ok: true, data: Config }` (validate ก่อนเขียน + backup) |
 | `reset_config` | `{ section: "all"\|"general"\|"languages"\|"keymap"\|"hud" }` | `Config` ใหม่ |
-| `rescan_languages` | — | `{ code, label, kind }[]` |
+| `rescan_languages` | — | `LanguageRow[]` (ดู §5) |
 | `set_language_enabled` | `{ code: string, enabled: bool }` | `Config` |
 | `set_keymap_cell` | `{ lang: string, layer: u8, group: u8, sector: u8, text: string }` | `Config` |
 | `export_profile` | — | `{ path, json }` |
@@ -90,6 +91,38 @@ Settings ──invoke save_config──▶ app ──validate──▶ config.js
 ```json
 { "ok": false, "error": { "code": "CONFIG_INVALID", "message": "keymaps.en.layers[0].cells ต้องมี 64 ช่อง" } }
 ```
+
+### `rescan_languages` → `LanguageRow`
+
+```json
+{
+  "code": "th",
+  "klid": "0000041E",
+  "label": "Thai (Thailand)",
+  "kind": "layout",
+  "detected": true,
+  "builtin": false,
+  "supported": true,
+  "enabled": true,
+  "locked": false
+}
+```
+
+| field | ความหมาย |
+| --- | --- |
+| `code` | รหัสภาษาหลัก (`en`, `th`, `ja`, …) |
+| `klid` | layout id ของ Windows (`00000409`); ว่างเมื่อเป็น built-in ที่ไม่ได้ติดตั้ง |
+| `kind` | `layout` \| `ime` |
+| `detected` | มี layout นี้ใน Windows |
+| `builtin` | EN/TH มีตาราง 8×8 ในแอป — แสดงเสมอ |
+| `supported` | พิมพ์ได้จริงตอนนี้ (EN/TH) |
+| `enabled` | เปิดใน Language wheel |
+| `locked` | EN = base ปิดไม่ได้ |
+
+### `app:status` — เพิ่ม `get_status` / `set_paused`
+
+`get_status` คืน payload เดียวกับ event `app:status` · `set_paused { paused }` คืน payload นั้น
+หลังเปลี่ยน (Settings ใช้แทนการคลิก tray)
 
 ## 6. Error codes
 

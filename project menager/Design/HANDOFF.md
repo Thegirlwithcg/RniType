@@ -1,11 +1,11 @@
 ---
 title: HANDOFF — RniType (อ่านก่อนเริ่ม session ใหม่)
-status: v0.8
+status: v0.9
 updated: 2026-11-16
 tags: [handoff]
 ---
 
-# HANDOFF — RniType v0.8 (2026-11-16)
+# HANDOFF — RniType v0.9 (2026-11-16)
 
 > เอกสารนี้ทำให้ session ใหม่ทำงานต่อได้ใน \~5 นาที · อ่านจบ = รู้ทุกอย่างที่จำเป็น
 
@@ -15,11 +15,11 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · visual refresh (ADR-22) · P4/P5 slice 1 · runtime จอยจริงต่อได้และพิมพ์ได้ — 188 tests** |
+| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · P4/P5 slice 1–2 · visual refresh (ADR-22) · runtime จอยจริงพิมพ์ได้ — 201 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, XInput) + `SendInput` (auto scancode/Unicode) |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
-| งานถัดไป | **P5 Settings** (General/Languages/Keymap + exclusion UI) หรือ **P6** วัด WPM/latency |
-| ค้างยืนยัน | owner retest ADR-20 (UI ค้างจอ) + quick bar/caret/sticky drag + **exclusion guard/scancode บนแอปจริง** — ดู §4.8 |
+| งานถัดไป | **P5 Keymap editor** (ต้อง universal QWERTY mapping) หรือ **P6** วัด WPM/latency/installer |
+| ค้างยืนยัน | owner retest ADR-20 + quick bar/caret/sticky drag + exclusion/scancode + **Settings General/Languages บนแอปจริง** — ดู §4.8 |
 
 ## 2. การตัดสินใจที่ล็อกแล้ว (ห้ามถามซ้ำ)
 
@@ -45,6 +45,7 @@ tags: [handoff]
 21. **Visual language (ADR-22)**: accent เดียว **Apple blue `#0A84FF`** · mode = Type blue / Mouse orange / Nav purple · HUD = แผ่นทึบ `.88` + ขอบสองชั้น **ไม่มี `backdrop-filter`** · active wedge = fill + stroke 2px + dim อื่น **0 ms** · pill 28px + dot สีโหมด + idle 3 วิ · Settings = sidebar 200px + inset group (760×640) · motion 80/140 ms + reduced-motion — [[05-visual-language]] · [[22-visual-refresh-apple-style]]
 22. **P2 slice 4 (ADR-23)**: **Quick bar = LB ค้าง 150 ms** (แตะสั้นไม่เปิด · ปล่อย LB = ปิด · ดัน LS = ปิดแล้วพิมพ์ Ctrl+ตัวอักษร) ช่อง ↑Copy ↗Paste →Cut ↘Undo ↓Redo ↙Select All ←Save ↖Alt+Tab · **caret = R3** (RS = ลูกศร 350/90 ms · R3×2 < 280 ms = Shift+ลูกศร · ไม่มีวง เหลือกากบาท) · **sticky drag = RB 2 แตะ** ใน Mouse (แตะอีกครั้ง = ปล่อย; session ปล่อยปุ่มให้เมื่อสลับ mode) · **pivot clamp ฝั่งแอป** margin 172×`hudScale` จากขอบ virtual desktop · `KeyPress` มี `alt` แล้ว — [[23-quickbar-caret-sticky-drag-pivot-clamp]]
 23. **P3 slice 2 (ADR-24)**: **exclusion/UIPI guard** ตรวจ foreground ทุก 250 ms → exe ใน `system.exclusion` หรือ target elevated → หยุด `session.step`, HUD `disabled` + เหตุผล, กลับมาเป็น mode เดิม · **scancode path อัตโนมัติ** (`VkKeyScanExW` + `MapVirtualKeyExW` ตาม HKL ของ foreground) → เกม/IME เห็นเหมือนคีย์บอร์ดจริง, พิมพ์ไม่ได้ = Unicode fallback, `--no-scancode` ปิดได้ · **`timeBeginPeriod(1)`** ระหว่างรัน loop — [[24-target-guard-scancode-timer]]
+24. **P5 slice 2 (ADR-25)**: **General** = status (`get_status`/`app:status`) + Pause + **exclusion list UI** · **Languages** = `GetKeyboardLayoutList` → EN/TH built-in แสดงเสมอ, EN = base (locked), ภาษาอื่นต้องมี mapping, เปิดได้ ≤ 8 · **live reload** `config_rev` → runtime เปลี่ยนภาษา/pivot clamp ภายใน 250 ms · Reset แยก section (general/hud/languages/all) — [[25-settings-general-languages-live-reload]]
 
 ## 3. โครงสร้างไฟล์
 
@@ -77,7 +78,8 @@ project menager/
    │  ├─ 21-mouse-nav-repeat-layer2.md ← ADR-21 mouse/Nav math · repeat · layer 2 · double-tap/hold
    │  ├─ 22-visual-refresh-apple-style.md ← ADR-22 tokens/HUD plate/Settings sidebar
    │  ├─ 23-quickbar-caret-sticky-drag-pivot-clamp.md ← ADR-23 quick bar/caret/sticky drag/pivot clamp
-   │  └─ 24-target-guard-scancode-timer.md ← ADR-24 exclusion/UIPI · scancode · 1 ms timer
+   │  ├─ 24-target-guard-scancode-timer.md ← ADR-24 exclusion/UIPI · scancode · 1 ms timer
+   │  └─ 25-settings-general-languages-live-reload.md ← ADR-25 General/Languages · exclusion UI · live reload
    └─ 05-mockup/
       ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (อ้างอิงดีไซน์ ไม่ใช่ของจริง)
       └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings, runtime)
@@ -97,10 +99,11 @@ project menager/
 | `crates/rnitype-win/src/sendinput.rs` | Windows sender: Unicode/VK/**scancode** ของ HKL เป้าหมาย |
 | `crates/rnitype-win/src/target.rs` | foreground exe + elevated (exclusion/UIPI guard) |
 | `crates/rnitype-win/src/timer.rs` | `timeBeginPeriod(1)` แบบ RAII |
+| `crates/rnitype-win/src/language.rs` | `GetKeyboardLayoutList` → code/label/kind (layout vs IME) |
 | `ui/hud/{index.html,hud.css,hud.js}` | HUD จริง — วาดจาก `hud:state` · typography จาก `hud:style` |
-| `ui/settings/*` | Settings window (แท็บ HUD: Text size / Ring size / Font / Reset) |
+| `ui/settings/*` | Settings window — General (status/pause/exclusion) · Languages (rescan) · HUD (size/font) · Reset |
 | `ui/shared/{tokens.css,fonts.css,fonts.js,fonts/*.ttf}` | สี + ฟอนต์ (IBM Plex Sans Thai + Noto Sans Thai + OFL) |
-| `tools/tests/{browser,hud-smoke,hud-typography}.mjs` | ตัวช่วย CDP · 54 checks (ม็อกอัป) · 30 checks (HUD จริง + screenshot) |
+| `tools/tests/{browser,hud-smoke,hud-typography,settings-smoke}.mjs` | CDP · 54 mockup · 36 HUD · 19 Settings checks |
 
 ## 4. สถานะงานและลำดับถัดไป
 
@@ -118,14 +121,14 @@ project menager/
 | Track | ทำแล้ว | เหลือ |
 | --- | --- | --- |
 | P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons + **slice 3: mouse math, Nav pivot, auto-repeat, layer 2, double-tap/hold** + **slice 4: quick bar, caret nav, sticky drag, pivot clamp** (98 tests) | — (P2 ปิด; เหลือแค่ mixed-DPI) |
-| P3 win | SendInput Unicode/VK/mouse + **HWheel** + Ctrl+ASCII→VK + **Alt** + **scancode auto** + **exclusion/UIPI guard** + **1 ms timer** (53 tests) | Settings UI สำหรับ exclusion · Task Scheduler/"Run as admin" (P5/P6) |
+| P3 win | SendInput Unicode/VK/mouse + **HWheel** + Ctrl+ASCII→VK + **Alt** + **scancode auto** + **exclusion/UIPI guard** + **1 ms timer** (56 tests) | Task Scheduler/"Run as admin" (P6) |
 | P4 HUD | renderer ครบ mode + overlay + typography + **visual refresh ADR-22** + **quickbar/caret mode** + `HudState` จริง (+ `layer`/`repeat`/`pointer`) (36 checks) | latency, pivot per-monitor/mixed-DPI |
-| Runtime | `input.rs` + `session.rs` + tray Pause + resend/heartbeat + single instance + **mouse/Nav recenter/reset** + **sticky-drag safety release** + **pivot clamp** + **guard/pause คืน mode เดิม** | ทดสอบ mouse/Nav/quickbar/caret กับจอยจริง |
-| P5 Settings | slice 1: หน้าต่าง + แท็บ HUD + persist config | แท็บ General/Languages/Keymap, rescan HKL, profiles |
+| Runtime | `input.rs` + `session.rs` + tray Pause + resend/heartbeat + single instance + **mouse/Nav recenter/reset** + **sticky-drag safety release** + **pivot clamp** + **guard/pause คืน mode เดิม** + **live config reload** | ทดสอบ mouse/Nav/quickbar/caret กับจอยจริง |
+| P5 Settings | slice 1: หน้าต่าง + HUD tab + persist · slice 2: **General (status/pause/exclusion) + Languages (rescan/enable) + Reset แยกส่วน + live reload** (19 checks) | Keymap editor (รอ universal mapping) · profiles · autostart/runAsAdmin จริง |
 
 ### 4.3 ขั้นถัดไป (เรียง)
 
-1. **P5 Settings ที่เหลือ** — General/Languages/Keymap + **exclusion list UI** + rescan HKL + keymap editor
+1. **P5 Keymap editor** — ต้องทำ universal QWERTY mapping (`ToUnicodeEx`) ใน core ก่อน แล้วค่อยเปิดแท็บ Keymap (8×8 + override + reset group)
 2. **P6** — วัด WPM/latency, ทดสอบคนจริง, installer/Steam/itch, Task Scheduler/"Run as admin"
 3. **P2 ที่เหลือ (เล็ก)** — pivot clamp แบบ per-monitor/mixed-DPI (ตอนนี้ clamp ด้วย virtual desktop เดียว)
 
@@ -140,10 +143,11 @@ crates\rnitype-app\run.ps1 --demo --settings --seconds 30  # HUD จาก state
 ```
 
 ```powershell
-cargo test --workspace                      # 188 tests
+cargo test --workspace                      # 201 tests
 node tools/contracts/validate.mjs           # 12/12
 node tools/tests/hud-smoke.mjs              # 54/54 (ม็อกอัป)
 node tools/tests/hud-typography.mjs         # 36/36 + screenshot
+node tools/tests/settings-smoke.mjs         # 19/19 + screenshot Settings
 ```
 
 - Tray: **คลิกซ้าย = Settings** · คลิกขวา = Pause typing / Settings… / Quit
@@ -201,6 +205,9 @@ node tools/tests/hud-typography.mjs         # 36/36 + screenshot
 11. **Exclusion guard (ADR-24)**: เพิ่ม `"system": { "exclusion": ["notepad.exe"] }` ใน `%APPDATA%\RniType\config.json` → โฟกัส Notepad → pill ต้องเป็น `Paused · แอปนี้อยู่ในรายการกัน` และพิมพ์ไม่ออก · สลับไปหน้าต่างอื่น → กลับมาพิมพ์ได้ mode เดิม
 12. **UIPI (ADR-24)**: เปิด Task Manager (elevated) แล้วโฟกัส → pill `Paused · ต้องรันแบบ admin` · ปิด Task Manager → กลับมาทำงาน
 13. **Timer (ADR-24)**: เปิด `--pad-log` ต้องเห็น `[timer] 1 ms resolution: เปิด` และ `[pad-log]` อัปเดตทุก ~250 ms
+14. **Settings General (ADR-25)**: เปิด Settings → Controller ต้องขึ้นชื่อจอย · ติ๊ก Pause → HUD/pill เป็น Paused · เพิ่ม `notepad.exe` ใน Exclusion → โฟกัส Notepad แล้วพิมพ์ไม่ออก pill บอกเหตุผล · ลบออกแล้วพิมพ์ได้
+15. **Settings Languages (ADR-25)**: เปิดแท็บ Languages → ต้องเห็น EN (Detected/Locked) + TH (Built-in) · ปิด TH → log `[config] runtime reload: languages=0` และวงภาษาไม่มี TH · เปิดกลับ → มี TH
+16. **Reset (ADR-25)**: Reset languages → config `languages: []` (EN/TH กลับมา) · Reset general **ต้องไม่ลบ exclusion** · Reset all คืนทั้งไฟล์
 
 ### 4.9 P2 slice 4 (2026-11-16) — ✅ ปิดแล้ว (ADR-23)
 
@@ -223,6 +230,16 @@ node tools/tests/hud-typography.mjs         # 36/36 + screenshot
 | Bug fix | tray Pause/unpause คืน mode เดิม (เดิม unpause แล้วพิมพ์ต่อไม่ได้) + ไม่รีเซ็ต deadman ระหว่าง emergency |
 | ตัวเลข | cargo **188** (core 98 · win 53 · app 37) · log จริง: `[timer] เปิด`, `[inject] auto scancode`, พิมพ์ไทยผ่าน |
 
+### 4.11 P5 slice 2 (2026-11-16) — ✅ ปิดแล้ว (ADR-25)
+
+| เรื่อง | ผล |
+| --- | --- |
+| General tab | status grid (controller/typing/version) จาก `get_status` + `app:status` · Pause toggle (`set_paused`) · exclusion list เพิ่ม/ลบผ่าน `save_config` · Reset general/all |
+| Languages tab | `language.rs` อ่าน HKL จริง · EN/TH เป็น **built-in** แสดงเสมอ (EN locked = base) · ภาษาอื่น/IME แสดง badge + ปิด toggle จนมี mapping · เปิดได้ ≤ 8 |
+| Live reload | `AppState.config_rev` → loop reload `set_enabled_languages` + pivot clamp ทุก 250 ms · log `[config] runtime reload: languages=N hudScale=X` |
+| Reset | `reset_config { section }` — general ไม่ล้าง exclusion · languages กลับ EN/TH · hud เฉพาะ typography · all = default |
+| ตัวเลข | cargo **201** (core 98 · win 56 · app 47) · settings-smoke **19/19** · E2E WebView จริง: ปิด TH → `languages=0`, เปิด → `languages=1`; exclusion add/remove เขียน config ถูก |
+
 ## 5. คำถามที่ยังค้าง
 
 | # | เรื่อง | ข้อเสนอ |
@@ -237,12 +254,14 @@ Q1, Q2, Q5, Q15, Q16, Q17 = ตัดสินแล้ว
 ## 6. Environment & เคล็ดลับ debug
 
 - vault = `D:\Erin's Works\Programming\RniType` — เขียนเฉพาะในนี้ · MCP `nizylanote` เรียก `vault_info` ก่อนเขียน
-- **Git**: commit ก่อน session นี้ `9fb6c4d` (handoff v0.7) · P3 slice 2 = `10d4db4` · commit งานเป็นชุด `feat(...)` + `docs(...)` (`.nznote/`, `.opencode/` ถูก ignore)
+- **Git**: commit ก่อน session นี้ `4cba441` (handoff v0.8) · P5 slice 2 = `d3f17a2` (+ docs commit ถัดจากนั้น) · commit งานเป็นชุด `feat(...)` + `docs(...)` (`.nznote/`, `.opencode/` ถูก ignore)
 - **เทอร์มินัล cp874** → log ไทยใน console เป็น `???` (ไม่ใช่บั๊ก) · ไฟล์เป็น UTF-8
 - **PowerShell กิน `--` ตัวแรก** → `run.ps1` เติมให้แล้ว ใช้ `run.ps1 --seconds 30`
 - `Chrome_WidgetWin_0 ... 1412` ตอนปิด = WebView2 noise ไม่มีผล
 - **scancode path** ใช้ HKL ของหน้าต่างที่ focus — ถ้าเกม/IME พิมพ์เพี้ยน ใช้ `--no-scancode` แล้วรายงาน HKL กับชื่อเกม
 - **guard** ตรวจทุก 250 ms — ระหว่างถูกกัน `[pad-log]` ยังเดินแต่ไม่มี `[type]` ออก
+- **Settings → runtime**: เปลี่ยนภาษา/ขนาดวงมีผลภายใน 250 ms ผ่าน `config_rev` · ถ้าไม่เห็น log `[config] runtime reload` แปลว่า command ไม่ได้เขียน config
+- **Languages บนเครื่องนี้**: Windows มี layout EN ตัวเดียว → TH ขึ้นเป็น `Built-in` (ตารางในแอป) ไม่ใช่ `Detected`
 - **Chrome headless**: `C:\Users\User\AppData\Local\ms-playwright\chromium-1208\chrome-win64\chrome.exe` (`CHROME_PATH`)
 - เครื่องนี้ 2 จอ: virtual desktop 3840×1080 เริ่มที่ x = −1920 · จอหลัก 1920×1080 (pivot เริ่มที่กลางจอหลัก)
 
@@ -253,6 +272,9 @@ $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9224"
 crates\rnitype-app\run.ps1 --seconds 120
 # แล้วเปิด http://127.0.0.1:9224/json/list → ได้ webSocketDebuggerUrl ของ hud/settings
 ```
+
+- target ของ Settings = URL ที่ลงท้าย `settings/index.html` — `Runtime.evaluate` สั่งคลิกแท็บ/switch ได้จริง
+  (ใช้ตรวจ ADR-25: ปิด TH แล้วอ่าน `[config] runtime reload` ใน log ของแอป)
 
 อ่านสถานะ HUD ที่แท้จริง (ใช้ `Runtime.evaluate`):
 

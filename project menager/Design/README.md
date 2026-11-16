@@ -66,6 +66,7 @@ updated: 2026-11-15
 | [[22-visual-refresh-apple-style]] | ADR: tokens/HUD plate/Settings sidebar — Apple/macOS-inspired visual refresh |
 | [[23-quickbar-caret-sticky-drag-pivot-clamp]] | ADR: Quick bar (LB), caret nav (R3), sticky drag (RB×2), pivot clamp ฝั่งแอป |
 | [[24-target-guard-scancode-timer]] | ADR: exclusion/UIPI guard, scancode path อัตโนมัติ, `timeBeginPeriod(1)` |
+| [[25-settings-general-languages-live-reload]] | ADR: Settings General/Languages + exclusion UI + live config reload |
 | [[hud-v0.9]] | บันทึก HUD: ภาพเทียบ A/B (v0.9) + สรุป v0.10 |
 | `05-mockup/hud-prototype/` | ม็อกอัป HUD v0.11 (เน้น EN+TH, หลายภาษา, Settings window, Keymap editor, pivot) |
 | `05-mockup/hud-shots/` | screenshot ตรวจรับ typography (100%/150% DPI), overlay จริง, Settings |
@@ -90,7 +91,7 @@ updated: 2026-11-15
 | หลักการ HUD | วงใน = สิ่งที่ LS เลือก · วงนอก = สิ่งที่ RS เลือก · idle เหลือ pill สถานะ (เปิดวงตลอดได้) |
 | ความปลอดภัย | **exclusion list** ต่อ exe (wildcard) + **UIPI guard** (target elevated) → หยุดส่ง + pill บอกเหตุผล · **scancode อัตโนมัติ** ตาม layout เป้าหมาย (เกม/IME) + Unicode fallback — [[24-target-guard-scancode-timer]] |
 | เทคโนโลยี | Rust + Tauri v2 + gilrs/SDL3 + SendInput (แผนสำรอง: C# .NET 8) — ดู [[03-stack-rust]] |
-| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · visual refresh (ADR-22) · P4/P5 slice 1 · runtime จอยจริง** — 188 tests |
+| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · P4/P5 slice 1–2 · visual refresh (ADR-22) · runtime จอยจริง** — 201 tests |
 
 ## หมายเหตุการทำงาน
 
