@@ -148,9 +148,10 @@ project menager/
 
 ### 4.3 ขั้นถัดไป (เรียง)
 
-1. **IME passthrough (v0.2)** — ตาม [[ime-passthrough-deferred]]: ส่ง physical key ให้ Windows IME, HUD QWERTY + badge IME
-2. **Code-sign + publish** — ลด SmartScreen · ต่อร้าน/itch · auto-update
-3. **P2 ที่เหลือ (เล็ก)** — pivot clamp แบบ per-monitor/mixed-DPI (ตอนนี้ clamp ด้วย virtual desktop เดียว)
+1. **IME passthrough (v0.2)** — ตาม [[ime-passthrough-deferred]]: ส่ง physical key ให้ Windows IME, HUD QWERTY + badge IME, ทดสอบ JA/ZH/KO
+2. **Owner testing รอบถัดไป** — รัน installer จริง + Practice กับจอย: วัด WPM/error rate ไทย/อังกฤษเทียบเป้า 12/20 และ error < 1.5%
+3. **Code-sign + publish** — ลด SmartScreen · itch/Steam upload · auto-update (Tauri updater)
+4. **P2 ที่เหลือ (เล็ก)** — pivot clamp แบบ per-monitor/mixed-DPI (ตอนนี้ clamp ด้วย virtual desktop เดียว)
 
 ### 4.4 รัน / ตรวจ
 
@@ -337,8 +338,32 @@ node tools/tests/settings-smoke.mjs         # 33/33 + screenshot Settings
 | ตรวจแล้ว | `setup /S` → `%LOCALAPPDATA%\RniType\RniType.exe` · Start Menu + Apps & Features ครบ · รันได้ (overlay/tray/HUD/settings) · `uninstall /S` ลบหมด |
 | ยังไม่ทำ | code-sign (SmartScreen), auto-update, Steam/itch upload |
 
-## 5. คำถามที่ยังค้าง
+### 4.18 สรุป session ล่าสุด (2026-11-16) — ทำอะไรไปแล้ว / เหลืออะไร
 
+| งาน | ผล | เอกสาร |
+| --- | --- | --- |
+| Settings slice 2 | General (status/pause/exclusion) + Languages (rescan/enable) + Reset + live reload | [[25-settings-general-languages-live-reload]] |
+| P6 slice 1 | WPM 60 วิ + action latency + uptime | [[26-usage-stats-wpm-latency]] |
+| Keymap editor | แท็บ Keymap 8×8 + override รายช่อง + reset group/language | [[27-keymap-editor-overrides]] |
+| Universal QWERTY | RU/EL จาก HKL (`a→ф`, `a→α`) + Keymap แก้ได้ทุก layout | [[28-universal-qwerty-mapping]] |
+| P6 slice 2 | CPU/RAM ของโปรเซส + corrections proxy → Footprint cards | [[29-stats-cpu-memory-corrections]] |
+| P6 slice 3 | **Practice tab** — error rate จริง (Levenshtein) + WPM → `bench.jsonl` | [[30-practice-error-rate]] |
+| Installer | NSIS current-user + portable zip · ติดตั้ง/ถอนผ่านจริง | [[31-installer-beta]] |
+| IME | **เลื่อนไป v0.2** (owner) — บันทึกแผนครบ | [[ime-passthrough-deferred]] |
+
+**ตัวเลขปิด session**: `cargo test --workspace` = **219** (core 101 · win 58 · app 60) · contracts 12/12 ·
+hud-smoke 54/54 · typography 36/36 · settings-smoke **33/33** · installer ติดตั้ง/ถอนผ่านบนเครื่องนี้
+
+**ไฟล์ให้ owner ทดสอบ**
+```
+dist\RniType_0.1.0_x64-setup.exe      ← installer (current user)
+dist\RniType-portable-0.1.0.zip       ← portable + README-beta
+```
+
+**งานต่อจากนี้ (เรียงตาม §4.3)**: IME passthrough v0.2 → owner testing (WPM/error/installer) →
+code-sign + publish/auto-update → per-monitor pivot clamp
+
+## 5. คำถามที่ยังค้าง
 | # | เรื่อง | ข้อเสนอ |
 | --- | --- | --- |
 | Q4 | Alt อยู่ปุ่มไหน | hold-Y = Alt (หรือ View/Share) |
@@ -358,16 +383,15 @@ Q1, Q2, Q5, Q15, Q16, Q17 = ตัดสินแล้ว
 - **scancode path** ใช้ HKL ของหน้าต่างที่ focus — ถ้าเกม/IME พิมพ์เพี้ยน ใช้ `--no-scancode` แล้วรายงาน HKL กับชื่อเกม
 - **guard** ตรวจทุก 250 ms — ระหว่างถูกกัน `[pad-log]` ยังเดินแต่ไม่มี `[type]` ออก
 - **Settings → runtime**: เปลี่ยนภาษา/ขนาดวงมีผลภายใน 250 ms ผ่าน `config_rev` · ถ้าไม่เห็น log `[config] runtime reload` แปลว่า command ไม่ได้เขียน config
-- **Languages บนเครื่องนี้**: Windows มี layout EN ตัวเดียว → TH ขึ้นเป็น `Built-in` (ตารางในแอป) ไม่ใช่ `Detected`
+- **Languages บนเครื่องนี้**: Windows มี layout EN + TH (หลังแก้ KLID bug) · ถ้าเครื่องมีแค่ EN จะเห็น TH เป็น `Built-in` (ตารางในแอป)
 - **WPM จาก `--fake-pad`** (~15–17) เป็นแค่การพิสูจน์ท่อ ไม่ใช่ตัวเลขผู้ใช้จริง — owner ต้องวัดกับจอย
 - **latency** วัดฝั่งเรา (`session.step`) ไม่รวมเวลา OS/เกมประมวลผลคีย์
-- **Keymap editor** แก้ได้เฉพาะ EN/TH (มีตารางใน core) · ภาษาอื่นยัง `Needs mapping` จนมี universal QWERTY
+- **Keymap editor** แก้ได้ทุกภาษาที่มีตาราง: EN/TH built-in · RU/EL สร้างจาก HKL (ADR-28)
 - override เก็บเป็น diff (`<layer>-<g>-<s>`) ไม่ใช่ตารางเต็ม — config ที่เขียนมือต้องใช้รูปแบบนี้
-- **IME (JA/ZH/KO) ยังเปิดไม่ได้** — toggle ตอบ `LANG_NOT_FOUND`; ต้องทำ passthrough scancode ก่อน
+- **IME (JA/ZH/KO) ยังเปิดไม่ได้** — toggle ตอบ `LANG_NOT_FOUND`; เลื่อนไป v0.2 ตาม [[ime-passthrough-deferred]]
 - **universal table** สร้างจาก KLID ของ layout ที่ติดตั้ง/โหลดได้ · ถ้า Windows ไม่มี layout นั้นจริง ๆ จะไม่มีแถวให้เปิด (เขียน config เองได้ถ้ามี KLID)
 - **CPU ที่แสดงไม่รวม WebView2 child** — ตัวเลข Task Manager จะสูงกว่านี้
-- **corrections ≠ error rate** — เป็นจำนวน Backspace เท่านั้น ยังไม่มี diff กับข้อความอ้างอิง
-- **error rate จริง** อยู่ที่แท็บ Practice (diff) — ไม่ได้วัดอัตโนมัติจาก Notepad/เกม
+- **corrections** = จำนวน Backspace (proxy) · **error rate จริง** อยู่ที่แท็บ **Practice** (Levenshtein กับประโยคอ้างอิง)
 - **installer ยังไม่ code-sign** — SmartScreen จะเตือน Unknown publisher (More info → Run anyway)
 - **beta เปิด console** (feature `console`) — ปิดได้เมื่อ build รุ่นขาย
 - **IME (JA/ZH/KO) เลื่อนไป v0.2** ตาม [[ime-passthrough-deferred]]
@@ -395,12 +419,35 @@ const h = document.getElementById('hud');
 // idle ที่ถูกต้อง = { rings:'off', inner:0, ringOpacity:'0', visible:'true' }
 ```
 
-## 7. นิยาม "เสร็จ" ของ session ถัดไป
+### 6.1 Error / บทเรียนจาก session ล่าสุด (2026-11-16)
 
-1. ทุก check ผ่านและมีตัวเลขแนบ: `cargo test --workspace` · contracts · hud-smoke · hud-typography
-2. งานที่แตะ runtime/overlay ต้องมี log จริง + screenshot/หลักฐาน (ไม่ใช่ "น่าจะได้")
-3. อัปเดตตารางวัดผลใน [[02-roadmap-and-smoke-tests]]
+| # | อาการ | สาเหตุ | วิธีแก้ / หมายเหตุ |
+| --- | --- | --- | --- |
+| 1 | ภาษาใน Settings ได้ KLID เดียวกันทุกแถว | `GetKeyboardLayoutNameW` คืน layout ของ **thread ผู้เรียก** ไม่ใช่ HKL ในลิสต์ | ใช้ language id (low word ของ HKL) เป็น `klid` (`00000409`) — [[25-settings-general-languages-live-reload]] |
+| 2 | `LoadKeyboardLayoutW("0000FFFF")` สำเร็จทั้งที่ไม่ใช่ layout | Windows ยอมคืน fallback | ตรวจ lang id 4 หลักท้าย KLID กับ HKL ที่โหลดได้ — [[28-universal-qwerty-mapping]] |
+| 3 | panic `attempt to subtract with overflow` ตอนสร้างตาราง EL/RU | `ToUnicodeEx` คืน 2 หน่วยแต่ไม่ใช่ surrogate pair | ตรวจ high/low surrogate ก่อนรวม · กรณีอื่น fallback เป็นตัวอักษร EN |
+| 4 | ตั้ง `defaults.typing.mode = "ru"` แต่พิมพ์ EN | `Session::with_homes` เรียก `refresh_languages` (list ว่าง) → reset เป็น EN ก่อน `set_language_slots` | เรียก `activate_language` **หลัง** set slots |
+| 5 | ปิด TH แล้ว runtime กลับเปิดเอง | `enabled_languages` fallback เป็น EN+TH เมื่อ list ว่าง | ใช้รายการ config ตรง ๆ · EN เป็น base ที่ล็อกไว้ — [[25-settings-general-languages-live-reload]] |
+| 6 | `cargo install tauri-cli` ล้ม `failed to open object file` | temp build dir ของ cargo-install มีปัญหา | ดาวน์โหลด prebuilt `cargo-tauri-x86_64-pc-windows-msvc.zip` (v2.12.4) ไปวาง `~/.cargo/bin` |
+| 7 | `cargo build` ล้ม `failed to remove ... rnitype-app.exe` (Access denied) | มี process แอปค้างถือ exe | `Get-Process rnitype-app | Stop-Process -Force` ก่อน rebuild |
+| 8 | contracts 12/12 ล้ม JSON parse | PowerShell `-replace` ทำให้ `\"` กลายเป็น `\\"` | แก้บรรทัด description ด้วยมือ · รัน `node tools/contracts/validate.mjs` ทุกครั้งหลังแก้ schema |
+| 9 | `hud-typography` ล้ม `#hud` เป็น null | Chrome/state-player รอบแรกยังไม่พร้อม (flaky) | รันซ้ำได้ 36/36 · ถ้าเกิดบ่อยเพิ่ม settle ใน test |
+| 10 | Tauri เตือน identifier ลงท้าย `.app` | ชนกับ bundle ของ macOS | Windows-only → ยอมรับไว้ (ไม่กระทบ installer) |
+| 11 | config ผู้ใช้ถูกแก้ระหว่าง E2E | ทดสอบ exclusion/language/keymap | backup `%APPDATA%\RniType\config.json` ก่อน แล้ว copy คืนใน `finally`; ลบ `bench.jsonl` ที่เกิดจาก test |
+
+**คอมเมนต์สำคัญ**
+- installer build ต้องมี `tauri-cli` v2 และ build ด้วย feature `console` (beta) · `mainBinaryName = RniType`
+- `dist/` ถูก ignore — อย่า commit ไฟล์ exe/zip · installer script อยู่ `installer/`
+- silent test: `setup.exe /S` → `%LOCALAPPDATA%\RniType\RniType.exe` · ถอน `uninstall.exe /S`
+- test UI จริงใช้ CDP 9224 (Settings target = `settings/index.html`) และ `Runtime.evaluate` เรียก command ได้ตรง
+- ทุกครั้งที่จบ loop: `cargo test --workspace` + contracts + 3 smokes + อัปเดต §4.18/roadmap
+
+## 7. นิยาม "เสร็จ" ของ session ถัดไป
+1. ทุก check ผ่านและมีตัวเลขแนบ: `cargo test --workspace` · contracts · hud-smoke · hud-typography · **settings-smoke**
+2. งานที่แตะ runtime/overlay/installer ต้องมี log จริง + screenshot/หลักฐาน (ไม่ใช่ "น่าจะได้")
+3. อัปเดตตารางวัดผลใน [[02-roadmap-and-smoke-tests]] + สรุปใน §4.18
 4. เปลี่ยนการตัดสินใจ → เขียน ADR ใหม่ (อย่าแก้ ADR เก่า) + อัปเดต HANDOFF นี้
+5. ถ้าแตะ installer → build ใหม่ + ทดสอบ `setup /S` และ `uninstall /S` ให้ผ่าน
 
 ## 8. ตัวเลขอ้างอิงที่ใช้ตัดสินใจ
 
