@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use rnitype_core::keymap::Lang;
 use rnitype_core::Key;
-use rnitype_win::language::LanguageInfo;
+use rnitype_win::language::{LanguageInfo, LanguageKind};
 use serde_json::{json, Value};
 
 /// ฟอนต์ที่ HUD รองรับ (ตรงกับ ui/shared/fonts.css)
@@ -151,7 +151,7 @@ pub fn language_rows(config: &Value, detected: &[LanguageInfo]) -> Vec<Value> {
                 "kind": info.kind.as_str(),
                 "detected": true,
                 "builtin": false,
-                "supported": info.typing_supported(),
+                "supported": info.kind == LanguageKind::Layout,
                 "enabled": enabled,
             })
         })
@@ -190,7 +190,8 @@ pub fn language_rows(config: &Value, detected: &[LanguageInfo]) -> Vec<Value> {
             "kind": entry.get("kind").and_then(Value::as_str).unwrap_or("layout"),
             "detected": false,
             "builtin": false,
-            "supported": matches!(code, "en" | "th"),
+            "supported": entry.get("kind").and_then(Value::as_str) != Some("ime")
+                && entry.get("klid").and_then(Value::as_str).is_some_and(|klid| !klid.is_empty()),
             "enabled": entry.get("enabled").and_then(Value::as_bool).unwrap_or(false),
         }));
     }
@@ -371,7 +372,7 @@ fn parse_override_value(text: &str) -> Option<Key> {
 }
 
 /// ค่า override ทั้งไฟล์ (ทุกภาษา) สำหรับส่งเข้า engine ตอน build/reload
-pub fn all_keymap_overrides(config: &Value) -> Vec<(Lang, u8, u8, u8, Option<Key>)> {
+pub fn all_keymap_overrides(config: &Value) -> Vec<(String, u8, u8, u8, Option<Key>)> {
     let mut out = Vec::new();
     let Some(list) = config.get("languages").and_then(Value::as_array) else {
         return out;
@@ -380,15 +381,18 @@ pub fn all_keymap_overrides(config: &Value) -> Vec<(Lang, u8, u8, u8, Option<Key
         let Some(code) = entry.get("code").and_then(Value::as_str) else {
             continue;
         };
-        let Some(lang) = keymap_lang(code) else {
-            continue;
-        };
         if let Some(overrides) = entry.get("overrides").and_then(Value::as_object) {
             for (key, value) in overrides {
                 if let (Some((layer, group, sector)), Some(text)) =
                     (parse_override_key(key), value.as_str())
                 {
-                    out.push((lang, layer, group, sector, parse_override_value(text)));
+                    out.push((
+                        code.to_string(),
+                        layer,
+                        group,
+                        sector,
+                        parse_override_value(text),
+                    ));
                 }
             }
         }
@@ -428,8 +432,8 @@ pub fn set_keymap_cell(
     sector: u8,
     text: &str,
 ) -> Result<(), String> {
-    if keymap_lang(code).is_none() {
-        return Err(format!("{code}: ยังไม่มีตาราง 8×8"));
+    if code.trim().is_empty() {
+        return Err("code: ห้ามว่าง".to_string());
     }
     if !matches!(layer, 1 | 2) || group > 7 || sector > 7 {
         return Err("layer/group/sector ไม่ถูกต้อง".to_string());
@@ -516,6 +520,35 @@ pub fn validate_keymaps(config: &Value) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// เติม metadata ของภาษา (klid/label/kind) จาก layout ที่ตรวจพบ
+pub fn set_language_meta(config: &mut Value, code: &str, klid: &str, label: &str, kind: &str) {
+    if config.get("languages").and_then(Value::as_array).is_none() {
+        config["languages"] = json!([]);
+    }
+    let Some(list) = config["languages"].as_array_mut() else {
+        return;
+    };
+    let position = list
+        .iter()
+        .position(|entry| entry.get("code").and_then(Value::as_str) == Some(code));
+    let entry = match position {
+        Some(index) => &mut list[index],
+        None => {
+            list.push(json!({ "code": code, "enabled": false }));
+            list.last_mut().expect("just pushed")
+        }
+    };
+    if !klid.is_empty() {
+        entry["klid"] = json!(klid);
+    }
+    if !label.is_empty() {
+        entry["label"] = json!(label);
+    }
+    if matches!(kind, "layout" | "ime") {
+        entry["kind"] = json!(kind);
+    }
 }
 
 /// รายการ exe ที่ห้ามส่งคีย์ (`system.exclusion`) — trim และตัดค่าว่าง
@@ -774,8 +807,8 @@ mod tests {
         set_keymap_cell(&mut config, "en", 2, 3, 4, "").unwrap();
 
         let all = all_keymap_overrides(&config);
-        assert!(all.contains(&(Lang::En, 1, 0, 0, Some(Key::Char('z')))));
-        assert!(all.contains(&(Lang::En, 2, 3, 4, None)));
+        assert!(all.contains(&("en".to_string(), 1, 0, 0, Some(Key::Char('z')))));
+        assert!(all.contains(&("en".to_string(), 2, 3, 4, None)));
 
         let en = keymap_overrides(&config, "en");
         assert_eq!(en.len(), 2);
@@ -788,7 +821,7 @@ mod tests {
     #[test]
     fn keymap_cell_validation_rejects_bad_input() {
         let mut config = default_config();
-        assert!(set_keymap_cell(&mut config, "ru", 1, 0, 0, "z").is_err());
+        assert!(set_keymap_cell(&mut config, "", 1, 0, 0, "z").is_err());
         assert!(set_keymap_cell(&mut config, "en", 3, 0, 0, "z").is_err());
         assert!(set_keymap_cell(&mut config, "en", 1, 8, 0, "z").is_err());
         assert!(set_keymap_cell(&mut config, "en", 1, 0, 0, "").is_err());
@@ -801,7 +834,8 @@ mod tests {
         set_keymap_cell(&mut config, "th", 1, 2, 5, "ฬ").unwrap();
         // เขียนรูปเก่าแล้วต้องอ่านได้
         config["languages"][0]["overrides"] = json!({ "2-5": "ฬ" });
-        assert!(all_keymap_overrides(&config).contains(&(Lang::Th, 1, 2, 5, Some(Key::Char('ฬ')))));
+        assert!(all_keymap_overrides(&config)
+            .contains(&("th".to_string(), 1, 2, 5, Some(Key::Char('ฬ')))));
     }
 
     #[test]

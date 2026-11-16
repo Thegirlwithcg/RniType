@@ -36,7 +36,7 @@
 
 use crate::action::{Action, Command, Key, KeyPress, Mode, MouseButton, NamedKey, QuickAction};
 use crate::gesture::{GestureConfig, GestureState};
-use crate::keymap::Lang;
+use crate::keymap::{Keymap, Lang};
 use crate::normalizer::{Dir8, SectorTracker};
 use crate::pad::{PadState, Vec2};
 use crate::pointer::{
@@ -87,20 +87,38 @@ impl Default for RuntimeConfig {
 }
 
 /// ภาษาในวงภาษา: index ใน `config.languages[]` (ค่าที่ส่งออกใน [`Action::SetLang`])
-/// + ตาราง keymap ที่ core รู้จัก
-///
-/// TODO(P5a): `Lang` ยังเป็น enum ตายตัว (EN/TH) — P5a ต้องขยายการ lookup keymap
-/// ให้รับ layout ที่ติดตั้งจริงใน Windows (HKL → 8×8) แทนการเพิ่ม variant ที่นี่
-/// ตอนนั้น `LangSlot` อาจเปลี่ยนจาก `Lang` เป็น id ของ layout
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// + ตาราง keymap ที่จะใช้ (built-in EN/TH หรือ layout ที่สร้างจาก Windows)
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LangSlot {
     pub index: u8,
     pub lang: Lang,
+    /// รหัสภาษาที่แสดง/ใช้ lookup (`en`, `th`, `ru`, …)
+    pub code: String,
+    /// ชื่อที่แสดงบน HUD (จาก layout ที่ตรวจพบ)
+    pub label: String,
+    /// `None` = ใช้ตาราง built-in ของ `lang`
+    pub keymap: Option<Keymap>,
 }
 
 impl LangSlot {
-    pub const fn new(index: u8, lang: Lang) -> Self {
-        Self { index, lang }
+    pub fn new(index: u8, lang: Lang) -> Self {
+        Self {
+            index,
+            lang,
+            code: crate::keymap::lang_code(lang).to_string(),
+            label: lang.label().to_string(),
+            keymap: None,
+        }
+    }
+
+    pub fn custom(index: u8, code: &str, label: &str, keymap: Keymap) -> Self {
+        Self {
+            index,
+            lang: Lang::En,
+            code: code.to_string(),
+            label: label.to_string(),
+            keymap: Some(keymap),
+        }
     }
 }
 
@@ -380,16 +398,22 @@ impl RuntimeEngine {
         self.typing.set_lang(lang);
     }
 
+    /// ตั้งภาษาปัจจุบันจาก slot (built-in หรือ layout ที่สร้างจาก Windows)
+    pub fn activate_language(&mut self, slot: &LangSlot) {
+        self.typing
+            .set_profile(slot.lang, &slot.code, &slot.label, slot.keymap.clone());
+    }
+
     /// override ของผู้ใช้ 1 ช่อง (config `languages[].overrides`) — `None` = ช่องว่าง
     pub fn set_keymap_override(
         &mut self,
-        lang: Lang,
+        code: &str,
         layer: u8,
         group: u8,
         sector: u8,
         key: Option<Key>,
     ) {
-        self.typing.set_override(lang, layer, group, sector, key);
+        self.typing.set_override(code, layer, group, sector, key);
     }
 
     pub fn clear_keymap_overrides(&mut self) {
@@ -406,13 +430,23 @@ impl RuntimeEngine {
         &self.languages
     }
 
+    /// รหัสภาษาที่ใช้อยู่ (`en`, `th`, `ru`, …) — HUD ใช้แสดง pill
+    pub fn lang_code(&self) -> &str {
+        self.typing.code()
+    }
+
+    /// ชื่อภาษาที่ใช้อยู่ — HUD ใช้วงภาษา
+    pub fn lang_label(&self) -> &str {
+        self.typing.label()
+    }
+
     /// ตั้งรายการภาษาที่สอง สูงสุด [`MAX_LANGUAGES`]
     ///
     /// ถ้าภาษาที่ใช้อยู่ถูกปิด → กลับ EN (interaction model §7)
     pub fn set_languages(&mut self, languages: Vec<LangSlot>) {
         self.languages = languages.into_iter().take(MAX_LANGUAGES).collect();
-        let current = self.typing.lang();
-        if current != Lang::En && !self.languages.iter().any(|slot| slot.lang == current) {
+        let current = self.typing.code().to_string();
+        if current != "en" && !self.languages.iter().any(|slot| slot.code == current) {
             self.typing.set_lang(Lang::En);
         }
         if self.languages.is_empty() && self.wheel == Some(WheelKind::Language) {
@@ -1186,9 +1220,10 @@ impl RuntimeEngine {
             Command::Language => {
                 if self.languages.len() == 1 {
                     // มีภาษาอื่นภาษาเดียว = สลับทันที (spec §3.2)
-                    let slot = self.languages[0];
+                    let slot = self.languages[0].clone();
                     self.apply_mode(Mode::Type);
-                    self.typing.set_lang(slot.lang);
+                    self.typing
+                        .set_profile(slot.lang, &slot.code, &slot.label, slot.keymap);
                     Action::SetLang { index: slot.index }
                 } else {
                     self.open_lang_wheel(pad);
@@ -1216,11 +1251,12 @@ impl RuntimeEngine {
 
     /// ยืนยันภาษาจากวงภาษา → `type-<lang>` (spec §3.2)
     fn commit_lang(&mut self, index: u8) -> Option<Action> {
-        let slot = *self.languages.get(index as usize)?;
+        let slot = self.languages.get(index as usize)?.clone();
         self.close_wheel();
         self.typing.cancel();
         self.apply_mode(Mode::Type);
-        self.typing.set_lang(slot.lang);
+        self.typing
+            .set_profile(slot.lang, &slot.code, &slot.label, slot.keymap);
         Some(Action::SetLang { index: slot.index })
     }
 

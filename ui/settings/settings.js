@@ -95,6 +95,9 @@
     statWpm: $('statWpm'),
     statLatency: $('statLatency'),
     statUptime: $('statUptime'),
+    statCpu: $('statCpu'),
+    statMemory: $('statMemory'),
+    statCorrections: $('statCorrections'),
     exclusionList: $('exclusionList'),
     exclusionForm: $('exclusionForm'),
     exclusionInput: $('exclusionInput'),
@@ -253,6 +256,15 @@
       dom.statLatency.textContent = `${formatMs(data.stepAvgUs)} / ${formatMs(data.stepMaxUs)}`;
     }
     dom.statUptime.textContent = formatUptime(data.uptimeSecs);
+    if (Number.isFinite(data.cpuPercent)) {
+      dom.statCpu.textContent = `${data.cpuPercent.toFixed(1)}%`;
+    }
+    if (Number.isFinite(data.rssBytes)) {
+      dom.statMemory.textContent = `${Math.round(data.rssBytes / (1024 * 1024))} MB`;
+    }
+    if (Number.isFinite(data.corrections)) {
+      dom.statCorrections.textContent = String(data.corrections);
+    }
   }
 
   async function refreshStats() {

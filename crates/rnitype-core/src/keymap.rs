@@ -14,8 +14,60 @@ pub enum Lang {
 impl Lang {
     pub fn label(self) -> &'static str {
         match self {
-            Lang::En => "EN",
-            Lang::Th => "TH",
+            Lang::En => "English",
+            Lang::Th => "Thai",
+        }
+    }
+}
+
+/// รหัสภาษาสั้น (ใช้ใน config/HUD) — ตรงกับ `language_code()` ฝั่ง Windows
+pub fn lang_code(lang: Lang) -> &'static str {
+    match lang {
+        Lang::En => "en",
+        Lang::Th => "th",
+    }
+}
+
+/// ตาราง 8×8 ที่ใช้งานจริง — `None` = ใช้ตาราง built-in ของ [`Lang`]
+///
+/// ภาษาที่มาจาก layout ของ Windows (RU/EL/…) ใช้ตารางที่สร้างด้วย
+/// `ToUnicodeEx` โดยยึด **ตำแหน่ง QWERTY** ของตาราง EN (ADR-14)
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Keymap {
+    pub cells: [[Key; 8]; 8],
+    pub cells2: [[Option<Key>; 8]; 8],
+}
+
+impl Keymap {
+    /// ตารางเริ่มต้นของ EN/TH
+    pub fn builtin(lang: Lang) -> Self {
+        Self {
+            cells: *table(lang),
+            cells2: *table_layer2(lang),
+        }
+    }
+
+    /// คีย์ของช่อง — `None` = ช่องว่าง (layer 2)
+    pub fn key_at(&self, layer: u8, group: usize, sector: usize) -> Option<Key> {
+        if group > 7 || sector > 7 {
+            return None;
+        }
+        if layer >= 2 {
+            self.cells2[group][sector]
+        } else {
+            Some(self.cells[group][sector])
+        }
+    }
+
+    /// ตั้งช่อง (ใช้ตอนสร้างตาราง/override) — layer 1 ว่างไม่ได้
+    pub fn set_cell(&mut self, layer: u8, group: usize, sector: usize, key: Option<Key>) {
+        if group > 7 || sector > 7 {
+            return;
+        }
+        if layer >= 2 {
+            self.cells2[group][sector] = key;
+        } else if let Some(key) = key {
+            self.cells[group][sector] = key;
         }
     }
 }

@@ -87,6 +87,25 @@
           <p class="hint">WPM uses the standard 5 characters per word over the last 60 seconds. Action latency is controller sample → SendInput (average / worst of the last second).</p>
         </section>
 
+        <section class="group" aria-labelledby="footprintTitle">
+          <h2 id="footprintTitle" class="group__title">Footprint</h2>
+          <div class="status-grid">
+            <div class="stat">
+              <span class="stat__label">CPU</span>
+              <b id="statCpu">—</b>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Memory</span>
+              <b id="statMemory">—</b>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Corrections</span>
+              <b id="statCorrections">0</b>
+            </div>
+          </div>
+          <p class="hint">CPU is this process only (last second). Corrections = Backspace presses sent; a proxy for typos, not a diff against a reference text.</p>
+        </section>
+
         <section class="group" aria-labelledby="exclusionTitle">
           <h2 id="exclusionTitle" class="group__title">Exclusion list</h2>
           <p class="hint">When one of these apps has focus, RniType stops sending keys and the HUD shows why. Names match the .exe file; <code>*</code> and <code>?</code> wildcards work.</p>
@@ -112,7 +131,7 @@
 
         <p class="hint" id="langSummary">Scanning installed layouts…</p>
         <ul id="langList" class="langlist"></ul>
-        <p class="hint">Up to 8 enabled layouts. IME languages pass physical keys through and let Windows compose the text. English and Thai type with the built-in 8×8 tables; other layouts need the universal QWERTY mapping (coming next).</p>
+        <p class="hint">Up to 8 enabled layouts. Layouts other than English/Thai get an 8×8 table from their QWERTY positions (Russian <b>a</b> → <b>ф</b>). IME languages pass physical keys through and let Windows compose; enabling IMEs is not supported yet.</p>
 
         <footer class="actions">
           <button id="rescanLangs" type="button" class="btn">Rescan languages</button>
@@ -130,7 +149,7 @@
         <div class="row">
           <div class="row__body">
             <label for="mapLang">Language</label>
-            <p class="hint">English and Thai have built-in 8×8 tables. English is the base language.</p>
+            <p class="hint">Every enabled layout has an 8×8 table. English is the base language.</p>
           </div>
           <select id="mapLang" class="select"></select>
         </div>

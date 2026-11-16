@@ -33,8 +33,7 @@ use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize};
 use input::{GilrsSource, PadSource, ScriptSource};
 use rnitype_core::pad::PadState;
 use rnitype_core::runtime::RuntimeConfig;
-use rnitype_core::keymap::{group_names_for, label_of, lookup_layer};
-use rnitype_core::normalizer::Dir8;
+use rnitype_core::keymap::{group_names_for, label_of};
 use rnitype_core::{Lang, RuntimeEngine};
 use rnitype_win::Injector;
 use session::{HudStyle, Session};
@@ -526,22 +525,25 @@ fn build_session(config: &Value, desktop: (i32, i32, u32, u32), no_scancode: boo
 
     let mut cfg = RuntimeConfig::default();
     cfg.gesture.commit_dwell_ms = dwell;
-    let mut engine = RuntimeEngine::new(cfg);
-    if mode.starts_with("th") {
-        engine.set_lang(Lang::Th);
-    }
+    let engine = RuntimeEngine::new(cfg);
 
-    let enabled = enabled_languages(config);
+    let slots = language_slots(config);
     let (px, py) = primary_monitor_center();
 
     // pivot/pointer home = กลางจอหลัก (RS click ใน Mouse/Nav = กลับมาที่นี่)
     let mut session = Session::with_homes(
         engine,
         make_injector(no_scancode),
-        enabled,
+        vec![Lang::En],
         (px, py),
         (px, py),
     );
+    session.set_language_slots(slots.clone());
+    if mode != "en"
+        && let Some(slot) = slots.iter().find(|slot| slot.code == mode)
+    {
+        session.activate_language(slot);
+    }
     // HUD เริ่มที่ตำแหน่ง pointer จริง ไม่ใช่กลางจอ (กันจุด pointer เพี้ยนทั้ง session)
     if let Some(position) = rnitype_win::cursor_position() {
         session.set_pointer(position);
@@ -586,37 +588,119 @@ fn emit_status(handle: &tauri::AppHandle) {
     let _ = handle.emit_to("settings", "app:status", &payload);
 }
 
-/// ภาษาที่เปิดใน config (`languages[].enabled`) — EN เป็น base เสมอ
+/// ภาษาที่เปิดใน config (`languages[].enabled`) → slot พร้อมตาราง keymap
 ///
-/// `languages` ไม่มี/ว่าง = ค่าเริ่มต้น EN+TH · มีรายการ = ใช้ตามที่เปิด (EN บังคับเปิด)
-fn enabled_languages(config: &Value) -> Vec<Lang> {
+/// EN เป็น base เสมอ · TH ใช้ตารางใน core · layout อื่นสร้างตารางด้วย `build_keymap`
+/// (ต้องมี `klid` ใน config หรือหาได้จาก layout ที่ติดตั้ง)
+fn language_slots(config: &Value) -> Vec<rnitype_core::runtime::LangSlot> {
+    use rnitype_core::runtime::LangSlot;
+
     let list = config
         .get("languages")
         .and_then(Value::as_array)
         .filter(|list| !list.is_empty());
     let Some(list) = list else {
-        return vec![Lang::En, Lang::Th];
+        return vec![LangSlot::new(0, Lang::En), LangSlot::new(1, Lang::Th)];
     };
 
-    let enabled = |code: &str| {
-        list.iter().any(|entry| {
-            entry.get("code").and_then(Value::as_str) == Some(code)
-                && entry.get("enabled").and_then(Value::as_bool).unwrap_or(false)
-        })
-    };
+    let mut slots = vec![LangSlot::new(0, Lang::En)];
+    let mut next_index = 1u8;
+    let mut detected: Option<Vec<rnitype_win::language::LanguageInfo>> = None;
 
-    let mut out = vec![Lang::En];
-    if enabled("th") {
-        out.push(Lang::Th);
+    for entry in list {
+        let code = entry.get("code").and_then(Value::as_str).unwrap_or("");
+        let enabled = entry
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if !enabled || code.is_empty() || code == "en" {
+            continue;
+        }
+
+        if code == "th" {
+            slots.push(LangSlot::new(next_index, Lang::Th));
+            next_index += 1;
+            continue;
+        }
+
+        let info = detected
+            .get_or_insert_with(rnitype_win::language::installed_languages)
+            .iter()
+            .find(|info| info.code == code)
+            .cloned();
+        let klid = entry
+            .get("klid")
+            .and_then(Value::as_str)
+            .filter(|klid| !klid.is_empty())
+            .map(str::to_string)
+            .or_else(|| info.as_ref().map(|info| info.klid.clone()));
+        let Some(klid) = klid else {
+            eprintln!("[languages] {code}: ไม่พบ layout ในเครื่อง — ข้าม");
+            continue;
+        };
+        let label = entry
+            .get("label")
+            .and_then(Value::as_str)
+            .filter(|label| !label.is_empty())
+            .map(str::to_string)
+            .or_else(|| info.as_ref().map(|info| info.label.clone()))
+            .unwrap_or_else(|| code.to_uppercase());
+
+        match rnitype_win::language::build_keymap(&klid) {
+            Some(keymap) => {
+                slots.push(LangSlot::custom(next_index, code, &label, keymap));
+                next_index += 1;
+            }
+            None => eprintln!("[languages] {code}: สร้างตาราง 8×8 ไม่ได้ — ข้าม"),
+        }
     }
-    out
+    slots
+}
+
+/// หาตาราง keymap ของภาษา — EN/TH built-in · อื่น ๆ สร้างจาก layout ในเครื่อง
+fn resolve_keymap(config: &Value, code: &str) -> Result<(Lang, rnitype_core::keymap::Keymap, String), String> {
+    use rnitype_core::keymap::Keymap;
+
+    if let Some(lang) = config::keymap_lang(code) {
+        return Ok((lang, Keymap::builtin(lang), lang.label().to_string()));
+    }
+
+    let entry = config
+        .get("languages")
+        .and_then(Value::as_array)
+        .and_then(|list| {
+            list.iter()
+                .find(|entry| entry.get("code").and_then(Value::as_str) == Some(code))
+        })
+        .ok_or_else(|| format!("{code}: ไม่มีใน config"))?;
+    let label = entry
+        .get("label")
+        .and_then(Value::as_str)
+        .unwrap_or(code)
+        .to_string();
+    let klid = entry
+        .get("klid")
+        .and_then(Value::as_str)
+        .filter(|klid| !klid.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            rnitype_win::language::installed_languages()
+                .into_iter()
+                .find(|info| info.code == code)
+                .map(|info| info.klid)
+        })
+        .ok_or_else(|| format!("{code}: ไม่พบ KLID"))?;
+
+    let table = rnitype_win::language::build_keymap(&klid)
+        .ok_or_else(|| format!("{code}: สร้างตารางจาก {klid} ไม่ได้"))?;
+    Ok((Lang::En, table, label))
 }
 
 /// ข้อมูล keymap ของภาษา (64 ช่อง/ชั้น + default + override) สำหรับแท็บ Keymap
 ///
 /// `cells` = ค่าที่ใช้จริง (override ชนะ) · `defaults` = ตารางใน core · `""` = ช่องว่าง
 fn keymap_payload(config: &Value, code: &str) -> Result<Value, String> {
-    let lang = config::keymap_lang(code).ok_or_else(|| format!("{code}: ยังไม่มีตาราง 8×8"))?;
+    let (lang, table, label) = resolve_keymap(config, code)?;
     let overrides = config::keymap_overrides(config, code);
 
     let mut layers = Vec::new();
@@ -625,9 +709,7 @@ fn keymap_payload(config: &Value, code: &str) -> Result<Value, String> {
         let mut defaults = Vec::new();
         for group in 0..8usize {
             for sector in 0..8usize {
-                let dir_group = Dir8::from_index(group);
-                let dir_sector = Dir8::from_index(sector);
-                let default = lookup_layer(lang, layer, dir_group, dir_sector);
+                let default = table.key_at(layer, group, sector);
                 let key = overrides
                     .iter()
                     .find(|(l, g, s, _)| *l == layer && *g as usize == group && *s as usize == sector)
@@ -655,7 +737,7 @@ fn keymap_payload(config: &Value, code: &str) -> Result<Value, String> {
 
     Ok(json!({
         "code": code,
-        "label": if lang == Lang::En { "English" } else { "Thai" },
+        "label": label,
         "groups": group_names_for(lang, 1),
         "groups2": group_names_for(lang, 2),
         "layers": layers,
@@ -700,6 +782,7 @@ fn run_loop(
     let mut step_sum_us: u128 = 0;
     let mut step_count = 0u64;
     let mut step_max_us = 0u64;
+    let mut last_cpu_sample: Option<(u64, u64)> = None;
     if own_elevated {
         println!("[guard] แอปรันแบบ admin — UIPI guard จะไม่บล็อกหน้าต่าง elevated");
     }
@@ -738,7 +821,7 @@ fn run_loop(
             if rev != last_config_rev {
                 last_config_rev = rev;
                 let config = app_state.config.lock().unwrap().clone();
-                session.set_enabled_languages(enabled_languages(&config));
+                session.set_language_slots(language_slots(&config));
                 session.set_keymap_overrides(&config::all_keymap_overrides(&config));
                 apply_pivot_clamp(session, &config, virtual_desktop());
                 println!(
@@ -847,6 +930,15 @@ fn run_loop(
                 0
             };
             let uptime = start.elapsed().as_secs();
+            let (cpu_time, rss) = stats::process_usage().unwrap_or((0, 0));
+            let cpu_percent = match last_cpu_sample {
+                Some((previous_cpu, previous_ms)) => stats::cpu_percent(
+                    cpu_time.saturating_sub(previous_cpu),
+                    now.saturating_sub(previous_ms),
+                ),
+                None => 0.0,
+            };
+            last_cpu_sample = Some((cpu_time, now));
             let payload = json!({
                 "chars": session.chars(),
                 "wpm": (session.wpm() * 10.0).round() / 10.0,
@@ -854,18 +946,23 @@ fn run_loop(
                 "stepAvgUs": avg_us,
                 "stepMaxUs": step_max_us,
                 "uptimeSecs": uptime,
+                "cpuPercent": cpu_percent,
+                "rssBytes": rss,
+                "corrections": session.backspaces(),
             });
             *handle.state::<AppState>().stats.lock().unwrap() = payload;
 
             if now.saturating_sub(last_stats_log_ms) >= 10_000 {
                 last_stats_log_ms = now;
                 println!(
-                    "[stats] chars={} wpm={:.1} actions={} step avg={} max={} uptime={}",
+                    "[stats] chars={} wpm={:.1} actions={} corrections={} step avg={} max={} cpu={cpu_percent:.1}% rss={} uptime={}",
                     session.chars(),
                     session.wpm(),
                     session.sent(),
+                    session.backspaces(),
                     stats::format_ms(avg_us),
                     stats::format_ms(step_max_us),
+                    stats::format_mb(rss),
                     stats::format_uptime(uptime)
                 );
             }
@@ -1280,6 +1377,22 @@ fn set_language_enabled(
     enabled: bool,
 ) -> Value {
     let mut next = state.config.lock().unwrap().clone();
+    if enabled && !matches!(code.as_str(), "en" | "th") {
+        let detected = rnitype_win::language::installed_languages();
+        let Some(info) = detected.iter().find(|info| info.code == code) else {
+            return json!({
+                "ok": false,
+                "error": { "code": "LANG_NOT_FOUND", "message": format!("{code}: ไม่พบ layout ในเครื่อง") }
+            });
+        };
+        if info.kind == rnitype_win::language::LanguageKind::Ime {
+            return json!({
+                "ok": false,
+                "error": { "code": "LANG_NOT_FOUND", "message": format!("{code}: IME ยังไม่รองรับ") }
+            });
+        }
+        config::set_language_meta(&mut next, &code, &info.klid, &info.label, info.kind.as_str());
+    }
     if !config::set_language_enabled(&mut next, &code, enabled) {
         return json!({
             "ok": false,
@@ -1473,27 +1586,43 @@ fn fallback_icon_rgba() -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod enabled_language_tests {
+mod language_slot_tests {
     use super::*;
+
+    fn codes(slots: &[rnitype_core::runtime::LangSlot]) -> Vec<&str> {
+        slots.iter().map(|slot| slot.code.as_str()).collect()
+    }
 
     #[test]
     fn missing_language_list_defaults_to_en_and_th() {
-        assert_eq!(enabled_languages(&json!({})), vec![Lang::En, Lang::Th]);
+        assert_eq!(codes(&language_slots(&json!({}))), vec!["en", "th"]);
         assert_eq!(
-            enabled_languages(&json!({ "languages": [] })),
-            vec![Lang::En, Lang::Th]
+            codes(&language_slots(&json!({ "languages": [] }))),
+            vec!["en", "th"]
         );
     }
 
     #[test]
     fn disabled_thai_leaves_english_as_the_only_language() {
         let config = json!({ "languages": [ { "code": "th", "enabled": false } ] });
-        assert_eq!(enabled_languages(&config), vec![Lang::En]);
+        assert_eq!(codes(&language_slots(&config)), vec!["en"]);
     }
 
     #[test]
     fn enabled_thai_is_added_after_english() {
         let config = json!({ "languages": [ { "code": "th", "enabled": true } ] });
-        assert_eq!(enabled_languages(&config), vec![Lang::En, Lang::Th]);
+        assert_eq!(codes(&language_slots(&config)), vec!["en", "th"]);
+    }
+
+    #[test]
+    fn unknown_layout_is_skipped_instead_of_crashing() {
+        let config = json!({
+            "languages": [
+                { "code": "th", "enabled": false },
+                { "code": "zz", "enabled": true, "klid": "0000FFFF", "label": "Unknown" }
+            ]
+        });
+        // สร้างตารางไม่ได้ → ไม่มี slot (ยังมี EN)
+        assert_eq!(codes(&language_slots(&config)), vec!["en"]);
     }
 }

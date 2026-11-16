@@ -53,6 +53,13 @@ try {
     JSON.stringify(usageLabels) === '["Characters","WPM · 60 s","Action latency","Uptime"]',
     usageLabels.join(' · '));
 
+  const footprint = await browser.evaluate(
+    `Array.from(document.querySelectorAll('[data-panel="general"] .group')).map((group) => group.querySelector('.group__title')?.textContent)`
+  );
+  check('General has Status/Usage/Footprint/Exclusion groups',
+    JSON.stringify(footprint) === '["Status","Usage","Footprint","Exclusion list"]',
+    footprint.join(' · '));
+
   await browser.evaluate(`document.getElementById('pauseToggle').click()`);
   await sleep(100);
   const paused = await browser.evaluate(

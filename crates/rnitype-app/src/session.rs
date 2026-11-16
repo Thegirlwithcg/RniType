@@ -15,7 +15,8 @@ use rnitype_core::keymap::{group_names_for, label_of};
 use rnitype_core::normalizer::Dir8;
 use rnitype_core::runtime::{LangSlot, RuntimeEngine, WheelKind};
 use rnitype_core::{
-    Action, Command, GestureState, Key, KeyPress, Lang, Mode, MouseButton, PadState, QuickAction,
+    Action, Command, GestureState, Key, KeyPress, Lang, Mode, MouseButton, NamedKey, PadState,
+    QuickAction,
 };
 use rnitype_win::Injector;
 use rnitype_win::target::BlockReason;
@@ -40,8 +41,8 @@ impl Default for HudStyle {
 pub struct Session {
     engine: RuntimeEngine,
     injector: Box<dyn Injector + Send>,
-    /// ภาษาที่ผู้ใช้เปิดไว้ (config `languages`) — ใช้สร้างวงภาษา
-    enabled: Vec<Lang>,
+    /// ภาษาที่ผู้ใช้เปิดไว้ (config `languages`) — ใช้สร้างวงภาษา/HUD
+    enabled: Vec<LangSlot>,
     /// ตำแหน่ง HUD (พิกัดหน้าจอจริง; แปลงเป็นพิกัดหน้าต่างตอนสร้าง HudState)
     pivot: (f32, f32),
     /// ตำแหน่ง pivot เริ่มต้น (RS click ในโหมด Nav = กลับมาที่นี่)
@@ -59,6 +60,8 @@ pub struct Session {
     sent: u32,
     /// ตัวอักษรที่พิมพ์สำเร็จทั้ง session (WPM lifetime)
     chars: u64,
+    /// จำนวน Backspace (ตัวชี้ว่าต้องแก้บ่อยแค่ไหน — proxy ของ error rate)
+    backspaces: u64,
     /// เวลาของ commit ในหน้าต่าง 60 วิ (คำนวณ WPM)
     commits: std::collections::VecDeque<std::time::Instant>,
 }
@@ -86,7 +89,11 @@ impl Session {
         let mut session = Self {
             engine,
             injector,
-            enabled,
+            enabled: enabled
+                .into_iter()
+                .enumerate()
+                .map(|(index, lang)| LangSlot::new(index as u8, lang))
+                .collect(),
             pivot,
             pivot_home: pivot,
             pointer: pointer_home,
@@ -96,6 +103,7 @@ impl Session {
             paused_mode: None,
             sent: 0,
             chars: 0,
+            backspaces: 0,
             commits: std::collections::VecDeque::new(),
         };
         session.refresh_languages();
@@ -113,6 +121,11 @@ impl Session {
     /// ตัวอักษรที่พิมพ์สำเร็จทั้ง session
     pub fn chars(&self) -> u64 {
         self.chars
+    }
+
+    /// จำนวน Backspace ที่ส่งออก (proxy ของ error rate — ไม่ใช่ diff กับข้อความอ้างอิง)
+    pub fn backspaces(&self) -> u64 {
+        self.backspaces
     }
 
     /// WPM จาก commits ใน 60 วินาทีสุดท้าย (5 ตัวอักษร = 1 คำ)
@@ -267,36 +280,44 @@ impl Session {
         }
     }
 
-    /// ตั้งภาษาที่เปิดไว้ (config) — สร้าง slot ของ "ภาษาอื่น" ใหม่ตามภาษาปัจจุบัน
-    #[allow(dead_code)] // ใช้เมื่อ Settings เปลี่ยนภาษาแบบ hot reload (P5 ถัดไป)
-    pub fn set_enabled_languages(&mut self, enabled: Vec<Lang>) {
-        self.enabled = enabled;
+    /// ตั้งภาษาปัจจุบันจาก slot (หลังสร้าง session/เปลี่ยนรายการภาษา)
+    pub fn activate_language(&mut self, slot: &LangSlot) {
+        self.engine.activate_language(slot);
+    }
+
+    /// ตั้ง slot ภาษาทั้งชุด (รวมตาราง layout ที่สร้างจาก Windows) — ใช้ตอน boot/live reload
+    pub fn set_language_slots(&mut self, slots: Vec<LangSlot>) {
+        self.enabled = slots;
         self.refresh_languages();
     }
 
     /// ตั้ง override ของ keymap (จาก config) — ล้างของเดิมแล้วใส่ชุดใหม่
     pub fn set_keymap_overrides(
         &mut self,
-        overrides: &[(Lang, u8, u8, u8, Option<Key>)],
+        overrides: &[(String, u8, u8, u8, Option<Key>)],
     ) {
         self.engine.clear_keymap_overrides();
-        for (lang, layer, group, sector, key) in overrides {
+        for (code, layer, group, sector, key) in overrides {
             self.engine
-                .set_keymap_override(*lang, *layer, *group, *sector, *key);
+                .set_keymap_override(code, *layer, *group, *sector, *key);
         }
     }
 
     /* ---------------- internal ---------------- */
 
     fn refresh_languages(&mut self) {
-        // core: `languages` = ภาษาอื่นที่เปิดใช้ (ไม่รวม EN) — ต้องคงภาษาปัจจุบันไว้
+        // core: `languages` = ภาษาอื่นที่เปิดใช้ (ไม่รวม EN base) — ต้องคงภาษาปัจจุบันไว้
         // ไม่งั้น `set_languages` จะตีกลับเป็น EN (interaction model §7)
         let slots: Vec<LangSlot> = self
             .enabled
             .iter()
-            .filter(|lang| **lang != Lang::En)
+            .filter(|slot| slot.code != "en")
+            .cloned()
             .enumerate()
-            .map(|(index, lang)| LangSlot::new(index as u8, *lang))
+            .map(|(index, mut slot)| {
+                slot.index = index as u8;
+                slot
+            })
             .collect();
         self.engine.set_languages(slots);
     }
@@ -360,6 +381,11 @@ impl Session {
                 && matches!(press.key, Key::Char(_))
             {
                 self.note_commit();
+            }
+            if let Action::Key(press) = effect
+                && matches!(press.key, Key::Named(NamedKey::Backspace))
+            {
+                self.backspaces = self.backspaces.saturating_add(1);
             }
             out.push(effect);
         }
@@ -449,9 +475,9 @@ impl Session {
             "group": group.map_or(-1, |dir| dir.index() as i32),
             "sector": sector.map_or(-1, |dir| dir.index() as i32),
             "language": {
-                "code": lang_code(lang),
+                "code": engine.lang_code(),
                 "kind": "layout",
-                "enabled": self.enabled.iter().map(|lang| lang_code(*lang)).collect::<Vec<_>>(),
+                "enabled": self.enabled.iter().map(|slot| slot.code.clone()).collect::<Vec<_>>(),
             },
             "inner": inner,
             "outer": outer,
@@ -495,8 +521,8 @@ impl Session {
                     .iter()
                     .map(|slot| {
                         json!({
-                            "text": lang_code(slot.lang).to_uppercase(),
-                            "sub": lang_label(slot.lang),
+                            "text": slot.code.to_uppercase(),
+                            "sub": slot.label,
                         })
                     })
                     .collect();
@@ -604,20 +630,6 @@ fn hud_state_name(state: GestureState) -> &'static str {
     }
 }
 
-fn lang_code(lang: Lang) -> &'static str {
-    match lang {
-        Lang::En => "en",
-        Lang::Th => "th",
-    }
-}
-
-fn lang_label(lang: Lang) -> &'static str {
-    match lang {
-        Lang::En => "English",
-        Lang::Th => "ไทย",
-    }
-}
-
 /// ป้ายของช่องในวงคำสั่ง (ตามที่ engine มีจริง: ↑ EN · ↗ ภาษา · → Mouse · ↘ UI · ↓/↙/←/↖)
 fn command_label(engine: &RuntimeEngine, dir: Dir8) -> Value {
     match engine.command_slot(dir) {
@@ -717,7 +729,7 @@ mod tests {
     #[test]
     fn keymap_overrides_reach_the_injector() {
         let (mut session, shared) = session();
-        session.set_keymap_overrides(&[(Lang::En, 1, 0, 0, Some(Key::Char('z')))]);
+        session.set_keymap_overrides(&[("en".to_string(), 1, 0, 0, Some(Key::Char('z')))]);
         type_char(&mut session, (0.0, 0.9), (0.0, 0.9));
         assert_eq!(
             *shared.sent.lock().unwrap(),
