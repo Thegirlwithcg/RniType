@@ -7,6 +7,8 @@
 
 use std::path::PathBuf;
 
+use rnitype_core::keymap::Lang;
+use rnitype_core::Key;
 use rnitype_win::language::LanguageInfo;
 use serde_json::{json, Value};
 
@@ -340,6 +342,182 @@ pub fn reset_section(config: &mut Value, section: &str) -> bool {
     }
 }
 
+/// ภาษาที่มีตาราง 8×8 ใน core → editor แก้ได้
+pub fn keymap_lang(code: &str) -> Option<Lang> {
+    match code {
+        "en" => Some(Lang::En),
+        "th" => Some(Lang::Th),
+        _ => None,
+    }
+}
+
+/// key ของ override: รูปใหม่ `"<layer>-<group>-<sector>"` · รองรับรูปเก่า `"<group>-<sector>"` (layer 1)
+fn parse_override_key(key: &str) -> Option<(u8, u8, u8)> {
+    let parts: Vec<&str> = key.split('-').collect();
+    let (layer, group, sector) = match parts.as_slice() {
+        [layer, group, sector] => (layer.parse().ok()?, group.parse().ok()?, sector.parse().ok()?),
+        [group, sector] => (1, group.parse().ok()?, sector.parse().ok()?),
+        _ => return None,
+    };
+    (matches!(layer, 1 | 2) && group <= 7 && sector <= 7).then_some((layer, group, sector))
+}
+
+fn parse_override_value(text: &str) -> Option<Key> {
+    let mut chars = text.chars();
+    match (chars.next(), chars.next()) {
+        (Some(ch), None) => Some(Key::Char(ch)),
+        _ => None,
+    }
+}
+
+/// ค่า override ทั้งไฟล์ (ทุกภาษา) สำหรับส่งเข้า engine ตอน build/reload
+pub fn all_keymap_overrides(config: &Value) -> Vec<(Lang, u8, u8, u8, Option<Key>)> {
+    let mut out = Vec::new();
+    let Some(list) = config.get("languages").and_then(Value::as_array) else {
+        return out;
+    };
+    for entry in list {
+        let Some(code) = entry.get("code").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(lang) = keymap_lang(code) else {
+            continue;
+        };
+        if let Some(overrides) = entry.get("overrides").and_then(Value::as_object) {
+            for (key, value) in overrides {
+                if let (Some((layer, group, sector)), Some(text)) =
+                    (parse_override_key(key), value.as_str())
+                {
+                    out.push((lang, layer, group, sector, parse_override_value(text)));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// override ของภาษาเดียว (สำหรับ `get_keymap`)
+pub fn keymap_overrides(config: &Value, code: &str) -> Vec<(u8, u8, u8, Option<Key>)> {
+    let mut out = Vec::new();
+    let list = config.get("languages").and_then(Value::as_array);
+    let entry = list.and_then(|list| {
+        list.iter()
+            .find(|entry| entry.get("code").and_then(Value::as_str) == Some(code))
+    });
+    if let Some(overrides) = entry
+        .and_then(|entry| entry.get("overrides"))
+        .and_then(Value::as_object)
+    {
+        for (key, value) in overrides {
+            if let (Some((layer, group, sector)), Some(text)) =
+                (parse_override_key(key), value.as_str())
+            {
+                out.push((layer, group, sector, parse_override_value(text)));
+            }
+        }
+    }
+    out
+}
+
+/// เขียน override 1 ช่อง — `text` ว่าง = ทำให้ช่องว่าง (เฉพาะ layer 2)
+pub fn set_keymap_cell(
+    config: &mut Value,
+    code: &str,
+    layer: u8,
+    group: u8,
+    sector: u8,
+    text: &str,
+) -> Result<(), String> {
+    if keymap_lang(code).is_none() {
+        return Err(format!("{code}: ยังไม่มีตาราง 8×8"));
+    }
+    if !matches!(layer, 1 | 2) || group > 7 || sector > 7 {
+        return Err("layer/group/sector ไม่ถูกต้อง".to_string());
+    }
+    if text.chars().count() > 1 {
+        return Err("ช่องละ 1 ตัวอักษร".to_string());
+    }
+    if layer == 1 && text.is_empty() {
+        return Err("layer 1 ต้องมีคีย์".to_string());
+    }
+
+    if config.get("languages").and_then(Value::as_array).is_none() {
+        config["languages"] = json!([]);
+    }
+    let list = config["languages"].as_array_mut().expect("array just set");
+    let position = list
+        .iter()
+        .position(|entry| entry.get("code").and_then(Value::as_str) == Some(code));
+    let index = match position {
+        Some(index) => index,
+        None => {
+            list.push(json!({
+                "code": code,
+                "enabled": matches!(code, "en" | "th"),
+                "kind": "layout",
+                "overrides": {},
+            }));
+            list.len() - 1
+        }
+    };
+    let entry = &mut list[index];
+    if !entry.is_object() {
+        *entry = json!({ "code": code, "enabled": true, "kind": "layout" });
+    }
+    if !entry.get("overrides").is_some_and(Value::is_object) {
+        entry["overrides"] = json!({});
+    }
+    entry["overrides"][format!("{layer}-{group}-{sector}")] = json!(text);
+    Ok(())
+}
+
+/// ลบ override (ทั้งภาษา หรือเฉพาะกลุ่ม) — คืน `false` เมื่อไม่พบภาษา
+pub fn reset_keymap(config: &mut Value, code: &str, group: Option<u8>) -> bool {
+    let Some(list) = config.get_mut("languages").and_then(Value::as_array_mut) else {
+        return false;
+    };
+    let Some(entry) = list
+        .iter_mut()
+        .find(|entry| entry.get("code").and_then(Value::as_str) == Some(code))
+    else {
+        return false;
+    };
+    let Some(overrides) = entry.get_mut("overrides").and_then(Value::as_object_mut) else {
+        return true;
+    };
+    match group {
+        None => overrides.clear(),
+        Some(group) => overrides.retain(|key, _| {
+            parse_override_key(key).is_none_or(|(_, target, _)| target != group)
+        }),
+    }
+    true
+}
+
+/// ตรวจ `languages[].overrides` — key ต้องเป็น layer-group-sector และค่าต้อง ≤ 1 ตัวอักษร
+pub fn validate_keymaps(config: &Value) -> Result<(), String> {
+    let Some(list) = config.get("languages").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for entry in list {
+        let Some(overrides) = entry.get("overrides").and_then(Value::as_object) else {
+            continue;
+        };
+        for (key, value) in overrides {
+            if parse_override_key(key).is_none() {
+                return Err(format!("overrides: key \"{key}\" ต้องเป็น layer-group-sector"));
+            }
+            let text = value
+                .as_str()
+                .ok_or_else(|| format!("overrides[{key}]: ต้องเป็น string"))?;
+            if text.chars().count() > 1 {
+                return Err(format!("overrides[{key}]: 1 ตัวอักษร"));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// รายการ exe ที่ห้ามส่งคีย์ (`system.exclusion`) — trim และตัดค่าว่าง
 pub fn exclusion_list(config: &Value) -> Vec<String> {
     config
@@ -587,9 +765,78 @@ mod tests {
         assert!(validate_languages(&too_many).is_err());
     }
 
+    /* ---------------- P5 slice 3: keymap overrides ---------------- */
+
     #[test]
-    fn reset_section_touches_only_its_own_part() {
+    fn keymap_cells_round_trip_through_the_config() {
         let mut config = default_config();
+        set_keymap_cell(&mut config, "en", 1, 0, 0, "z").unwrap();
+        set_keymap_cell(&mut config, "en", 2, 3, 4, "").unwrap();
+
+        let all = all_keymap_overrides(&config);
+        assert!(all.contains(&(Lang::En, 1, 0, 0, Some(Key::Char('z')))));
+        assert!(all.contains(&(Lang::En, 2, 3, 4, None)));
+
+        let en = keymap_overrides(&config, "en");
+        assert_eq!(en.len(), 2);
+        assert!(en.contains(&(1, 0, 0, Some(Key::Char('z')))));
+
+        // TH ยังไม่มี override ของตัวเอง
+        assert!(keymap_overrides(&config, "th").is_empty());
+    }
+
+    #[test]
+    fn keymap_cell_validation_rejects_bad_input() {
+        let mut config = default_config();
+        assert!(set_keymap_cell(&mut config, "ru", 1, 0, 0, "z").is_err());
+        assert!(set_keymap_cell(&mut config, "en", 3, 0, 0, "z").is_err());
+        assert!(set_keymap_cell(&mut config, "en", 1, 8, 0, "z").is_err());
+        assert!(set_keymap_cell(&mut config, "en", 1, 0, 0, "").is_err());
+        assert!(set_keymap_cell(&mut config, "en", 1, 0, 0, "ab").is_err());
+    }
+
+    #[test]
+    fn legacy_group_sector_keys_are_layer_one() {
+        let mut config = default_config();
+        set_keymap_cell(&mut config, "th", 1, 2, 5, "ฬ").unwrap();
+        // เขียนรูปเก่าแล้วต้องอ่านได้
+        config["languages"][0]["overrides"] = json!({ "2-5": "ฬ" });
+        assert!(all_keymap_overrides(&config).contains(&(Lang::Th, 1, 2, 5, Some(Key::Char('ฬ')))));
+    }
+
+    #[test]
+    fn reset_keymap_clears_group_or_language() {
+        let mut config = default_config();
+        set_keymap_cell(&mut config, "en", 1, 0, 0, "z").unwrap();
+        set_keymap_cell(&mut config, "en", 2, 0, 1, "Z").unwrap();
+        set_keymap_cell(&mut config, "en", 1, 1, 0, "y").unwrap();
+
+        assert!(reset_keymap(&mut config, "en", Some(0)));
+        let left = keymap_overrides(&config, "en");
+        assert_eq!(left, vec![(1, 1, 0, Some(Key::Char('y')))]);
+
+        assert!(reset_keymap(&mut config, "en", None));
+        assert!(keymap_overrides(&config, "en").is_empty());
+        assert!(!reset_keymap(&mut config, "ru", None), "ไม่พบภาษา");
+    }
+
+    #[test]
+    fn validate_keymaps_checks_shape_and_length() {
+        assert!(validate_keymaps(&default_config()).is_ok());
+        let mut config = default_config();
+        set_keymap_cell(&mut config, "en", 1, 0, 0, "z").unwrap();
+        assert!(validate_keymaps(&config).is_ok());
+
+        config["languages"][0]["overrides"] = json!({ "9-0-0": "z" });
+        assert!(validate_keymaps(&config).is_err());
+        config["languages"][0]["overrides"] = json!({ "1-0-0": "zz" });
+        assert!(validate_keymaps(&config).is_err());
+        config["languages"][0]["overrides"] = json!({ "1-0-0": 7 });
+        assert!(validate_keymaps(&config).is_err());
+    }
+
+    #[test]
+    fn reset_section_touches_only_its_own_part() {        let mut config = default_config();
         config["ui"]["hudTextScale"] = json!(2.0);
         config["ui"]["hudFontFamily"] = json!("system");
         config["ui"]["language"] = json!("th");

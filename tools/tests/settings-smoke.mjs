@@ -29,12 +29,12 @@ try {
   /* ---------------- tabs ---------------- */
 
   const tabs = await browser.evaluate(`Array.from(document.querySelectorAll('[data-tab]')).map((b) => b.dataset.tab)`);
-  check('sidebar has General/Languages/HUD tabs', JSON.stringify(tabs) === '["general","languages","hud"]', tabs.join(','));
+  check('sidebar has General/Languages/HUD/Keymap tabs', JSON.stringify(tabs) === '["general","languages","hud","keymap"]', tabs.join(','));
 
-  const keymapDisabled = await browser.evaluate(
-    `document.querySelector('.nav__item.is-disabled')?.textContent.trim() === 'Keymap'`
+  const keymapAvailable = await browser.evaluate(
+    `document.querySelector('[data-tab="keymap"]')?.textContent.trim() === 'Keymap'`
   );
-  check('Keymap stays disabled until universal mapping', keymapDisabled === true);
+  check('Keymap tab is available', keymapAvailable === true);
 
   const startTab = await browser.evaluate(
     `document.querySelector('[data-panel="general"]').hidden === false && document.querySelector('[data-panel="languages"]').hidden === true`
@@ -139,6 +139,57 @@ try {
   await sleep(100);
   const resetOutput = await browser.evaluate(`document.getElementById('textScaleValue').textContent`);
   check('Reset HUD restores 1.40×', resetOutput === '1.40×', resetOutput);
+
+  /* ---------------- Keymap ---------------- */
+
+  await browser.evaluate(`document.querySelector('[data-tab="keymap"]').click()`);
+  await sleep(300);
+
+  const mapGroups = await browser.evaluate(`document.querySelectorAll('#mapGroups .keymap__group').length`);
+  check('Keymap shows 8 groups', mapGroups === 8, `groups=${mapGroups}`);
+
+  const mapCells = await browser.evaluate(`document.querySelectorAll('#mapGrid .cell:not(.cell--center)').length`);
+  check('Keymap shows the 8 RS cells', mapCells === 8, `cells=${mapCells}`);
+
+  const firstCell = await browser.evaluate(`document.querySelector('#mapGrid .cell').textContent`);
+  check('base layer starts with the built-in table', firstCell === 'a', firstCell);
+
+  await browser.evaluate(`document.querySelector('#mapGrid .cell').click()`);
+  await sleep(80);
+  const editing = await browser.evaluate(`!!document.querySelector('#mapGrid .cell input')`);
+  check('clicking a cell opens the inline editor', editing === true);
+
+  await browser.evaluate(`
+    const input = document.querySelector('#mapGrid .cell input');
+    input.value = 'z';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  `);
+  await sleep(150);
+  const edited = await browser.evaluate(`
+    (() => {
+      const cell = document.querySelector('#mapGrid .cell');
+      return { text: cell.textContent, modified: cell.classList.contains('is-modified'), hint: document.getElementById('mapHint').textContent };
+    })()
+  `);
+  check('edited cell shows the new key and a modified dot', edited.text === 'z' && edited.modified === true, edited.text);
+  check('hint counts the changed cell', edited.hint.includes('1 changed cell'), edited.hint);
+
+  await browser.evaluate(`document.getElementById('mapResetGroup').click()`);
+  await sleep(150);
+  const resetCell = await browser.evaluate(`
+    (() => {
+      const cell = document.querySelector('#mapGrid .cell');
+      return { text: cell.textContent, modified: cell.classList.contains('is-modified') };
+    })()
+  `);
+  check('Reset group restores the default key', resetCell.text === 'a' && resetCell.modified === false, resetCell.text);
+
+  await browser.evaluate(`document.querySelector('#mapLayer button[data-layer="2"]').click()`);
+  await sleep(80);
+  const layer2 = await browser.evaluate(`document.querySelector('#mapGrid .cell').textContent`);
+  check('Layer 2 shows uppercase letters', layer2 === 'A', layer2);
+
+  await browser.screenshot(path.join(SHOTS, 'settings-keymap.png'));
 
   const exceptions = browser.exceptions.length;
   check('no runtime exceptions', exceptions === 0, exceptions ? browser.exceptions.join(' | ') : '');

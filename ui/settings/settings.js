@@ -24,6 +24,53 @@
     { code: 'ja', klid: '00000411', label: 'Japanese (Japan)', kind: 'ime', detected: true, builtin: false, supported: false, enabled: false },
   ];
 
+  // ตารางตัวอย่างสำหรับ preview (ไม่มี Tauri) — ตรงกับตาราง EN ใน core
+  const PREVIEW_ROWS = {
+    base: [
+      ['a', 'e', 'i', 'o', 'u', 't', 'n', 's'],
+      ['h', 'r', 'd', 'l', 'c', 'm', 'f', 'w'],
+      ['g', 'p', 'b', 'v', 'k', 'x', 'y', 'j'],
+      ['q', 'z', "'", '"', '-', '_', '.', ','],
+      ['1', '2', '3', '4', '5', '6', '7', '8'],
+      ['9', '0', '/', '\\', '(', ')', '[', ']'],
+      ['!', '?', '@', '#', '$', '%', '&', '*'],
+      [':', ';', '=', '+', '<', '>', '`', '~'],
+    ],
+    layer2: [
+      ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'],
+      ['I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'],
+      ['Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X'],
+      ['{', '}', '|', '^', '¬', '°', '±', '§'],
+      ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8'],
+      ['F9', 'F10', 'F11', 'F12', 'PrintScreen', 'Insert', '', ''],
+      ['Home', 'End', 'PageUp', 'PageDown', 'Left', 'Up', 'Down', 'Right'],
+      ['Delete', 'Backspace', 'Escape', 'Enter', 'Tab', 'Space', '', ''],
+    ],
+  };
+
+  const PREVIEW_GROUPS = {
+    base: ['AEIOU', 'B', 'C', 'D', '1', '2', '3', '4'],
+    layer2: ['A–H', 'I–P', 'Q–X', 'Sym', 'F1–F8', 'F9–F12', 'Nav', 'Keys'],
+  };
+
+  function previewKeymap() {
+    const build = (rows) => {
+      const cells = rows.flat();
+      return { cells, defaults: cells.slice() };
+    };
+    return {
+      code: mapLang,
+      label: mapLang === 'th' ? 'Thai' : 'English',
+      groups: PREVIEW_GROUPS.base,
+      groups2: PREVIEW_GROUPS.layer2,
+      layers: [
+        { name: 'base', ...build(PREVIEW_ROWS.base) },
+        { name: 'layer 2', ...build(PREVIEW_ROWS.layer2) },
+      ],
+      overrides: {},
+    };
+  }
+
   const tauri = typeof window !== 'undefined' ? window.__TAURI__ : null;
   const invoke =
     tauri && tauri.core && typeof tauri.core.invoke === 'function'
@@ -58,6 +105,14 @@
     langList: $('langList'),
     rescanLangs: $('rescanLangs'),
     resetLangs: $('resetLangs'),
+    // Keymap
+    mapLang: $('mapLang'),
+    mapLayer: $('mapLayer'),
+    mapGroups: $('mapGroups'),
+    mapGrid: $('mapGrid'),
+    mapHint: $('mapHint'),
+    mapResetGroup: $('mapResetGroup'),
+    mapResetLang: $('mapResetLang'),
     // HUD
     slider: $('textScale'),
     sliderValue: $('textScaleValue'),
@@ -72,6 +127,10 @@
   let config = null;
   let status = null;
   let langs = [];
+  let keymap = null;
+  let mapLang = 'en';
+  let mapLayer = 1;
+  let mapGroup = 0;
   let activeTab = 'general';
   let languagesLoaded = false;
   let saveTimer = 0;
@@ -146,6 +205,7 @@
       pane.hidden = pane.dataset.panel !== name;
     });
     if (name === 'languages' && !languagesLoaded) rescan();
+    if (name === 'keymap') loadKeymap();
     if (name === 'general') refreshStats();
   }
 
@@ -398,6 +458,229 @@
     rescan();
   });
   dom.resetLangs.addEventListener('click', () => resetSection('languages'));
+
+  /* ---------------- Keymap ---------------- */
+
+  const SECTOR_POS = ['1 / 2', '1 / 3', '2 / 3', '3 / 3', '3 / 2', '3 / 1', '2 / 1', '1 / 1'];
+
+  function mapLanguageOptions() {
+    const editable = langs.filter((row) => row.supported);
+    if (editable.length > 0) return editable;
+    return [
+      { code: 'en', label: 'English' },
+      { code: 'th', label: 'Thai' },
+    ];
+  }
+
+  function renderMapLanguages() {
+    const options = mapLanguageOptions();
+    if (!options.some((row) => row.code === mapLang)) mapLang = options[0]?.code || 'en';
+    dom.mapLang.replaceChildren();
+    options.forEach((row) => {
+      const option = document.createElement('option');
+      option.value = row.code;
+      option.textContent = `${String(row.code).toUpperCase()} · ${row.label || row.code}`;
+      option.selected = row.code === mapLang;
+      dom.mapLang.append(option);
+    });
+  }
+
+  function mapLayerData() {
+    if (!keymap || !Array.isArray(keymap.layers)) return null;
+    return keymap.layers[mapLayer - 1] || null;
+  }
+
+  function renderKeymap() {
+    if (!keymap) return;
+    const groups = (mapLayer === 1 ? keymap.groups : keymap.groups2) || [];
+    dom.mapGroups.replaceChildren();
+    groups.forEach((name, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `keymap__group${index === mapGroup ? ' is-on' : ''}`;
+      button.textContent = `${index + 1}. ${name}`;
+      button.setAttribute('role', 'option');
+      button.setAttribute('aria-selected', index === mapGroup ? 'true' : 'false');
+      button.addEventListener('click', () => {
+        mapGroup = index;
+        renderKeymap();
+      });
+      dom.mapGroups.append(button);
+    });
+
+    const layer = mapLayerData();
+    dom.mapGrid.replaceChildren();
+    for (let sector = 0; sector < 8; sector++) {
+      const index = mapGroup * 8 + sector;
+      const value = layer?.cells?.[index] ?? '';
+      const isDefault = value === (layer?.defaults?.[index] ?? '');
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = `cell${value === '' ? ' is-empty' : ''}${isDefault ? '' : ' is-modified'}`;
+      cell.style.gridArea = SECTOR_POS[sector];
+      cell.dataset.value = value;
+      cell.textContent = value === '' ? '—' : value;
+      cell.title = value === '' ? 'Empty cell' : `${value} — click to change`;
+      cell.addEventListener('click', () => startCellEdit(cell, mapGroup, sector));
+      dom.mapGrid.append(cell);
+    }
+
+    const center = document.createElement('div');
+    center.className = 'cell cell--center';
+    center.style.gridArea = '2 / 2';
+    center.textContent = groups[mapGroup] || '';
+    dom.mapGrid.append(center);
+
+    const modified = layer
+      ? layer.cells.reduce((count, value, index) => count + (value !== layer.defaults[index] ? 1 : 0), 0)
+      : 0;
+    dom.mapHint.textContent = modified > 0
+      ? `${modified} changed cell${modified === 1 ? '' : 's'} in this layer. Click a cell to edit; Enter saves, Esc cancels.`
+      : 'Click a cell to assign a key. Enter saves, Esc cancels.';
+  }
+
+  function startCellEdit(cell, group, sector) {
+    if (cell.querySelector('input')) return;
+    const previous = cell.dataset.value || '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 2;
+    input.value = previous;
+    cell.textContent = '';
+    cell.append(input);
+    input.focus();
+    input.select();
+
+    let done = false;
+    const finish = (commit) => {
+      if (done) return;
+      done = true;
+      const value = commit ? input.value : previous;
+      saveCell(group, sector, value);
+    };
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        finish(true);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        finish(false);
+      }
+    });
+    input.addEventListener('blur', () => finish(true));
+  }
+
+  async function saveCell(group, sector, value) {
+    if (mapLayer === 1 && value === '') {
+      setStatus('Base layer needs a key in every cell', 'error');
+      renderKeymap();
+      return;
+    }
+    if (!invoke) {
+      const layer = mapLayerData();
+      if (layer) {
+        const index = group * 8 + sector;
+        layer.cells[index] = value;
+        const key = `${mapLayer}-${group}-${sector}`;
+        if (value === layer.defaults[index]) delete keymap.overrides[key];
+        else keymap.overrides[key] = value;
+      }
+      renderKeymap();
+      setStatus('Saved (preview)');
+      return;
+    }
+
+    try {
+      const result = await invoke('set_keymap_cell', {
+        code: mapLang,
+        layer: mapLayer,
+        group,
+        sector,
+        text: value,
+      });
+      if (result && result.ok === true) {
+        keymap = result.data;
+        renderKeymap();
+        setStatus('Keymap saved');
+      } else {
+        const message = (result && result.error && result.error.message) || 'unknown error';
+        setStatus(`Not saved: ${message}`, 'error');
+        renderKeymap();
+      }
+    } catch (err) {
+      setStatus(`Not saved: ${err && err.message ? err.message : err}`, 'error');
+      renderKeymap();
+    }
+  }
+
+  async function loadKeymap() {
+    renderMapLanguages();
+    if (!invoke) {
+      keymap = previewKeymap();
+      renderKeymap();
+      return;
+    }
+    try {
+      const result = await invoke('get_keymap', { code: mapLang });
+      if (result && result.ok === true) {
+        keymap = result.data;
+        renderKeymap();
+      } else {
+        keymap = null;
+        setStatus('Keymap is not available for this language', 'error');
+      }
+    } catch (err) {
+      setStatus(`Could not load keymap: ${err && err.message ? err.message : err}`, 'error');
+    }
+  }
+
+  async function resetMap(group) {
+    if (!invoke) {
+      const layer = mapLayerData();
+      if (layer) {
+        for (let sector = 0; sector < 8; sector++) {
+          const index = mapGroup * 8 + sector;
+          layer.cells[index] = layer.defaults[index];
+          delete keymap.overrides[`${mapLayer}-${mapGroup}-${sector}`];
+        }
+      }
+      renderKeymap();
+      setStatus('Reset (preview)');
+      return;
+    }
+    try {
+      const result = await invoke('reset_keymap', { code: mapLang, group });
+      if (result && result.ok === true) {
+        keymap = result.data;
+        renderKeymap();
+        setStatus(group === undefined || group === null ? 'Language reset' : 'Group reset');
+      } else {
+        const message = (result && result.error && result.error.message) || 'unknown error';
+        setStatus(`Reset failed: ${message}`, 'error');
+      }
+    } catch (err) {
+      setStatus(`Reset failed: ${err && err.message ? err.message : err}`, 'error');
+    }
+  }
+
+  dom.mapLang.addEventListener('change', () => {
+    mapLang = dom.mapLang.value;
+    keymap = null;
+    loadKeymap();
+  });
+
+  dom.mapLayer.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-layer]');
+    if (!button) return;
+    mapLayer = Number(button.dataset.layer);
+    dom.mapLayer.querySelectorAll('button').forEach((item) => {
+      item.classList.toggle('is-on', Number(item.dataset.layer) === mapLayer);
+    });
+    renderKeymap();
+  });
+
+  dom.mapResetGroup.addEventListener('click', () => resetMap(mapGroup));
+  dom.mapResetLang.addEventListener('click', () => resetMap(null));
 
   /* ---------------- HUD ---------------- */
 

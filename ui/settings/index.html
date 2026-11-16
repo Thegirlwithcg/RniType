@@ -23,7 +23,7 @@
         <button type="button" class="nav__item is-active" data-tab="general" aria-current="page">General</button>
         <button type="button" class="nav__item" data-tab="languages">Languages</button>
         <button type="button" class="nav__item" data-tab="hud">HUD</button>
-        <span class="nav__item is-disabled" title="Custom keymaps arrive with universal layouts">Keymap</span>
+        <button type="button" class="nav__item" data-tab="keymap">Keymap</button>
       </nav>
       <p class="sidebar__note">Settings apply immediately.</p>
     </aside>
@@ -117,6 +117,39 @@
         <footer class="actions">
           <button id="rescanLangs" type="button" class="btn">Rescan languages</button>
           <button id="resetLangs" type="button" class="btn">Reset languages</button>
+        </footer>
+      </section>
+
+      <!-- ======================= Keymap ======================= -->
+      <section class="pane" data-panel="keymap" hidden>
+        <header class="content__head">
+          <h1>Keymap</h1>
+          <p class="lead">Pick a group on the left, then a cell. Changed cells get a blue dot.</p>
+        </header>
+
+        <div class="row">
+          <div class="row__body">
+            <label for="mapLang">Language</label>
+            <p class="hint">English and Thai have built-in 8×8 tables. English is the base language.</p>
+          </div>
+          <select id="mapLang" class="select"></select>
+        </div>
+
+        <div class="segmented" id="mapLayer" role="group" aria-label="Layer">
+          <button type="button" data-layer="1" class="is-on">Base</button>
+          <button type="button" data-layer="2">Layer 2</button>
+        </div>
+
+        <div class="keymap">
+          <div class="keymap__groups" id="mapGroups" role="listbox" aria-label="Groups"></div>
+          <div class="keymap__grid" id="mapGrid" aria-label="Cells"></div>
+        </div>
+
+        <p class="hint" id="mapHint">Click a cell to assign a key. Enter saves, Esc cancels.</p>
+
+        <footer class="actions">
+          <button id="mapResetGroup" type="button" class="btn">Reset group</button>
+          <button id="mapResetLang" type="button" class="btn">Reset language</button>
         </footer>
       </section>
 

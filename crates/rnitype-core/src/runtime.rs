@@ -380,6 +380,27 @@ impl RuntimeEngine {
         self.typing.set_lang(lang);
     }
 
+    /// override ของผู้ใช้ 1 ช่อง (config `languages[].overrides`) — `None` = ช่องว่าง
+    pub fn set_keymap_override(
+        &mut self,
+        lang: Lang,
+        layer: u8,
+        group: u8,
+        sector: u8,
+        key: Option<Key>,
+    ) {
+        self.typing.set_override(lang, layer, group, sector, key);
+    }
+
+    pub fn clear_keymap_overrides(&mut self) {
+        self.typing.clear_overrides();
+    }
+
+    /// คีย์ที่จะพิมพ์จากช่องนี้ (ตามภาษาปัจจุบัน + layer ปัจจุบัน) — HUD ใช้ทำ preview
+    pub fn preview_key(&self, group: Dir8, sector: Dir8) -> Option<Key> {
+        self.typing.key_at(group, sector)
+    }
+
     /// ภาษาอื่นที่เปิดใช้ (ไม่รวม EN) — เรียงตามลำดับใน config
     pub fn languages(&self) -> &[LangSlot] {
         &self.languages

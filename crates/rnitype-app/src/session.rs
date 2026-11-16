@@ -11,7 +11,7 @@
 //! - `Command::Mouse/TypeEn/PlaceUi` · `SetMode` · `SetLang` → engine เปลี่ยนเองแล้ว
 //! - `MovePivot` / `ResetPivot` / `RecenterPointer` → ขยับ pivot/pointer ของ HUD (Nav/Mouse math อยู่ใน core)
 
-use rnitype_core::keymap::{group_names_for, label_of, lookup_layer};
+use rnitype_core::keymap::{group_names_for, label_of};
 use rnitype_core::normalizer::Dir8;
 use rnitype_core::runtime::{LangSlot, RuntimeEngine, WheelKind};
 use rnitype_core::{
@@ -274,6 +274,18 @@ impl Session {
         self.refresh_languages();
     }
 
+    /// ตั้ง override ของ keymap (จาก config) — ล้างของเดิมแล้วใส่ชุดใหม่
+    pub fn set_keymap_overrides(
+        &mut self,
+        overrides: &[(Lang, u8, u8, u8, Option<Key>)],
+    ) {
+        self.engine.clear_keymap_overrides();
+        for (lang, layer, group, sector, key) in overrides {
+            self.engine
+                .set_keymap_override(*lang, *layer, *group, *sector, *key);
+        }
+    }
+
     /* ---------------- internal ---------------- */
 
     fn refresh_languages(&mut self) {
@@ -389,7 +401,8 @@ impl Session {
         };
         let preview = if typing {
             match (group, sector) {
-                (Some(g), Some(s)) => lookup_layer(lang, layer, g, s)
+                (Some(g), Some(s)) => engine
+                    .preview_key(g, s)
                     .map(|key| shifted(label_of(key), shift_lock))
                     .unwrap_or_default(),
                 _ => String::new(),
@@ -514,7 +527,8 @@ impl Session {
                 let labels: Vec<Value> = Dir8::ALL
                     .iter()
                     .map(|dir| {
-                        let text = lookup_layer(lang, layer, group, *dir)
+                        let text = engine
+                            .preview_key(group, *dir)
                             .map(|key| shifted(label_of(key), shift_lock))
                             .unwrap_or_default();
                         json!({ "text": text })
@@ -698,6 +712,22 @@ mod tests {
         session.step(&pad(ls, rs), 4);
         session.step(&pad(ls, (0.0, 0.0)), 4);
         session.step(&pad(ls, (0.0, 0.0)), 64)
+    }
+
+    #[test]
+    fn keymap_overrides_reach_the_injector() {
+        let (mut session, shared) = session();
+        session.set_keymap_overrides(&[(Lang::En, 1, 0, 0, Some(Key::Char('z')))]);
+        type_char(&mut session, (0.0, 0.9), (0.0, 0.9));
+        assert_eq!(
+            *shared.sent.lock().unwrap(),
+            vec![Action::Key(KeyPress {
+                key: Key::Char('z'),
+                shift: false,
+                ctrl: false,
+                alt: false,
+            })]
+        );
     }
 
     #[test]

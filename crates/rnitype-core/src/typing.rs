@@ -1,6 +1,8 @@
 //! ต่อ gesture → keymap → Action (ตัว injector อยู่ใน crate ของแอป)
 
-use crate::action::{Action, KeyPress};
+use std::collections::BTreeMap;
+
+use crate::action::{Action, Key, KeyPress};
 use crate::gesture::{Commit, GestureConfig, GestureEngine, GestureState};
 use crate::keymap::{Lang, lookup_layer};
 use crate::normalizer::Dir8;
@@ -11,6 +13,10 @@ pub struct TypingPipeline {
     engine: GestureEngine,
     lang: Lang,
     layer: u8,
+    /// ช่องที่ผู้ใช้แก้เอง (config `languages[].overrides`) — `None` = ไม่มีคีย์ (layer 2)
+    ///
+    /// key = (ภาษา, layer, กลุ่ม, ช่อง) · เก็บแยกภาษาจึงสลับภาษาแล้วยังอยู่
+    overrides: BTreeMap<(Lang, u8, u8, u8), Option<Key>>,
 }
 
 impl TypingPipeline {
@@ -19,6 +25,7 @@ impl TypingPipeline {
             engine: GestureEngine::new(cfg),
             lang,
             layer: 1,
+            overrides: BTreeMap::new(),
         }
     }
 
@@ -37,6 +44,38 @@ impl TypingPipeline {
 
     pub fn set_layer(&mut self, layer: u8) {
         self.layer = layer.max(1);
+    }
+
+    /// คีย์ของช่องนั้น — override ของผู้ใช้ชนะตารางเริ่มต้น
+    ///
+    /// คืน `None` = ช่องว่าง (layer 2 ของไทย) → commit แล้วไม่ส่งคีย์
+    pub fn key_at(&self, group: Dir8, sector: Dir8) -> Option<Key> {
+        let index = (
+            self.lang,
+            self.layer,
+            group.index() as u8,
+            sector.index() as u8,
+        );
+        match self.overrides.get(&index) {
+            Some(value) => *value,
+            None => lookup_layer(self.lang, self.layer, group, sector),
+        }
+    }
+
+    /// ตั้ง override 1 ช่อง (`None` = ทำให้ช่องว่าง เฉพาะ layer 2)
+    pub fn set_override(&mut self, lang: Lang, layer: u8, group: u8, sector: u8, key: Option<Key>) {
+        if layer < 1 || group > 7 || sector > 7 {
+            return;
+        }
+        self.overrides.insert((lang, layer, group, sector), key);
+    }
+
+    pub fn clear_overrides(&mut self) {
+        self.overrides.clear();
+    }
+
+    pub fn override_count(&self) -> usize {
+        self.overrides.len()
     }
 
     pub fn state(&self) -> GestureState {
@@ -74,7 +113,7 @@ impl TypingPipeline {
     /// ชั้น 2 มีช่องว่าง (ไทย) → คืน `None` = commit แล้วไม่ส่งคีย์
     pub fn tick(&mut self, pad: &PadState, dt_ms: u32) -> Option<Action> {
         let Commit { group, sector } = self.engine.tick(pad, dt_ms)?;
-        let key = lookup_layer(self.lang, self.layer, group, sector)?;
+        let key = self.key_at(group, sector)?;
         Some(Action::Key(KeyPress {
             key,
             shift: pad.buttons.lt,
@@ -152,6 +191,58 @@ mod tests {
             Action::Key(KeyPress {
                 key: Key::Char('a'),
                 shift: true,
+                ctrl: false,
+                alt: false,
+            })
+        );
+    }
+
+    #[test]
+    fn overrides_win_over_the_builtin_table_and_stay_per_language() {
+        let mut en = TypingPipeline::default();
+        en.set_override(Lang::En, 1, 0, 0, Some(Key::Char('z')));
+        let action = press(&mut en, (0.0, 0.9), (0.0, 0.9)).expect("commit");
+        assert_eq!(
+            action,
+            Action::Key(KeyPress {
+                key: Key::Char('z'),
+                shift: false,
+                ctrl: false,
+                alt: false,
+            })
+        );
+
+        // override ของ EN ต้องไม่รั่วไป TH
+        let mut th = TypingPipeline::new(Lang::Th, GestureConfig::default());
+        th.set_override(Lang::En, 1, 0, 0, Some(Key::Char('z')));
+        let action = press(&mut th, (0.0, 0.9), (0.0, 0.9)).expect("commit");
+        assert_eq!(
+            action,
+            Action::Key(KeyPress {
+                key: Key::Char('ก'),
+                shift: false,
+                ctrl: false,
+                alt: false,
+            })
+        );
+    }
+
+    #[test]
+    fn layer_two_can_be_emptied_and_overrides_can_be_cleared() {
+        let mut pipe = TypingPipeline::default();
+        pipe.set_layer(2);
+        pipe.set_override(Lang::En, 2, 0, 0, None);
+        assert_eq!(press(&mut pipe, (0.0, 0.9), (0.0, 0.9)), None);
+        assert_eq!(pipe.override_count(), 1);
+
+        pipe.clear_overrides();
+        assert_eq!(pipe.override_count(), 0);
+        let action = press(&mut pipe, (0.0, 0.9), (0.0, 0.9)).expect("commit");
+        assert_eq!(
+            action,
+            Action::Key(KeyPress {
+                key: Key::Char('A'),
+                shift: false,
                 ctrl: false,
                 alt: false,
             })

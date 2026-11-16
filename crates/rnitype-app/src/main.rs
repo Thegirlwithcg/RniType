@@ -33,6 +33,8 @@ use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize};
 use input::{GilrsSource, PadSource, ScriptSource};
 use rnitype_core::pad::PadState;
 use rnitype_core::runtime::RuntimeConfig;
+use rnitype_core::keymap::{group_names_for, label_of, lookup_layer};
+use rnitype_core::normalizer::Dir8;
 use rnitype_core::{Lang, RuntimeEngine};
 use rnitype_win::Injector;
 use session::{HudStyle, Session};
@@ -163,7 +165,10 @@ fn main() {
             set_paused,
             rescan_languages,
             set_language_enabled,
-            reset_config
+            reset_config,
+            get_keymap,
+            set_keymap_cell,
+            reset_keymap
         ])
         .setup(move |app| setup_overlay(app, &options, &demo_states))
         .run(tauri::generate_context!())
@@ -543,6 +548,7 @@ fn build_session(config: &Value, desktop: (i32, i32, u32, u32), no_scancode: boo
     }
     // pivot ต้องไม่ล้นจอ: เว้นรัศมีวง HUD (340px × scale / 2 ≈ 172px) จากขอบ virtual desktop
     apply_pivot_clamp(&mut session, config, desktop);
+    session.set_keymap_overrides(&config::all_keymap_overrides(config));
     session
 }
 
@@ -606,9 +612,59 @@ fn enabled_languages(config: &Value) -> Vec<Lang> {
     out
 }
 
+/// ข้อมูล keymap ของภาษา (64 ช่อง/ชั้น + default + override) สำหรับแท็บ Keymap
+///
+/// `cells` = ค่าที่ใช้จริง (override ชนะ) · `defaults` = ตารางใน core · `""` = ช่องว่าง
+fn keymap_payload(config: &Value, code: &str) -> Result<Value, String> {
+    let lang = config::keymap_lang(code).ok_or_else(|| format!("{code}: ยังไม่มีตาราง 8×8"))?;
+    let overrides = config::keymap_overrides(config, code);
+
+    let mut layers = Vec::new();
+    for layer in 1..=2u8 {
+        let mut cells = Vec::new();
+        let mut defaults = Vec::new();
+        for group in 0..8usize {
+            for sector in 0..8usize {
+                let dir_group = Dir8::from_index(group);
+                let dir_sector = Dir8::from_index(sector);
+                let default = lookup_layer(lang, layer, dir_group, dir_sector);
+                let key = overrides
+                    .iter()
+                    .find(|(l, g, s, _)| *l == layer && *g as usize == group && *s as usize == sector)
+                    .map_or(default, |(_, _, _, key)| *key);
+                defaults.push(default.map(label_of).unwrap_or_default());
+                cells.push(key.map(label_of).unwrap_or_default());
+            }
+        }
+        layers.push(json!({
+            "name": if layer == 1 { "base" } else { "layer 2" },
+            "cells": cells,
+            "defaults": defaults,
+        }));
+    }
+
+    let overrides_json: serde_json::Map<String, Value> = overrides
+        .iter()
+        .map(|(layer, group, sector, key)| {
+            (
+                format!("{layer}-{group}-{sector}"),
+                json!(key.map(label_of).unwrap_or_default()),
+            )
+        })
+        .collect();
+
+    Ok(json!({
+        "code": code,
+        "label": if lang == Lang::En { "English" } else { "Thai" },
+        "groups": group_names_for(lang, 1),
+        "groups2": group_names_for(lang, 2),
+        "layers": layers,
+        "overrides": overrides_json,
+    }))
+}
+
 #[cfg(windows)]
-fn make_injector(no_scancode: bool) -> Box<dyn Injector + Send> {
-    Box::new(rnitype_win::SendInputInjector::new().with_scancode(!no_scancode))
+fn make_injector(no_scancode: bool) -> Box<dyn Injector + Send> {    Box::new(rnitype_win::SendInputInjector::new().with_scancode(!no_scancode))
 }
 
 #[cfg(not(windows))]
@@ -683,6 +739,7 @@ fn run_loop(
                 last_config_rev = rev;
                 let config = app_state.config.lock().unwrap().clone();
                 session.set_enabled_languages(enabled_languages(&config));
+                session.set_keymap_overrides(&config::all_keymap_overrides(&config));
                 apply_pivot_clamp(session, &config, virtual_desktop());
                 println!(
                     "[config] runtime reload: languages={:?} hudScale={:.2}",
@@ -1038,6 +1095,10 @@ fn save_config(
         eprintln!("[config] ปฏิเสธการบันทึก: {message}");
         return json!({ "ok": false, "error": { "code": "CONFIG_INVALID", "message": message } });
     }
+    if let Err(message) = config::validate_keymaps(&config) {
+        eprintln!("[config] ปฏิเสธ keymap: {message}");
+        return json!({ "ok": false, "error": { "code": "CONFIG_INVALID", "message": message } });
+    }
 
     let style = config::ui_style(&config);
     {
@@ -1075,6 +1136,85 @@ fn save_config(
 #[tauri::command]
 fn get_status(state: tauri::State<'_, AppState>) -> Value {
     json!({ "ok": true, "data": status_payload(&state) })
+}
+
+/// Keymap tab — อ่านตาราง 8×8 ของภาษา (default + override)
+#[tauri::command]
+fn get_keymap(state: tauri::State<'_, AppState>, code: String) -> Value {
+    let config = state.config.lock().unwrap().clone();
+    match keymap_payload(&config, &code) {
+        Ok(data) => json!({ "ok": true, "data": data }),
+        Err(message) => {
+            json!({ "ok": false, "error": { "code": "LANG_NOT_FOUND", "message": message } })
+        }
+    }
+}
+
+/// Keymap tab — แก้ช่องเดียว (`text` ว่าง = ลบคีย์ เฉพาะ layer 2)
+#[tauri::command]
+fn set_keymap_cell(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    code: String,
+    layer: u8,
+    group: u8,
+    sector: u8,
+    text: String,
+) -> Value {
+    let mut next = state.config.lock().unwrap().clone();
+    if let Err(message) = config::set_keymap_cell(&mut next, &code, layer, group, sector, &text) {
+        return json!({ "ok": false, "error": { "code": "CONFIG_INVALID", "message": message } });
+    }
+    if let Err(message) = config::validate_keymaps(&next) {
+        return json!({ "ok": false, "error": { "code": "CONFIG_INVALID", "message": message } });
+    }
+    if let Err(message) = config::save(&next) {
+        eprintln!("[config] {message}");
+        return json!({ "ok": false, "error": { "code": "CONFIG_IO", "message": message } });
+    }
+
+    *state.config.lock().unwrap() = next.clone();
+    state.touch_config();
+    let _ = app.emit_to("settings", "settings:config", &next);
+    println!("[keymap] {code} L{layer} G{group} S{sector} = {text:?}");
+    match keymap_payload(&next, &code) {
+        Ok(data) => json!({ "ok": true, "data": data }),
+        Err(message) => {
+            json!({ "ok": false, "error": { "code": "INTERNAL", "message": message } })
+        }
+    }
+}
+
+/// Keymap tab — Reset ทั้งภาษา หรือเฉพาะกลุ่ม
+#[tauri::command]
+fn reset_keymap(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    code: String,
+    group: Option<u8>,
+) -> Value {
+    let mut next = state.config.lock().unwrap().clone();
+    if !config::reset_keymap(&mut next, &code, group) {
+        return json!({
+            "ok": false,
+            "error": { "code": "LANG_NOT_FOUND", "message": format!("ไม่พบภาษา {code}") }
+        });
+    }
+    if let Err(message) = config::save(&next) {
+        eprintln!("[config] {message}");
+        return json!({ "ok": false, "error": { "code": "CONFIG_IO", "message": message } });
+    }
+
+    *state.config.lock().unwrap() = next.clone();
+    state.touch_config();
+    let _ = app.emit_to("settings", "settings:config", &next);
+    println!("[keymap] reset {code} group={group:?}");
+    match keymap_payload(&next, &code) {
+        Ok(data) => json!({ "ok": true, "data": data }),
+        Err(message) => {
+            json!({ "ok": false, "error": { "code": "LANG_NOT_FOUND", "message": message } })
+        }
+    }
 }
 
 /// General tab — ตัวเลข usage ล่าสุด (chars/WPM/latency/uptime)

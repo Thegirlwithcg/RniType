@@ -4,7 +4,7 @@
 use crate::action::{Key, NamedKey};
 use crate::normalizer::Dir8;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum Lang {
     #[default]
     En,
