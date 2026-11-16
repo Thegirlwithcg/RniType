@@ -274,9 +274,11 @@ html, body {
 .center__halo {
   fill: var(--mode-color);
   opacity: 0.55;
-  transition: opacity var(--t-base) var(--ease-out);
+  transition: opacity var(--t-fast) var(--ease-out);
 }
 .hud[data-rings="on"] .center__halo { opacity: 1; }
+/* มีตัวอักษรกลางวง = ซ่อนจุดสีโหมด (จุดมีหน้าที่บอกว่าวงพร้อม ไม่ใช่ทับ preview) */
+.hud[data-rings="on"][data-preview="on"] .center__halo { opacity: 0; }
 
 .hud__preview {
   fill: var(--hud-text);
