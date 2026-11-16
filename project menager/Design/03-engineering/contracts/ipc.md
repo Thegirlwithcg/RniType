@@ -6,6 +6,7 @@
 > v1.3 (2026-11-16) — เพิ่ม `get_stats` (chars/WPM/action latency/uptime) สำหรับ Usage cards (additive, ADR-26)
 > v1.4 (2026-11-16) — เพิ่ม `get_keymap` / `set_keymap_cell` / `reset_keymap` สำหรับ Keymap editor (additive, ADR-27)
 > v1.5 (2026-11-16) — `get_stats` เพิ่ม CPU/RAM/corrections (ADR-29) · `get_keymap` ใช้ได้กับ layout ที่สร้างจาก KLID (ADR-28)
+> v1.6 (2026-11-16) — เพิ่ม `record_bench` สำหรับแท็บ Practice (ADR-30)
 > ไฟล์นี้คือสัญญาที่ P3 (runtime), P4 (HUD), P5 (Settings) ต้องยึด
 > เปลี่ยนชื่อ/รูป payload = ต้อง bump `version` และแจ้ง lead
 
@@ -52,6 +53,7 @@
 | `get_keymap` | `{ code }` | `KeymapPayload` (ดู §5) |
 | `set_keymap_cell` | `{ code, layer, group, sector, text }` | `KeymapPayload` |
 | `reset_keymap` | `{ code, group? }` | `KeymapPayload` |
+| `record_bench` | `{ lang, target, typed, errors, errorPercent, wpm, seconds }` | `{ ok, data: record }` (append `bench.jsonl`) |
 | `open_settings` | `{ tab?: "general"\|"languages"\|"keymap"\|"hud" }` | `{ ok: true }` |
 
 ### HUD (read-only + lifecycle)
@@ -169,6 +171,24 @@ Settings ──invoke save_config──▶ app ──validate──▶ config.js
 `cells` = ค่าที่ใช้จริง (override ชนะ) · `defaults` = ตารางใน core · `""` = ช่องว่าง (layer 2)
 override เก็บใน `languages[].overrides` key `<layer>-<group>-<sector>` (รูปเก่า `<g>-<s>` = layer 1)
 `get_keymap` ใช้ได้กับทุกภาษาที่เปิด: EN/TH = built-in · layout อื่นสร้างจาก KLID (`build_keymap`)
+
+### `record_bench` — Practice (ADR-30)
+
+```json
+{
+  "lang": "th",
+  "target": "การพิมพ์ด้วยจอย...",
+  "typed": "การพิมพ์ด้วยจอย...",
+  "chars": 34,
+  "errors": 0,
+  "errorPercent": 0.0,
+  "wpm": 9.3,
+  "seconds": 44.0,
+  "at": 1763...
+}
+```
+
+เขียนต่อท้าย `%APPDATA%\RniType\bench.jsonl` (JSONL) และ log `[bench]`
 
 ## 6. Error codes
 

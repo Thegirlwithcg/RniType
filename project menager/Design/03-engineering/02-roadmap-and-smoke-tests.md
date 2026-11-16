@@ -30,7 +30,7 @@ tags: [plan, testing]
 | **M2.5 HUD polish** | variant B (idle เหลือ pill, วงโผล่เมื่อดัน LS), วงคำสั่งวงใน, เปลี่ยนกลุ่มด้วย LS | mockup v0.9 ผ่าน 36 checks; ผู้ใช้ใหม่เปิดวงคำสั่ง/สลับโหมดได้ < 2 s; ไม่มี feedback ซ้ำซ้อน | 1–2 วัน |
 | **M3 HUD** | overlay 2 ring + preview + pill สถานะ + idle pill | เปิด/ปิดได้, ไม่แย่ง focus, latency HUD < 16 ms | 3 วัน |
 | **M4 Config UI** | tray, หน้าตั้งค่า, profile ต่อแอป, autostart | ตั้งค่าแล้วมีผลทันที, reload ได้, crash-free 1 ชม. | 5 วัน |
-| **M5 Thai + polish** | keymap TH, layer 2, quick bar, exclusion list | 12 WPM ไทย, 20 WPM อังกฤษ, error < 1.5% | 5+ วัน |
+| **M5 Thai + polish** | keymap TH, layer 2, quick bar, exclusion list | 12 WPM ไทย, 20 WPM อังกฤษ, error < 1.5% (วัดด้วยแท็บ Practice) | 5+ วัน |
 
 ## 3. Smoke scripts (แผน — ยังไม่สร้าง)
 
@@ -74,6 +74,8 @@ tags: [plan, testing]
 | 2026-11-16 | P5 slice 3 | — | — | — | — | ADR-27: Keymap editor EN/TH · override `<layer>-<g>-<s>` · live reload · **213 tests** · settings-smoke **28/28** · E2E ตั้ง override → พิมพ์ `z` → reset → `ก` |
 | 2026-11-16 | P5 slice 4 | — | — | — | — | ADR-28: universal QWERTY จาก HKL (RU `a→ф`, EL `a→α`) · `Keymap` dynamic + `LangSlot {code,label,keymap}` · **219 tests** · E2E `[type] ф к и Э 5` |
 | 2026-11-16 | P6 slice 2 | — | — | — | cpu 3.1% · rss 32 MB | ADR-29: CPU/RAM ของโปรเซส + corrections (Backspace proxy) · Footprint cards · log `cpu=3.1% rss=32 MB` |
+| 2026-11-16 | P6 slice 3 | — | — | **วัดได้ (Levenshtein)** | — | ADR-30: แท็บ Practice · error rate จริง + WPM · `record_bench` → `bench.jsonl` · settings-smoke **33/33** |
+| 2026-11-16 | Installer beta | — | — | — | — | ADR-31: NSIS current-user + portable zip · `installer/build-installer.ps1` · feature `console` · ยังไม่ code-sign |
 
 ## 5. ความเสี่ยงและทางถอย
 
@@ -103,7 +105,8 @@ tags: [plan, testing]
 | 8 | **Settings window แยก** (English) + Reset all | ตั้งค่า/รีเซ็ตได้โดยไม่แตะ overlay |
 | 8a | Settings แท็บ HUD: text size / font / reset + persist | ✅ P5 slice 1 — [[16-hud-typography-and-fonts]] |
 | 8b | Settings แท็บ General / Languages | ✅ P5 slice 2 — [[25-settings-general-languages-live-reload]] |
-| 8c | Settings แท็บ Keymap (8×8 editor) | ✅ P5 slice 3 (EN/TH) — [[27-keymap-editor-overrides]] · ภาษาอื่นรอ universal QWERTY |
+| 8c | Settings แท็บ Keymap (8×8 editor) | ✅ P5 slice 3 (EN/TH) + universal QWERTY — [[27-keymap-editor-overrides]] · [[28-universal-qwerty-mapping]] |
+| 9 | Installer + packaging | ✅ beta: NSIS current-user + portable zip — [[31-installer-beta]] · ยังไม่ code-sign/auto-update |
 
 ## 7. สิ่งที่ต้องทำก่อนเริ่ม M0
 

@@ -1,11 +1,11 @@
 ---
 title: HANDOFF — RniType (อ่านก่อนเริ่ม session ใหม่)
-status: v1.2
+status: v1.3
 updated: 2026-11-16
 tags: [handoff]
 ---
 
-# HANDOFF — RniType v1.2 (2026-11-16)
+# HANDOFF — RniType v1.3 (2026-11-16)
 
 > เอกสารนี้ทำให้ session ใหม่ทำงานต่อได้ใน \~5 นาที · อ่านจบ = รู้ทุกอย่างที่จำเป็น
 
@@ -15,11 +15,11 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · P4/P5 slice 1–4 · P6 slice 1–2 · visual refresh (ADR-22) — 219 tests** |
+| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · P4/P5 slice 1–4 · P6 slice 1–3 (WPM/CPU/error rate) · installer beta — 219 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, XInput) + `SendInput` (auto scancode/Unicode) |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
-| งานถัดไป | **IME passthrough** หรือ **error rate จากข้อความอ้างอิง** หรือ **installer/Steam/itch** |
-| ค้างยืนยัน | owner retest §4.8 — quick bar/caret/sticky drag, exclusion/scancode, Settings, WPM, Keymap, **RU/EL บนจอยจริง** |
+| งานถัดไป | **IME passthrough (v0.2)** หรือ **code-sign + publish** หรือ **owner testing** |
+| ค้างยืนยัน | owner retest §4.8 — quick bar/caret/sticky drag, exclusion/scancode, Settings, WPM, Keymap, RU/EL, **installer + Practice** |
 
 ## 2. การตัดสินใจที่ล็อกแล้ว (ห้ามถามซ้ำ)
 
@@ -50,6 +50,9 @@ tags: [handoff]
 26. **P5 slice 3 (ADR-27)**: **Keymap editor** (แท็บจริง) — override รายช่องใน `languages[].overrides` key `<layer>-<group>-<sector>` (รูปเก่า `<g>-<s>` = layer 1) · core override ชนะตาราง static ทั้งพิมพ์จริง/preview · `get_keymap`/`set_keymap_cell`/`reset_keymap` + live reload — [[27-keymap-editor-overrides]]
 27. **P5 slice 4 (ADR-28)**: **Universal QWERTY mapping** — `Keymap` dynamic ใน core + `LangSlot { code, label, keymap }` · สร้างตารางจาก HKL ด้วย `VkKeyScanExW`+`ToUnicodeEx` (EN เป็น reference) · RU/EL พิมพ์ได้ทันที (`a→ф`) · IME ยังปิด · override key ด้วย `code` — [[28-universal-qwerty-mapping]]
 28. **P6 slice 2 (ADR-29)**: **CPU/RAM ของโปรเซส** (`GetProcessTimes`, `K32GetProcessMemoryInfo`) + **corrections** (นับ Backspace เป็น proxy ของ error rate) → log `[stats]` และการ์ด Footprint ใน Settings General — [[29-stats-cpu-memory-corrections]]
+29. **P6 slice 3 (ADR-30)**: **แท็บ Practice = error rate จริง** — พิมพ์ประโยคอ้างอิงด้วยจอยใน textarea ของ Settings · Levenshtein distance → errors/error%/WPM · `record_bench` เขียน `%APPDATA%\RniType\bench.jsonl` + log `[bench]` — [[30-practice-error-rate]]
+30. **IME passthrough = เลื่อนไป v0.2** (owner 2026-11-16) — JA/ZH/KO ยังปิด toggle · บันทึกแผนงาน/สิ่งที่ต้องทำไว้แล้ว — [[ime-passthrough-deferred]]
+31. **Installer beta**: Tauri NSIS (current user) + portable zip · build ด้วย `installer/build-installer.ps1` · feature `console` เปิด log ไว้ทดสอบ · ยังไม่ code-sign — [[31-installer-beta]]
 
 ## 3. โครงสร้างไฟล์
 
@@ -87,7 +90,10 @@ project menager/
    │  ├─ 26-usage-stats-wpm-latency.md ← ADR-26 WPM 60 วิ · action latency · Usage cards
    │  ├─ 27-keymap-editor-overrides.md ← ADR-27 Keymap editor · override รายช่อง
    │  ├─ 28-universal-qwerty-mapping.md ← ADR-28 Universal QWERTY (RU/EL) จาก HKL
-   │  └─ 29-stats-cpu-memory-corrections.md ← ADR-29 CPU/RAM · corrections proxy
+   │  ├─ 29-stats-cpu-memory-corrections.md ← ADR-29 CPU/RAM · corrections proxy
+   │  ├─ 30-practice-error-rate.md ← ADR-30 Practice · error rate จริง (Levenshtein)
+   │  ├─ 31-installer-beta.md ← ADR-31 NSIS + portable zip
+   │  └─ ime-passthrough-deferred.md ← IME (JA/ZH/KO) เลื่อนไป v0.2
    └─ 05-mockup/
       ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (อ้างอิงดีไซน์ ไม่ใช่ของจริง)
       └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings, runtime)
@@ -112,9 +118,10 @@ project menager/
 | `crates/rnitype-core/src/typing.rs` | gesture → key lookup + **override รายช่อง** (`BTreeMap`) |
 | `crates/rnitype-app/src/stats.rs` | WPM (5 ตัวอักษร/คำ) · format latency/uptime |
 | `ui/hud/{index.html,hud.css,hud.js}` | HUD จริง — วาดจาก `hud:state` · typography จาก `hud:style` |
-| `ui/settings/*` | Settings window — General (status/pause/exclusion/usage) · Languages (rescan) · Keymap (editor) · HUD · Reset |
+| `ui/settings/*` | Settings window — General (status/pause/exclusion/usage/footprint) · Languages · Keymap · **Practice** · HUD · Reset |
+| `installer/*` | `build-installer.ps1` (NSIS + portable zip) · `README-beta.txt` |
 | `ui/shared/{tokens.css,fonts.css,fonts.js,fonts/*.ttf}` | สี + ฟอนต์ (IBM Plex Sans Thai + Noto Sans Thai + OFL) |
-| `tools/tests/{browser,hud-smoke,hud-typography,settings-smoke}.mjs` | CDP · 54 mockup · 36 HUD · 19 Settings checks |
+| `tools/tests/{browser,hud-smoke,hud-typography,settings-smoke}.mjs` | CDP · 54 mockup · 36 HUD · 33 Settings checks |
 
 ## 4. สถานะงานและลำดับถัดไป
 
@@ -135,13 +142,14 @@ project menager/
 | P3 win | SendInput Unicode/VK/mouse + **HWheel** + Ctrl+ASCII→VK + **Alt** + **scancode auto** + **exclusion/UIPI guard** + **1 ms timer** (56 tests) | Task Scheduler/"Run as admin" (P6) |
 | P4 HUD | renderer ครบ mode + overlay + typography + **visual refresh ADR-22** + **quickbar/caret mode** + `HudState` จริง (+ `layer`/`repeat`/`pointer`) (36 checks) | latency, pivot per-monitor/mixed-DPI |
 | Runtime | `input.rs` + `session.rs` + tray Pause + resend/heartbeat + single instance + **mouse/Nav recenter/reset** + **sticky-drag safety release** + **pivot clamp** + **guard/pause คืน mode เดิม** + **live config reload** + **WPM/commit stats** | ทดสอบ mouse/Nav/quickbar/caret กับจอยจริง |
-| P5 Settings | slice 1: HUD tab · slice 2: **General + Languages + Reset + live reload** · slice 3: **Keymap editor** · slice 4: **universal QWERTY (RU/EL)** (29 checks) | IME passthrough · profiles · autostart/runAsAdmin จริง |
-| P6 measurement | slice 1: **WPM + action latency** · slice 2: **CPU/RAM + corrections** | error rate จากข้อความอ้างอิง · คนจริง · installer/Steam/itch |
+| P5 Settings | slice 1: HUD tab · slice 2: **General + Languages + Reset + live reload** · slice 3: **Keymap editor** · slice 4: **universal QWERTY (RU/EL)** (33 checks) | IME passthrough (v0.2) · profiles · autostart/runAsAdmin จริง |
+| P6 measurement | slice 1: **WPM + action latency** · slice 2: **CPU/RAM + corrections** · slice 3: **Practice error rate (Levenshtein)** | คนจริงหลายรอบ · export CSV |
+| Packaging | **NSIS installer (current user) + portable zip** · feature `console` สำหรับ beta | code-sign · auto-update · Steam/itch upload |
 
 ### 4.3 ขั้นถัดไป (เรียง)
 
-1. **IME passthrough** — JA/ZH/KO ส่ง scancode/VK ให้ Windows IME ประกอบ (ยังปิด toggle)
-2. **error rate จริง** — reference text + diff (เช่น พิมพ์ประโยคมาตรฐานแล้วเทียบ) + installer/Steam/itch
+1. **IME passthrough (v0.2)** — ตาม [[ime-passthrough-deferred]]: ส่ง physical key ให้ Windows IME, HUD QWERTY + badge IME
+2. **Code-sign + publish** — ลด SmartScreen · ต่อร้าน/itch · auto-update
 3. **P2 ที่เหลือ (เล็ก)** — pivot clamp แบบ per-monitor/mixed-DPI (ตอนนี้ clamp ด้วย virtual desktop เดียว)
 
 ### 4.4 รัน / ตรวจ
@@ -159,7 +167,13 @@ cargo test --workspace                      # 219 tests
 node tools/contracts/validate.mjs           # 12/12
 node tools/tests/hud-smoke.mjs              # 54/54 (ม็อกอัป)
 node tools/tests/hud-typography.mjs         # 36/36 + screenshot
-node tools/tests/settings-smoke.mjs         # 29/29 + screenshot Settings
+node tools/tests/settings-smoke.mjs         # 33/33 + screenshot Settings
+```
+
+```powershell
+# installer + portable zip (ต้องมี tauri-cli v2)
+.\installer\build-installer.ps1
+# → dist\RniType_0.1.0_x64-setup.exe · dist\RniType-portable-0.1.0.zip
 ```
 
 - Tray: **คลิกซ้าย = Settings** · คลิกขวา = Pause typing / Settings… / Quit
@@ -224,6 +238,8 @@ node tools/tests/settings-smoke.mjs         # 29/29 + screenshot Settings
 18. **Keymap editor (ADR-27)**: Settings → Keymap → เลือก TH → กลุ่ม 1 → คลิกช่อง A (บนกลาง) → พิมพ์ `z` → Enter → จุดฟ้า + พิมพ์ด้วยจอยได้ `z` · Reset group → กลับ `ก` · สลับ Base/Layer 2 แล้วแก้ layer 2 ได้ · Restart แอปแล้วค่าต้องอยู่
 19. **Universal layout (ADR-28)**: ติดตั้งภาษา RU/EL ใน Windows → Settings → Languages เปิด RU → วงภาษามี `RU` · พิมพ์ด้วยจอยต้องได้ `ф`/`α` ตามตำแหน่ง QWERTY (a→ф, q→й) · แท็บ Keymap เลือก RU แล้วเห็นตารางที่สร้างมาและแก้ได้
 20. **CPU/RAM (ADR-29)**: เปิด `--pad-log`/Settings → Footprint ต้องเห็น CPU ~0–5% ตอน idle, Memory ~30–80 MB · `[stats]` มี `cpu=…% rss=… MB corrections=…`
+21. **Practice error rate (ADR-30)**: Settings → Practice → Start → พิมพ์ประโยคด้วยจอยจนครบ → errors/error%/WPM ต้องแสดง · log มี `[bench]` · `%APPDATA%\RniType\bench.jsonl` มีผลบันทึก
+22. **Installer (ADR-31)**: รัน `dist\RniType_0.1.0_x64-setup.exe` → ติดตั้งแบบ current user → เปิดจาก Start Menu → tray + Settings ทำงาน · ถอนจาก Apps & Features ได้ · portable zip เปิดได้เช่นกัน
 
 ### 4.9 P2 slice 4 (2026-11-16) — ✅ ปิดแล้ว (ADR-23)
 
@@ -300,6 +316,27 @@ node tools/tests/settings-smoke.mjs         # 29/29 + screenshot Settings
 | แสดงผล | `[stats]` + การ์ด Footprint (CPU / Memory / Corrections) ใน General |
 | หลักฐานจริง | `[stats] chars=15 wpm=3.0 actions=15 corrections=0 step avg=0.004 ms max=0.729 ms cpu=3.1% rss=32 MB uptime=10s` |
 
+### 4.16 P6 slice 3 (2026-11-16) — ✅ ปิดแล้ว (ADR-30)
+
+| เรื่อง | ผล |
+| --- | --- |
+| Practice tab | ประโยคอ้างอิง EN/TH/RU/EL + textarea · Start = clear + focus (พิมพ์ด้วยจอยได้ทันที) |
+| Error rate | Levenshtein distance ระหว่างข้อความที่พิมพ์กับประโยคอ้างอิง → errors/error% |
+| WPM | ตัวอักษรที่พิมพ์/5 ÷ นาที (อัปเดตทุก 200 ms) |
+| บันทึก | `record_bench` → `%APPDATA%\RniType\bench.jsonl` + log `[bench] lang=… chars=… errors=… error=…% wpm=…` |
+| ตัวเลข | settings-smoke **33/33** (+ exact match = 0 error, ผิด = error สูง, Start focus) |
+
+### 4.17 Installer beta (2026-11-16) — ✅ พร้อมทดสอบ (ADR-31)
+
+| เรื่อง | ผล |
+| --- | --- |
+| NSIS | `bundle.targets = ["nsis"]` · `installMode: currentUser` (ไม่ต้อง admin) · ภาษา English |
+| Portable | `dist\RniType-portable-0.1.0.zip` (exe + README-beta) |
+| Build | `.\installer\build-installer.ps1` → `cargo tauri build --features console --bundles nsis` |
+| Console | feature `console` เปิด log ไว้สำหรับ beta (รุ่นขายปิดได้) |
+| ตรวจแล้ว | `setup /S` → `%LOCALAPPDATA%\RniType\RniType.exe` · Start Menu + Apps & Features ครบ · รันได้ (overlay/tray/HUD/settings) · `uninstall /S` ลบหมด |
+| ยังไม่ทำ | code-sign (SmartScreen), auto-update, Steam/itch upload |
+
 ## 5. คำถามที่ยังค้าง
 
 | # | เรื่อง | ข้อเสนอ |
@@ -314,7 +351,7 @@ Q1, Q2, Q5, Q15, Q16, Q17 = ตัดสินแล้ว
 ## 6. Environment & เคล็ดลับ debug
 
 - vault = `D:\Erin's Works\Programming\RniType` — เขียนเฉพาะในนี้ · MCP `nizylanote` เรียก `vault_info` ก่อนเขียน
-- **Git**: commit ก่อน session นี้ `4cba441` (handoff v0.8) · P5 slice 2 = `d3f17a2` · P6 slice 1 = `c3a7404` · P5 slice 3 = `741a60c` · universal + P6 slice 2 = `31df934` (+ docs commit ถัดจากนั้น) · commit งานเป็นชุด `feat(...)` + `docs(...)` (`.nznote/`, `.opencode/` ถูก ignore)
+- **Git**: commit ก่อน session นี้ `4cba441` (handoff v0.8) · P5 slice 2 = `d3f17a2` · P6 slice 1 = `c3a7404` · P5 slice 3 = `741a60c` · universal + P6 slice 2 = `31df934` · practice + installer = `9e53b58` (+ docs commit ถัดจากนั้น) · commit งานเป็นชุด `feat(...)` + `docs(...)` (`.nznote/`, `.opencode/` ถูก ignore)
 - **เทอร์มินัล cp874** → log ไทยใน console เป็น `???` (ไม่ใช่บั๊ก) · ไฟล์เป็น UTF-8
 - **PowerShell กิน `--` ตัวแรก** → `run.ps1` เติมให้แล้ว ใช้ `run.ps1 --seconds 30`
 - `Chrome_WidgetWin_0 ... 1412` ตอนปิด = WebView2 noise ไม่มีผล
@@ -330,6 +367,10 @@ Q1, Q2, Q5, Q15, Q16, Q17 = ตัดสินแล้ว
 - **universal table** สร้างจาก KLID ของ layout ที่ติดตั้ง/โหลดได้ · ถ้า Windows ไม่มี layout นั้นจริง ๆ จะไม่มีแถวให้เปิด (เขียน config เองได้ถ้ามี KLID)
 - **CPU ที่แสดงไม่รวม WebView2 child** — ตัวเลข Task Manager จะสูงกว่านี้
 - **corrections ≠ error rate** — เป็นจำนวน Backspace เท่านั้น ยังไม่มี diff กับข้อความอ้างอิง
+- **error rate จริง** อยู่ที่แท็บ Practice (diff) — ไม่ได้วัดอัตโนมัติจาก Notepad/เกม
+- **installer ยังไม่ code-sign** — SmartScreen จะเตือน Unknown publisher (More info → Run anyway)
+- **beta เปิด console** (feature `console`) — ปิดได้เมื่อ build รุ่นขาย
+- **IME (JA/ZH/KO) เลื่อนไป v0.2** ตาม [[ime-passthrough-deferred]]
 - **Chrome headless**: `C:\Users\User\AppData\Local\ms-playwright\chromium-1208\chrome-win64\chrome.exe` (`CHROME_PATH`)
 - เครื่องนี้ 2 จอ: virtual desktop 3840×1080 เริ่มที่ x = −1920 · จอหลัก 1920×1080 (pivot เริ่มที่กลางจอหลัก)
 

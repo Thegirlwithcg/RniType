@@ -71,6 +71,9 @@ updated: 2026-11-15
 | [[27-keymap-editor-overrides]] | ADR: Keymap editor + override รายช่อง (EN/TH) + live reload |
 | [[28-universal-qwerty-mapping]] | ADR: Universal QWERTY จาก HKL (RU/EL) — core `Keymap` dynamic + `build_keymap` |
 | [[29-stats-cpu-memory-corrections]] | ADR: CPU/RAM ของโปรเซส + corrections proxy |
+| [[30-practice-error-rate]] | ADR: แท็บ Practice · error rate จริง (Levenshtein) + bench.jsonl |
+| [[31-installer-beta]] | ADR: NSIS installer (current user) + portable zip · console feature |
+| [[ime-passthrough-deferred]] | IME (JA/ZH/KO) เลื่อนไป v0.2 — บันทึกแผนงานแล้ว |
 | [[hud-v0.9]] | บันทึก HUD: ภาพเทียบ A/B (v0.9) + สรุป v0.10 |
 | `05-mockup/hud-prototype/` | ม็อกอัป HUD v0.11 (เน้น EN+TH, หลายภาษา, Settings window, Keymap editor, pivot) |
 | `05-mockup/hud-shots/` | screenshot ตรวจรับ typography (100%/150% DPI), overlay จริง, Settings |
@@ -95,7 +98,7 @@ updated: 2026-11-15
 | หลักการ HUD | วงใน = สิ่งที่ LS เลือก · วงนอก = สิ่งที่ RS เลือก · idle เหลือ pill สถานะ (เปิดวงตลอดได้) |
 | ความปลอดภัย | **exclusion list** ต่อ exe (wildcard) + **UIPI guard** (target elevated) → หยุดส่ง + pill บอกเหตุผล · **scancode อัตโนมัติ** ตาม layout เป้าหมาย (เกม/IME) + Unicode fallback — [[24-target-guard-scancode-timer]] |
 | เทคโนโลยี | Rust + Tauri v2 + gilrs/SDL3 + SendInput (แผนสำรอง: C# .NET 8) — ดู [[03-stack-rust]] |
-| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · P4/P5 slice 1–4 · P6 slice 1–2 · visual refresh (ADR-22) — 219 tests** |
+| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · P4/P5 slice 1–4 · P6 slice 1–3 · installer beta — 219 tests** |
 
 ## หมายเหตุการทำงาน
 
