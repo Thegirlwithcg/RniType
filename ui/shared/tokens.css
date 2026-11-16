@@ -1,15 +1,102 @@
+/* ============================================================
+   RniType — shared design tokens (ADR-22)
+   แหล่งเดียวของสี/ระยะ/เงา/โมชัน สำหรับ HUD + Settings
+   หลัก: ลำดับชั้นด้วยความสว่าง · accent เดียว · motion สั้น · ไทยอ่านง่าย
+   ============================================================ */
+
 :root {
-  --hud-bg: rgba(10, 12, 16, 0.82);
-  --hud-bg-solid: #0a0c10;
-  --hud-fg: #f2f4f8;
-  --hud-muted: #8b93a1;
-  --hud-accent: #5eead4;
-  --hud-accent-soft: rgba(94, 234, 212, 0.18);
-  --hud-warn: #fbbf24;
-  --hud-danger: #f87171;
-  --hud-ring: #334155;
-  --hud-ring-soft: rgba(148, 163, 184, 0.18);
-  --hud-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-  --hud-radius: 14px;
+  color-scheme: dark;
+
+  /* ---------------- Settings ---------------- */
+  --bg: #1c1c1e;
+  --surface: #2c2c2e;
+  --surface-2: #3a3a3c;
+  --surface-elevated: #3a3a3c;
+  --separator: rgba(255, 255, 255, 0.1);
+  --line: rgba(255, 255, 255, 0.1);
+  --text: rgba(255, 255, 255, 0.92);
+  --text-1: rgba(255, 255, 255, 0.92);
+  --text-2: rgba(235, 235, 245, 0.62);
+  --text-3: rgba(235, 235, 245, 0.38); /* disabled/placeholder เท่านั้น */
+  --text-dim: var(--text-2);
+  --accent: #0a84ff; /* fill */
+  --accent-text: #409cff; /* ข้อความ/ลิงก์ ≈ 6:1 บน --bg */
+  --success: #30d158;
+  --warning: #ffd60a;
+  --danger: #ff453a;
+
+  /* ---------------- HUD plate ---------------- */
+  --hud-plate: rgba(18, 18, 20, 0.88);
+  --hud-plate-idle: rgba(18, 18, 20, 0.7);
+  --hud-stroke-in: rgba(255, 255, 255, 0.16);
+  --hud-stroke-out: rgba(0, 0, 0, 0.55);
+  --hud-text: #ffffff;
+  --hud-text-dim: rgba(255, 255, 255, 0.62);
+  --hud-active-fill: rgba(10, 132, 255, 0.24);
+
+  /* mode = หนึ่งสี หนึ่งรูปทรง หนึ่งป้าย */
+  --mode-type: #0a84ff;
+  --mode-mouse: #ff9f0a;
+  --mode-nav: #bf5af2;
+  --mode-caret: #64d2ff;
+  --mode-color: var(--mode-type);
+
+  /* aliases เดิม (HUD mockup / Settings slice 1) */
+  --hud-bg: var(--hud-plate);
+  --hud-bg-solid: #121214;
+  --hud-fg: var(--hud-text);
+  --hud-muted: var(--hud-text-dim);
+  --hud-accent: var(--mode-type);
+  --hud-accent-soft: var(--hud-active-fill);
+  --hud-warn: var(--warning);
+  --hud-danger: var(--danger);
+  --hud-ring: rgba(255, 255, 255, 0.16);
+  --hud-ring-soft: rgba(255, 255, 255, 0.08);
+  --accent-2: var(--mode-nav);
+  --ink: var(--hud-text);
+  --ink-dim: var(--hud-text-dim);
+
+  /* ---------------- scale ---------------- */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-pill: 999px;
+  --hud-radius: var(--r-md);
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+
+  /* ---------------- elevation ---------------- */
+  --e-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --e-2: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --e-hud: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --hud-shadow: var(--e-hud);
+
+  /* ---------------- motion ---------------- */
+  --t-fast: 80ms;
+  --t-base: 140ms;
+  --t-slow: 220ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---------------- typography ---------------- */
+  --ui-font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --hud-font: "IBM Plex Sans Thai", "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -438,6 +438,23 @@
     dom.previewCount.textContent = previewCount > 0 ? `×${previewCount}` : '';
     dom.hud.dataset.preview = previewChar !== '' || previewCount > 0 ? 'on' : 'off';
 
+    // idle 3 วิ → pill จาง (ADR-22) · heartbeat 2 วิ ต้องไม่รีเซ็ต timer
+    const signature = `${mode}|${dom.hud.dataset.state}|${ringsOn}|${previewChar}|${previewCount}`;
+    if (signature !== lastSignature) {
+      lastSignature = signature;
+      dom.hud.dataset.idle = 'false';
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+      if (visible && !ringsOn) {
+        idleTimer = setTimeout(() => {
+          dom.hud.dataset.idle = 'true';
+          idleTimer = null;
+        }, 3000);
+      }
+    }
+
     renderPill(next);
 
     // pointer (กำหนดโดยแอปผ่าน pointer.visible)
@@ -492,6 +509,8 @@
   }
 
   let lastJson = '';
+  let lastSignature = '';
+  let idleTimer = null;
 
   async function poll() {
     try {

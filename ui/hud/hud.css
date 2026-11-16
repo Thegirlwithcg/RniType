@@ -9,12 +9,12 @@
 :root {
   color-scheme: dark;
 
-  /* palette ของ HUD = ม็อกอัป v0.11 (น้ำเงิน/ม่วง)
-     ไม่แก้ ui/shared/tokens.css เพื่อไม่ให้สีของ Settings เปลี่ยนตาม */
-  --accent: #7cc5ff;
-  --accent-2: #a98bff;
-  --ink: #e8ecf6;
-  --ink-dim: #9aa4b8;
+  /* palette มาจาก ui/shared/tokens.css (ADR-22) — HUD ใช้ accent เดียว
+     และเปลี่ยนสีตาม mode ผ่าน --mode-color */
+  --accent: var(--mode-type);
+  --accent-2: var(--mode-nav);
+  --ink: var(--hud-text);
+  --ink-dim: var(--hud-text-dim);
 
   --hud-scale: 1;
   --hud-opacity: 0.92;
@@ -72,9 +72,19 @@ html, body {
   inset: 0;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.32s var(--ease-soft);
+  transition: opacity var(--t-fast) var(--ease-out);
 }
 .hud[data-visible="true"] { opacity: var(--hud-opacity); }
+
+/* หนึ่งโหมด = หนึ่งสี (ใช้กับ accent/arc/crosshair/pill dot) */
+.hud[data-mode="type-en"],
+.hud[data-mode="type-th"],
+.hud[data-mode="type-other"],
+.hud[data-mode="cmd"],
+.hud[data-mode="lang"] { --mode-color: var(--mode-type); }
+.hud[data-mode="mouse"] { --mode-color: var(--mode-mouse); }
+.hud[data-mode="nav"] { --mode-color: var(--mode-nav); }
+.hud[data-mode="disabled"] { --mode-color: var(--text-3); }
 
 .hud__stage {
   --size: 340px;
@@ -88,21 +98,25 @@ html, body {
   transform: scale(var(--hud-scale));
   transform-origin: 50% 50%;
   pointer-events: none;
-  transition: transform 0.32s var(--ease-out);
-  will-change: transform;
 }
 
+/* แผ่นทึบ 88% + ขอบสองชั้น (ขาวใน/ดำนอก) — อ่านได้บนพื้นหลังใดก็ได้
+   ไม่ใช้ backdrop-filter: WebView เบลอได้แค่เนื้อหาในตัวเอง + เปลือง GPU */
 .hud__glass {
   position: absolute;
-  inset: 2%;
+  inset: 0;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 45%, rgba(20, 25, 36, 0.42), rgba(8, 11, 16, 0.72) 70%);
-  backdrop-filter: blur(7px);
-  box-shadow: inset 0 0 60px rgba(124, 197, 255, 0.07);
+  border: 1px solid var(--hud-stroke-in);
+  background: var(--hud-plate);
+  box-shadow:
+    inset 0 0 48px rgba(0, 0, 0, 0.35),
+    0 0 0 1px var(--hud-stroke-out);
   opacity: 0;
-  transition: opacity 0.3s var(--ease-soft);
+  transition: opacity var(--t-fast) var(--ease-out);
 }
 .hud[data-rings="on"] .hud__glass { opacity: 1; }
+
+.hud[data-idle="true"] .hud__glass { background: var(--hud-plate-idle); }
 
 .hud__ring {
   position: absolute;
@@ -118,61 +132,60 @@ html, body {
 /* ---------------- sectors ---------------- */
 
 /* ADR-19: ไม่ขยาย sector ด้วย transform — การ scale wedge 45° ทำให้แต่ละชิ้น
-   กินมุมเกิน 45° แล้วทับกัน (วงดูเพี้ยน) · active = สี + stroke เท่านั้น */
+   กินมุมเกิน 45° แล้วทับกัน (วงดูเพี้ยน) · active = สี + stroke เท่านั้น
+   ADR-22: highlight ต้องเป็น 0 ms (ไม่มี transition) เพื่อไม่ให้รู้สึกหน่วง */
 .sector {
-  fill: rgba(23, 28, 40, 0.55);
-  stroke: rgba(255, 255, 255, 0.055);
+  fill: rgba(255, 255, 255, 0.03);
+  stroke: rgba(255, 255, 255, 0.07);
   stroke-width: 1;
-  transition: fill 0.18s linear, stroke 0.18s linear, opacity 0.25s var(--ease-soft);
 }
 
 .sector--group.is-armed {
-  fill: rgba(124, 197, 255, 0.16);
-  stroke: rgba(124, 197, 255, 0.45);
+  fill: var(--hud-active-fill);
+  stroke: var(--mode-color);
+  stroke-width: 2;
 }
 
 .sector--char.is-selected {
-  fill: rgba(169, 139, 255, 0.26);
-  stroke: rgba(184, 160, 255, 0.85);
-  stroke-width: 1.5;
+  fill: rgba(10, 132, 255, 0.32);
+  stroke: var(--mode-color);
+  stroke-width: 2;
 }
 
 /* ---------------- labels ---------------- */
 
 .sector-label {
-  fill: #93a0b8;
+  fill: var(--hud-text-dim);
   font-size: var(--fs-group);
   font-weight: 600;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  transition: fill 0.18s;
 }
 
 .sector-label--group { font-size: var(--fs-group); letter-spacing: 0.02em; }
 .sector-label--group.len-m { font-size: var(--fs-group-m); }
 .sector-label--group.len-l { font-size: var(--fs-group-l); }
 .sector-label--group.is-two-line { font-size: var(--fs-group-m); }
-.sector-label--group.is-muted { fill: #8d98ad; }
-.sector-label--group.is-armed { fill: #e6f4ff; }
-.sector--group.is-armed + .sector-label { fill: #cfe8ff; }
+.sector-label--group.is-muted { fill: var(--hud-text-dim); opacity: 0.45; }
+.sector-label--group.is-armed { fill: var(--hud-text); opacity: 1; }
+.sector--group.is-armed + .sector-label { fill: var(--hud-text); opacity: 1; }
 
 .char-text {
-  fill: #dbe3f2;
+  fill: var(--hud-text);
   font-size: var(--fs-char);
   font-weight: 500;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  transition: fill 0.16s, font-size 0.2s var(--ease-out), filter 0.2s;
+  transition: fill var(--t-fast) linear;
 }
 .char-text.is-selected {
-  fill: #ffffff;
+  fill: var(--hud-text);
   font-size: var(--fs-char-selected);
-  font-weight: 700;
-  filter: drop-shadow(0 0 12px rgba(169, 139, 255, 0.95));
+  font-weight: 600;
 }
-.char-text.is-dim { fill: #94a0b6; font-size: var(--fs-char-dim); }
+.char-text.is-dim { fill: var(--hud-text-dim); font-size: var(--fs-char-dim); }
 
 /* ขีดกำกับสระล่าง (ุ ู ฺ) — ADR-12: เส้นประสั้นเหนือตัวอักษร ให้เห็นว่าอยู่ใต้ฐาน */
 .char-guide {
@@ -200,54 +213,50 @@ html, body {
 /* ---------------- command / language wheel ---------------- */
 
 .cmd-sector {
-  fill: rgba(18, 23, 34, 0.78);
+  fill: rgba(255, 255, 255, 0.04);
   stroke: rgba(255, 255, 255, 0.08);
   stroke-width: 1;
-  transition: fill 0.15s linear, stroke 0.15s linear;
 }
 .cmd-sector.is-selected {
-  fill: rgba(124, 197, 255, 0.34);
-  stroke: rgba(160, 220, 255, 0.95);
-  stroke-width: 1.6;
+  fill: var(--hud-active-fill);
+  stroke: var(--mode-color);
+  stroke-width: 2;
 }
 
 .lang-sector {
-  fill: rgba(18, 24, 36, 0.8);
+  fill: rgba(255, 255, 255, 0.04);
   stroke: rgba(255, 255, 255, 0.08);
   stroke-width: 1;
-  transition: fill 0.15s linear, stroke 0.15s linear;
 }
 .lang-sector.is-selected {
-  fill: rgba(124, 197, 255, 0.34);
-  stroke: rgba(160, 220, 255, 0.95);
-  stroke-width: 1.6;
+  fill: var(--hud-active-fill);
+  stroke: var(--mode-color);
+  stroke-width: 2;
 }
 
 .cmd-label {
-  fill: #dbe3f2;
+  fill: var(--hud-text);
   font-size: var(--fs-cmd);
-  font-weight: 650;
+  font-weight: 600;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  transition: fill 0.15s linear, font-size 0.2s var(--ease-out);
 }
-.cmd-label.is-selected { fill: #ffffff; font-size: var(--fs-cmd-selected); }
+.cmd-label.is-selected { fill: var(--hud-text); font-size: var(--fs-cmd-selected); }
 
 .lang-label {
-  fill: #dbe3f2;
+  fill: var(--hud-text);
   font-size: var(--fs-lang);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  transition: fill 0.15s linear;
 }
-.lang-label.is-selected { fill: #ffffff; }
+.lang-label.is-selected { fill: var(--hud-text); }
 
 .slot-sub {
-  fill: #93a0b6;
+  fill: var(--hud-text-dim);
   font-size: var(--fs-sub);
   font-weight: 500;
   text-anchor: middle;
@@ -258,33 +267,33 @@ html, body {
 /* ---------------- center ---------------- */
 
 .center__track {
-  fill: rgba(8, 11, 16, 0.72);
-  stroke: rgba(255, 255, 255, 0.1);
+  fill: var(--hud-plate);
+  stroke: var(--hud-stroke-in);
   stroke-width: 1;
 }
 .center__halo {
-  fill: #cfe9ff;
+  fill: var(--mode-color);
   opacity: 0.55;
-  transition: opacity 0.3s;
+  transition: opacity var(--t-base) var(--ease-out);
 }
 .hud[data-rings="on"] .center__halo { opacity: 1; }
 
 .hud__preview {
-  fill: #ffffff;
+  fill: var(--hud-text);
   font-size: var(--fs-preview);
-  font-weight: 700;
+  font-weight: 600;
   text-anchor: middle;
   dominant-baseline: central;
   opacity: 0;
   pointer-events: none;
-  filter: drop-shadow(0 0 12px rgba(169, 139, 255, 0.75));
 }
 .hud[data-rings="on"][data-preview="on"] .hud__preview { opacity: 1; }
 
 .hud__repeat {
-  fill: var(--accent);
+  fill: var(--mode-color);
   font-size: var(--fs-repeat);
-  font-weight: 650;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   text-anchor: middle;
   dominant-baseline: central;
   opacity: 0;
@@ -301,7 +310,9 @@ html, body {
   transform: translateX(-50%);
   white-space: nowrap;
   font-size: var(--fs-pill);
+  transition: opacity var(--t-slow) var(--ease-out);
 }
+.hud[data-idle="true"] .hud__status { opacity: 0.6; }
 
 /* ไม่มีวง (idle / mouse / nav / disabled) → pill ย้ายมากลางจุดยึด */
 .hud[data-rings="off"] .hud__status {
@@ -312,21 +323,31 @@ html, body {
 
 .chip {
   display: inline-flex;
-  align-items: baseline;
-  padding: 3px 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(10, 13, 19, 0.78);
-  color: #b9c4d8;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  block-size: 28px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hud-stroke-in);
+  background: var(--hud-plate);
+  color: var(--hud-text);
+  font-size: var(--fs-pill);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  backdrop-filter: blur(8px);
 }
 .chip--status {
-  color: #b9c4d8;
-  border-color: rgba(124, 197, 255, 0.28);
-  background: rgba(14, 22, 32, 0.82);
+  color: var(--hud-text);
+  box-shadow: 0 0 0 1px var(--hud-stroke-out);
 }
-.chip--status b { color: #d9ecff; font-weight: 650; }
+.chip--status::before {
+  content: "";
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: var(--mode-color);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+.chip--status b { color: var(--hud-text); font-weight: 600; }
 
 .pill__part:not(:empty)::before {
   content: "·";
@@ -334,7 +355,7 @@ html, body {
   opacity: 0.45;
 }
 
-.pill__badges { display: inline-flex; gap: 4px; align-items: baseline; }
+.pill__badges { display: inline-flex; gap: 4px; align-items: center; }
 .pill__badges:not(:empty)::before {
   content: "·";
   margin: 0 6px;
@@ -342,15 +363,15 @@ html, body {
 }
 .pill-badge {
   padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(124, 197, 255, 0.16);
-  color: #cfe8ff;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--hud-text);
   font-size: var(--fs-pill-badge);
   line-height: 1.4;
 }
 
-.hud[data-mode="disabled"] .chip--status { border-color: rgba(248, 113, 113, 0.45); }
-.hud[data-mode="disabled"] .chip--status b { color: #cfd3da; }
+.hud[data-mode="disabled"] .chip--status { border-color: rgba(255, 69, 58, 0.55); }
+.hud[data-mode="disabled"] .chip--status b { color: var(--text-2); }
 
 /* ---------------- pointer / pivot ---------------- */
 
@@ -363,7 +384,7 @@ html, body {
   z-index: 60;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s linear;
+  transition: opacity var(--t-fast) linear;
 }
 .pointer[data-visible="true"] { opacity: 1; }
 .pointer i {
@@ -373,8 +394,8 @@ html, body {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 14px rgba(124, 197, 255, 0.9);
+  background: var(--hud-text);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
 }
 
 .pivot {
@@ -386,18 +407,24 @@ html, body {
   z-index: 24;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.18s linear;
+  border-radius: 50%;
+  transition: opacity var(--t-fast) linear;
 }
 .pivot[data-visible="true"] { opacity: 1; }
 .pivot::before,
 .pivot::after {
   content: "";
   position: absolute;
-  background: rgba(124, 197, 255, 0.8);
-  box-shadow: 0 0 8px rgba(124, 197, 255, 0.55);
+  background: var(--hud-text);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.65);
 }
-.pivot::before { left: -14px; top: 0; width: 28px; height: 1px; }
-.pivot::after { top: -14px; left: 0; width: 1px; height: 28px; }
+.pivot::before { left: -12px; top: 0; width: 24px; height: 1.5px; }
+.pivot::after { top: -12px; left: 0; width: 1.5px; height: 24px; }
+
+/* จุดกลางสีโหมด (ใช้ box-shadow บนจุด 0×0) */
+.hud[data-mode] ~ .pivot { box-shadow: 0 0 0 2px var(--mode-mouse); }
+.hud[data-mode="mouse"] ~ .pivot { box-shadow: 0 0 0 2px var(--mode-mouse); }
+.hud[data-mode="nav"] ~ .pivot { box-shadow: 0 0 0 2px var(--mode-nav); }
 
 /* ---------------- accessibility ---------------- */
 

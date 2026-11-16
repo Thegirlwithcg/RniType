@@ -761,8 +761,8 @@ fn open_settings(app: &tauri::AppHandle) -> tauri::Result<()> {
         tauri::WebviewUrl::App("settings/index.html".into()),
     )
     .title("RniType Settings")
-    .inner_size(560.0, 880.0)
-    .min_inner_size(460.0, 560.0)
+    .inner_size(760.0, 640.0)
+    .min_inner_size(680.0, 480.0)
     .focused(true)
     .center()
     .build()?;

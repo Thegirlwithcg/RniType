@@ -10,85 +10,92 @@
 </head>
 <body>
   <!--
-    Settings window (P5 slice 1) — English UI, separate window (ไม่ใช่ overlay)
-    ตอนนี้มีแท็บ HUD ก่อน · แท็บอื่น (General/Languages/Keymap) อยู่ใน P5
+    Settings window (P5 slice 1 · ADR-22 visual refresh) — English UI
+    Sidebar = macOS System Settings pattern · content = inset groups · ทุกค่ามีผลทันที
+    แท็บ General/Languages/Keymap ยังไม่มี backend (P5 ถัดไป)
   -->
-  <header class="topbar">
-    <span class="brand">RniType</span>
-    <nav class="tabs" aria-label="Sections">
-      <span class="tab is-active" aria-current="page">HUD</span>
-      <span class="tab is-disabled" title="Planned for P5">General</span>
-      <span class="tab is-disabled" title="Planned for P5">Languages</span>
-      <span class="tab is-disabled" title="Planned for P5">Keymap</span>
-    </nav>
-  </header>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">RniType</div>
+      <nav class="nav" aria-label="Sections">
+        <span class="nav__item is-active" aria-current="page">HUD</span>
+        <span class="nav__item is-disabled" title="Planned for P5">General</span>
+        <span class="nav__item is-disabled" title="Planned for P5">Languages</span>
+        <span class="nav__item is-disabled" title="Planned for P5">Keymap</span>
+      </nav>
+      <p class="sidebar__note">Settings apply immediately.</p>
+    </aside>
 
-  <main class="page">
-    <section class="card" aria-labelledby="hudTitle">
-      <h1 id="hudTitle">HUD</h1>
-      <p class="lead">Size and font of the on-screen keyboard overlay.</p>
+    <main class="content">
+      <header class="content__head">
+        <h1>HUD</h1>
+        <p class="lead">Size and font of the on-screen keyboard overlay.</p>
+      </header>
 
-      <div class="field">
-        <div class="field__head">
-          <label for="textScale">Text size</label>
+      <section class="group" aria-labelledby="sizeTitle">
+        <h2 id="sizeTitle" class="group__title">Size</h2>
+        <div class="row">
+          <div class="row__body">
+            <label for="textScale">Text size</label>
+            <p class="hint">Labels, characters and badges. Independent from the ring.</p>
+          </div>
           <output id="textScaleValue" for="textScale">1.40×</output>
         </div>
         <input id="textScale" type="range" min="0.8" max="2" step="0.05" value="1.4" />
         <div class="field__scale" aria-hidden="true"><span>0.8×</span><span>2.0×</span></div>
-        <p class="hint">
-          Multiplies every label, character and badge. Independent from the ring size, so the
-          letters grow without the circles growing.
-        </p>
-      </div>
 
-      <div class="field">
-        <div class="field__head">
-          <label for="ringScale">Ring size</label>
+        <div class="row">
+          <div class="row__body">
+            <label for="ringScale">Ring size</label>
+            <p class="hint">Diameter of the whole wheel. Text keeps its own size.</p>
+          </div>
           <output id="ringScaleValue" for="ringScale">1.00×</output>
         </div>
         <input id="ringScale" type="range" min="0.8" max="1.6" step="0.05" value="1" />
         <div class="field__scale" aria-hidden="true"><span>0.8×</span><span>1.6×</span></div>
-        <p class="hint">Diameter of the whole wheel. The text below keeps its own size.</p>
-      </div>
+      </section>
 
-      <fieldset class="field">
-        <legend>Font</legend>
-        <label class="option">
-          <input type="radio" name="font" value="ibm-plex-sans-thai" checked />
-          <span class="option__body">
-            <span class="option__name">IBM Plex Sans Thai</span>
-            <span class="option__note">Loopless Thai (default)</span>
-          </span>
-        </label>
-        <label class="option">
-          <input type="radio" name="font" value="noto-sans-thai" />
-          <span class="option__body">
-            <span class="option__name">Noto Sans Thai</span>
-            <span class="option__note">Loopless Thai, wider coverage</span>
-          </span>
-        </label>
-        <label class="option">
-          <input type="radio" name="font" value="system" />
-          <span class="option__body">
-            <span class="option__name">System</span>
-            <span class="option__note">Segoe UI · Leelawadee UI</span>
-          </span>
-        </label>
-      </fieldset>
+      <section class="group" aria-labelledby="fontTitle">
+        <h2 id="fontTitle" class="group__title">Font</h2>
+        <fieldset class="field">
+          <legend class="sr-only">Font family</legend>
+          <label class="option">
+            <input type="radio" name="font" value="ibm-plex-sans-thai" checked />
+            <span class="option__body">
+              <span class="option__name">IBM Plex Sans Thai</span>
+              <span class="option__note">Loopless Thai (default)</span>
+            </span>
+          </label>
+          <label class="option">
+            <input type="radio" name="font" value="noto-sans-thai" />
+            <span class="option__body">
+              <span class="option__name">Noto Sans Thai</span>
+              <span class="option__note">Loopless Thai, wider coverage</span>
+            </span>
+          </label>
+          <label class="option">
+            <input type="radio" name="font" value="system" />
+            <span class="option__body">
+              <span class="option__name">System</span>
+              <span class="option__note">Segoe UI · Leelawadee UI</span>
+            </span>
+          </label>
+        </fieldset>
+      </section>
 
       <section class="preview" aria-label="Preview">
         <p class="preview__caption">Preview</p>
         <p class="preview__group">วรรณยุกต์</p>
         <p class="preview__chars"><b>่</b> <b>้</b> <b>๊</b> <b>๋</b> <span class="sep">·</span> <b>ุ</b> <b>ู</b> <span class="sep">·</span> <b>ก</b> <b>น</b> <b>ร</b> <b>อ</b> <b>ง</b></p>
-        <p class="preview__pill">Type TH <span>·</span> ตัวใหญ่ <span class="badge">shift</span></p>
+        <p class="preview__pill"><i class="preview__dot"></i>Type TH <span class="preview__sep">·</span> ตัวใหญ่ <span class="badge">shift</span></p>
       </section>
 
       <footer class="actions">
         <button id="reset" type="button" class="btn">Reset HUD to defaults</button>
         <span id="status" class="status" role="status" aria-live="polite"></span>
       </footer>
-    </section>
-  </main>
+    </main>
+  </div>
 
   <script src="../shared/fonts.js"></script>
   <script src="settings.js"></script>
