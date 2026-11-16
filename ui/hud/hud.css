@@ -81,9 +81,11 @@ html, body {
 .hud[data-mode="type-th"],
 .hud[data-mode="type-other"],
 .hud[data-mode="cmd"],
-.hud[data-mode="lang"] { --mode-color: var(--mode-type); }
+.hud[data-mode="lang"],
+.hud[data-mode="quickbar"] { --mode-color: var(--mode-type); }
 .hud[data-mode="mouse"] { --mode-color: var(--mode-mouse); }
 .hud[data-mode="nav"] { --mode-color: var(--mode-nav); }
+.hud[data-mode="caret"] { --mode-color: var(--mode-caret); }
 .hud[data-mode="disabled"] { --mode-color: var(--text-3); }
 
 .hud__stage {
@@ -117,6 +119,100 @@ html, body {
 .hud[data-rings="on"] .hud__glass { opacity: 1; }
 
 .hud[data-idle="true"] .hud__glass { background: var(--hud-plate-idle); }
+
+/* ---------------- caret nav (R3) ----------------
+   ซ่อนวงพิมพ์ เหลือกากบาท 4 ทิศ 132px สี --mode-caret (ADR-23)
+   ไม่มี transform: scale บนชิ้นส่วน (กฎเดียวกับ ADR-19) — ใช้ opacity เท่านั้น */
+.hud__caret {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 132px;
+  height: 132px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  color: var(--mode-caret);
+  border: 1px solid color-mix(in srgb, var(--mode-caret) 45%, transparent);
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease-out);
+  pointer-events: none;
+}
+.hud[data-mode="caret"] .hud__caret { opacity: 1; }
+.hud__caret::before,
+.hud__caret::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+  opacity: 0.3;
+}
+.hud__caret::before { left: 50%; top: 18%; width: 1px; height: 64%; }
+.hud__caret::after { top: 50%; left: 18%; height: 1px; width: 64%; }
+.caret__arm {
+  position: absolute;
+  font-size: calc(11px * var(--hud-text-scale));
+  line-height: 1;
+  color: currentColor;
+}
+.caret__arm--n { top: 4px; left: 50%; transform: translateX(-50%); }
+.caret__arm--s { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.caret__arm--w { left: 5px; top: 50%; transform: translateY(-50%); }
+.caret__arm--e { right: 5px; top: 50%; transform: translateY(-50%); }
+.caret__hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: calc(8.5px * var(--hud-text-scale));
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
+/* ---------------- quick bar (LB) ----------------
+   แถบแนวนอน 8 ช่อง 44×44 radius 10px + ป้าย 11px (05-visual-language §5)
+   วงพิมพ์ถูกซ่อน (rings = on แต่ไม่วาดวง) — ช่อง active ใช้สีโหมด Type */
+.hud__quickbar {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease-out);
+  pointer-events: none;
+}
+.hud[data-mode="quickbar"] .hud__quickbar { opacity: 1; }
+.qb__slot {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--hud-stroke-in);
+  background: var(--hud-plate);
+  box-shadow: 0 0 0 1px var(--hud-stroke-out);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  color: var(--hud-text);
+}
+.qb__slot.is-active {
+  background: var(--mode-color);
+  border-color: transparent;
+  color: #fff;
+}
+.qb__label {
+  font-size: calc(8.6px * var(--hud-text-scale));
+  font-weight: 600;
+  line-height: 1;
+}
+.qb__sub {
+  font-size: calc(6.8px * var(--hud-text-scale));
+  line-height: 1;
+  opacity: 0.75;
+}
+.hud[data-mode="quickbar"] .hud__glass { opacity: 0; }
 
 .hud__ring {
   position: absolute;

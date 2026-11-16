@@ -46,6 +46,7 @@ pub struct KeyPress {
     pub key: Key,
     pub shift: bool,
     pub ctrl: bool,
+    pub alt: bool,
 }
 
 /// โหมดหลักของแอป — HUD และ injector ใช้ร่วมกัน
@@ -71,6 +72,20 @@ pub enum Command {
     Paste,
     Undo,
     Redo,
+}
+
+/// ช่องของ quick bar (LB ค้าง) — 8 ช่องตาม interaction model §5
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuickAction {
+    Copy,
+    Paste,
+    Cut,
+    Undo,
+    Redo,
+    SelectAll,
+    Save,
+    /// Alt+Tab — สลับหน้าต่าง (ใช้ `alt` ใน [`KeyPress`])
+    SwitchWindow,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

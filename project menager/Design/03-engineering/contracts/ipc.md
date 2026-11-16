@@ -73,7 +73,7 @@ Settings ──invoke save_config──▶ app ──validate──▶ config.js
 ## 5. ตัวอย่าง payload
 
 ### `hud:state`
-ดู [`hud-state.samples.json`](hud-state.samples.json) — 9 สถานะ: idle, group, char, shift, Thai repeat, cmd, lang, mouse, nav, disabled
+ดู [`hud-state.samples.json`](hud-state.samples.json) — 11 สถานะ: idle, group, char, shift, Thai repeat, cmd, lang, mouse, nav, disabled, quickbar, caret
 
 ### `app:status`
 ```json

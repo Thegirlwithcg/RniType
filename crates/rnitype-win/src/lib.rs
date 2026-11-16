@@ -79,6 +79,7 @@ mod tests {
             key: Key::Char('a'),
             shift: false,
             ctrl: false,
+            alt: false,
         }))
         .unwrap();
         out.apply(Action::MouseMove { dx: 3, dy: -1 }).unwrap();

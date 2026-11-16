@@ -24,12 +24,17 @@
 //! - layer 2: RB/RT (ค้าง = ชั่วคราว · แตะสั้นโดยไม่พิมพ์ = ล็อก)
 //! - ปุ่มหน้า: A double-tap = Enter · B hold 400 ms = Ctrl+Backspace · Y hold = Esc
 //!
-//! ยังไม่ทำใน slice นี้ (TODO ของ P2 รอบถัดไป):
-//! - quick bar (LB ค้าง) · caret nav (R3) · sticky drag (RB 2 แตะ)
-//! - pivot clamp ตามขอบจอ + mixed-DPI
+//! ขอบเขตของ slice 4 (P2 Track A — ADR-23):
+//! - quick bar (LB ค้าง): 8 ช่อง RS · ปล่อย RS = คีย์ลัด · ปล่อย LB/B = ยกเลิก ·
+//!   ดัน LS ขณะ LB = กลับไปพิมพ์ Ctrl+ตัวอักษร · Alt+Tab ใช้ `KeyPress.alt`
+//! - caret nav (R3): เปิด/ปิดลูกศร · แตะ 2 ครั้ง = Shift+ลูกศร · repeat 350/90 ms
+//! - sticky drag (Mouse): RB แตะ 2 ครั้ง = ล็อกปุ่มซ้ายค้าง · แตะอีกครั้ง = ปล่อย
+//!
+//! ยังไม่ทำ (งานถัดไป):
+//! - pivot clamp ต่อจอ/mixed-DPI (ตอนนี้ `Session` clamp ด้วย virtual desktop เดียว)
 //! - ตรวจ exclusion list / จอยหลุด (เป็นงานฝั่ง app–win ไม่ใช่ core)
 
-use crate::action::{Action, Command, Key, KeyPress, Mode, MouseButton, NamedKey};
+use crate::action::{Action, Command, Key, KeyPress, Mode, MouseButton, NamedKey, QuickAction};
 use crate::gesture::{GestureConfig, GestureState};
 use crate::keymap::Lang;
 use crate::normalizer::{Dir8, SectorTracker};
@@ -47,6 +52,8 @@ pub const MAX_LANGUAGES: usize = 8;
 pub struct RuntimeConfig {
     /// deadzone / dwell / hysteresis ของ gesture การพิมพ์ (ใช้ร่วมกับวงคำสั่ง)
     pub gesture: GestureConfig,
+    /// LB ต้องค้างนานเท่านี้จึงเปิด quick bar (แตะสั้นยังเป็น Ctrl chord ได้)
+    pub quickbar_hold_ms: u32,
     /// LB+RB ต้องค้างนานเท่านี้จึงเข้า `DISABLED` (spec §4: 1.5 s)
     pub emergency_hold_ms: u32,
     /// ระยะเวลาที่หยุดรับ input หลังกดปิดฉุกเฉิน (spec §4: `deadman` 3 s)
@@ -67,6 +74,7 @@ impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
             gesture: GestureConfig::default(),
+            quickbar_hold_ms: 150,
             emergency_hold_ms: 1500,
             deadman_ms: 3000,
             pointer: PointerConfig::default(),
@@ -103,6 +111,8 @@ pub enum WheelKind {
     Command,
     /// วงภาษา level 2 (จากช่อง Language ของวงคำสั่ง)
     Language,
+    /// quick bar 8 ช่อง (LB ค้าง) — RS เลือก · ปล่อย RS = ทำ
+    QuickBar,
 }
 
 /// เครื่องยนต์ระดับบนสุด: ถือ mode + วง + ท่อการพิมพ์
@@ -160,6 +170,25 @@ pub struct RuntimeEngine {
     scroll: ScrollEngine,
     pivot: PivotMover,
     scroll_diag_fired: bool,
+    /* ---- slice 4: quick bar / caret nav / sticky drag ---- */
+    /// LB ค้างต่อเนื่องนานเท่าไร (ต้องถึง `quickbar_hold_ms` จึงเปิด quick bar)
+    lb_hold_ms: u32,
+    /// `true` = การกด LB ครั้งนี้ยังไม่ถูกใช้ (หลังเปิด/แตะแล้วจะไม่เปิดซ้ำจนปล่อย)
+    lb_hold_armed: bool,
+    /// R3 เปิดโหมดลูกศร (Type mode) — RS = ลูกศร + repeat
+    caret: bool,
+    /// R3 สองครั้งติดกัน = เลือกข้อความ (ลูกศร + Shift)
+    caret_select: bool,
+    r3_window_ms: u32,
+    caret_sector: SectorTracker,
+    caret_dir: Option<Dir8>,
+    caret_ms: u32,
+    caret_fired: bool,
+    /// Mouse mode: RB แตะ 2 ครั้ง = ล็อกปุ่มซ้ายค้าง (ลากยาว)
+    sticky_drag: bool,
+    rb_tap_window_ms: u32,
+    /// การกด RB ครั้งนี้เพิ่งปล่อย sticky drag ไปแล้ว — ห้ามปล่อยซ้ำตอนยกนิ้ว
+    rb_sticky_released: bool,
 }
 
 /// rising edge ของปุ่มที่ต้องนับครั้งเดียวต่อการกด (กัน auto-repeat ของจอย)
@@ -220,6 +249,18 @@ impl RuntimeEngine {
             scroll: ScrollEngine::new(cfg.scroll),
             pivot: PivotMover::new(cfg.pivot),
             scroll_diag_fired: false,
+            lb_hold_ms: 0,
+            lb_hold_armed: true,
+            caret: false,
+            caret_select: false,
+            r3_window_ms: 0,
+            caret_sector: SectorTracker::new(gesture.sector_hysteresis_deg),
+            caret_dir: None,
+            caret_ms: 0,
+            caret_fired: false,
+            sticky_drag: false,
+            rb_tap_window_ms: 0,
+            rb_sticky_released: false,
         }
     }
 
@@ -257,6 +298,35 @@ impl RuntimeEngine {
         self.typing.repeat_count()
     }
 
+    /// Type mode: R3 เปิดโหมดลูกศรอยู่ (RS = ลูกศร)
+    pub fn caret_active(&self) -> bool {
+        self.caret
+    }
+
+    /// โหมดลูกศรกำลังเลือกข้อความ (ลูกศร + Shift)
+    pub fn caret_selecting(&self) -> bool {
+        self.caret && self.caret_select
+    }
+
+    /// Mouse mode: ล็อกปุ่มซ้ายค้างอยู่ (RB แตะ 2 ครั้ง)
+    pub fn sticky_drag(&self) -> bool {
+        self.sticky_drag
+    }
+
+    /// ช่องของ quick bar ตามทิศ RS (interaction model §5)
+    pub fn quickbar_slot(dir: Dir8) -> QuickAction {
+        match dir {
+            Dir8::N => QuickAction::Copy,
+            Dir8::NE => QuickAction::Paste,
+            Dir8::E => QuickAction::Cut,
+            Dir8::SE => QuickAction::Undo,
+            Dir8::S => QuickAction::Redo,
+            Dir8::SW => QuickAction::SelectAll,
+            Dir8::W => QuickAction::Save,
+            Dir8::NW => QuickAction::SwitchWindow,
+        }
+    }
+
     /// เปลี่ยน mode จากภายนอก (profile / exclusion list / ตั้งค่า)
     /// — ตัด gesture การพิมพ์ที่ค้างและปิดวงทั้งหมด (spec §3 ข้อ 1: event ที่สำคัญกว่าตัด gesture)
     ///
@@ -288,6 +358,18 @@ impl RuntimeEngine {
         self.y_hold_ms = 0;
         self.y_pending = false;
         self.y_hold_fired = false;
+        self.caret = false;
+        self.caret_select = false;
+        self.r3_window_ms = 0;
+        self.caret_dir = None;
+        self.caret_ms = 0;
+        self.caret_fired = false;
+        self.caret_sector.reset();
+        self.lb_hold_ms = 0;
+        self.lb_hold_armed = false;
+        self.sticky_drag = false;
+        self.rb_tap_window_ms = 0;
+        self.rb_sticky_released = false;
     }
 
     pub fn lang(&self) -> Lang {
@@ -402,6 +484,11 @@ impl RuntimeEngine {
     fn step(&mut self, pad: &PadState, dt_ms: u32, edges: Edges) -> Option<Action> {
         // ตัวจับเวลา double-tap ของ A เดินตลอดเวลา (แม้อยู่ในวง/Disabled)
         self.a_window_ms = self.a_window_ms.saturating_sub(dt_ms);
+        // หน้าต่าง R3 สองครั้ง (เปิดโหมดเลือกข้อความ)
+        self.r3_window_ms = self.r3_window_ms.saturating_sub(dt_ms);
+        if self.mode != Mode::Type {
+            self.r3_window_ms = 0;
+        }
 
         // 1) ปุ่มปิดฉุกเฉิน (LB+RB ค้าง 1.5 s) — สำคัญที่สุด
         if self.mode != Mode::Disabled {
@@ -426,17 +513,25 @@ impl RuntimeEngine {
             return None;
         }
 
-        // 4) วงเปิดอยู่ = A/B + RS เท่านั้น (LS ไม่มีผล · X/Y ไม่มีผล — วงชนะ)
+        // 4) quick bar: ปล่อย LB = ปิด · ดัน LS = กลับไปพิมพ์แบบ Ctrl+ตัวอักษร
+        if self.wheel == Some(WheelKind::QuickBar) {
+            let ls_armed = pad.ls.magnitude() >= self.cfg.gesture.ls_activate;
+            if !pad.buttons.lb || ls_armed {
+                self.close_wheel();
+            }
+        }
+
+        // 5) วงเปิดอยู่ = A/B + RS เท่านั้น (LS ไม่มีผล · X/Y ไม่มีผล — วงชนะ)
         if self.wheel.is_some() {
             return self.tick_wheel(pad, dt_ms, edges.a, edges.b);
         }
 
-        // 5) Modifier: LT แตะ = สลับ Shift lock (ADR-13) — เฉพาะ Type
+        // 6) Modifier: LT แตะ = สลับ Shift lock (ADR-13) — เฉพาะ Type
         if edges.lt && self.mode == Mode::Type {
             self.shift_lock = !self.shift_lock;
         }
 
-        // 6) ชั้น 2 (RB/RT) เฉพาะ Type: แตะ = ล็อก · ค้าง = ชั่วคราว
+        // 7) ชั้น 2 (RB/RT) เฉพาะ Type: แตะ = ล็อก · ค้าง = ชั่วคราว
         if self.mode == Mode::Type {
             // เช็คก่อนประมวลผลปล่อยปุ่ม: ถ้ามี gesture ค้างอยู่ = ค้างเพื่อพิมพ์ ไม่ใช่แตะ
             if self.layer2_held && self.typing.state() != GestureState::Idle {
@@ -454,7 +549,24 @@ impl RuntimeEngine {
             self.prev_layer = 1;
         }
 
-        // 7) ปุ่มหน้า A/B/X/Y + double-tap / hold (spec §4)
+        // 8) ปุ่มหน้า A/B/X/Y + double-tap / hold (spec §4)
+        //    caret mode (ADR-05): A = ยืนยัน · B = ยกเลิก — ห้ามส่ง Space/Backspace
+        //    ทับข้อความที่เลือก; X/Y ยังทำงานปกติ
+        if self.caret && (edges.a || edges.b) {
+            self.caret = false;
+            self.caret_select = false;
+            self.caret_dir = None;
+            self.caret_ms = 0;
+            self.caret_fired = false;
+            self.caret_sector.reset();
+            self.a_window_ms = 0;
+            if edges.b {
+                // กัน hold-B ยิง Ctrl+Backspace หลังออกจากโหมด
+                self.b_hold_ms = 0;
+                self.b_hold_fired = true;
+            }
+            return None;
+        }
         if let Some(action) = self.tick_face(pad, dt_ms, edges) {
             return Some(action);
         }
@@ -462,9 +574,22 @@ impl RuntimeEngine {
             return None;
         }
 
-        // 8) gesture บนแกนตาม mode
+        // 9) gesture บนแกนตาม mode
         match self.mode {
             Mode::Type => {
+                // R3: เปิด/ปิดโหมดลูกศร · แตะ 2 ครั้ง = เลือกข้อความ
+                if edges.rs_click {
+                    self.toggle_caret();
+                    return None;
+                }
+                // LB ค้าง 150 ms (ขณะยังไม่พิมพ์) = quick bar
+                self.tick_quickbar_hold(pad, dt_ms);
+                if self.wheel.is_some() {
+                    return None;
+                }
+                if self.caret {
+                    return self.tick_caret(pad, dt_ms);
+                }
                 self.typing.set_layer(self.layer());
                 self.typing
                     .tick(pad, dt_ms)
@@ -600,20 +725,187 @@ impl RuntimeEngine {
             // ADR-13: LT เป็น toggle ไม่ใช่ hold → ไม่ส่ง Shift ของ OS ออกไป
             shift: false,
             ctrl,
+            alt: false,
         })
+    }
+
+    /* ---------------- caret nav (R3) ---------------- */
+
+    /// R3 แตะ = เปิด/ปิดลูกศร · แตะ 2 ครั้งภายในหน้าต่าง = เลือกข้อความ
+    ///
+    /// ครั้งแรกเปิดลูกศรเสมอ (interaction model §3) — ถ้าแตะครั้งที่สองเร็ว ๆ
+    /// จะเปลี่ยนเป็นโหมดเลือกแทนการปิด (กดครั้งเดียวหลังพ้นหน้าต่างจึงปิด)
+    fn toggle_caret(&mut self) {
+        self.typing.cancel();
+        if self.r3_window_ms > 0 {
+            self.r3_window_ms = 0;
+            self.caret = true;
+            self.caret_select = true;
+        } else {
+            self.r3_window_ms = self.cfg.double_tap_ms;
+            if self.caret {
+                self.caret = false;
+            } else {
+                self.caret = true;
+            }
+            self.caret_select = false;
+        }
+        self.caret_sector.reset();
+        self.caret_dir = None;
+        self.caret_ms = 0;
+        self.caret_fired = false;
+    }
+
+    /// RS = ลูกศร · ดันครั้งแรกยิงทันที · ค้าง repeat ตาม 350/90 ms
+    fn tick_caret(&mut self, pad: &PadState, dt_ms: u32) -> Option<Action> {
+        let cfg = self.cfg.gesture;
+        let rm = pad.rs.magnitude();
+
+        if rm >= cfg.rs_activate {
+            let dir = self.caret_sector.update(pad.rs, cfg.rs_activate);
+            if dir != self.caret_dir {
+                self.caret_dir = dir;
+                self.caret_ms = 0;
+                self.caret_fired = false;
+                return dir.map(|_| self.arrow(pad.rs));
+            }
+            self.caret_ms = self.caret_ms.saturating_add(dt_ms);
+            let interval = if self.caret_fired {
+                cfg.repeat_rate_ms
+            } else {
+                cfg.repeat_delay_ms
+            };
+            if self.caret_ms >= interval {
+                self.caret_ms = 0;
+                self.caret_fired = true;
+                return self.caret_dir.map(|_| self.arrow(pad.rs));
+            }
+            return None;
+        }
+
+        if rm < cfg.rs_release {
+            self.caret_sector.reset();
+            self.caret_dir = None;
+            self.caret_ms = 0;
+            self.caret_fired = false;
+        }
+        None
+    }
+
+    /// ทิศ RS → ลูกศร (แกนที่เบี่ยงมากกว่าเป็นตัวตัดสิน · จอย y ขึ้น = Up)
+    fn arrow(&self, rs: Vec2) -> Action {
+        let key = if rs.x.abs() >= rs.y.abs() {
+            if rs.x >= 0.0 {
+                NamedKey::Right
+            } else {
+                NamedKey::Left
+            }
+        } else if rs.y >= 0.0 {
+            NamedKey::Up
+        } else {
+            NamedKey::Down
+        };
+        Action::Key(KeyPress {
+            key: Key::Named(key),
+            shift: self.caret_select,
+            ctrl: false,
+            alt: false,
+        })
+    }
+
+    /* ---------------- quick bar (LB) ---------------- */
+
+    /// LB ค้าง 150 ms = เปิด quick bar (แตะสั้นไม่เปิด — ยังใช้เป็น Ctrl ได้)
+    ///
+    /// เปิดครั้งเดียวต่อการกด · ปล่อย LB แล้วเริ่มนับใหม่ · ดัน LS ก่อนครบเวลา = ยกเลิกการเปิด
+    fn tick_quickbar_hold(&mut self, pad: &PadState, dt_ms: u32) {
+        if !pad.buttons.lb {
+            self.lb_hold_ms = 0;
+            self.lb_hold_armed = true;
+            return;
+        }
+        if !self.lb_hold_armed {
+            return;
+        }
+        let dragging_ls = pad.ls.magnitude() >= self.cfg.gesture.ls_activate;
+        if dragging_ls || self.caret || self.typing.state() != GestureState::Idle {
+            self.lb_hold_ms = 0;
+            self.lb_hold_armed = false;
+            return;
+        }
+        self.lb_hold_ms = self.lb_hold_ms.saturating_add(dt_ms);
+        if self.lb_hold_ms >= self.cfg.quickbar_hold_ms {
+            self.open_quickbar(pad);
+            self.lb_hold_armed = false;
+        }
+    }
+
+    fn open_quickbar(&mut self, pad: &PadState) {
+        self.close_wheel();
+        self.wheel = Some(WheelKind::QuickBar);
+        self.wheel_armed = pad.rs.magnitude() < self.cfg.gesture.rs_release;
+    }
+
+    /// ยืนยันช่อง quick bar → คีย์ลัดจริง (Ctrl+ตัวอักษร / Alt+Tab)
+    fn commit_quickbar(&mut self, index: u8) -> Option<Action> {
+        let dir = Dir8::from_index(index as usize);
+        self.close_wheel();
+        self.typing.cancel();
+
+        let (key, ctrl, alt) = match Self::quickbar_slot(dir) {
+            QuickAction::Copy => (Key::Char('c'), true, false),
+            QuickAction::Paste => (Key::Char('v'), true, false),
+            QuickAction::Cut => (Key::Char('x'), true, false),
+            QuickAction::Undo => (Key::Char('z'), true, false),
+            QuickAction::Redo => (Key::Char('y'), true, false),
+            QuickAction::SelectAll => (Key::Char('a'), true, false),
+            QuickAction::Save => (Key::Char('s'), true, false),
+            QuickAction::SwitchWindow => (Key::Named(NamedKey::Tab), false, true),
+        };
+        Some(Action::Key(KeyPress {
+            key,
+            shift: false,
+            ctrl,
+            alt,
+        }))
     }
 
     /* ---------------- Mouse mode ---------------- */
 
     fn tick_mouse(&mut self, pad: &PadState, dt_ms: u32, edges: Edges) -> Option<Action> {
-        // RB = คลิกซ้าย (กดค้าง = ลาก) · RT = คลิกขวา
+        self.rb_tap_window_ms = self.rb_tap_window_ms.saturating_sub(dt_ms);
+
+        // RB = คลิกซ้าย (กดค้าง = ลาก) · แตะ 2 ครั้ง = ล็อกปุ่มซ้ายค้าง (sticky drag)
+        // · RT = คลิกขวา
         if edges.rb {
+            if self.sticky_drag {
+                // แตะ RB อีกครั้ง = ปล่อยปุ่มซ้าย (จบการลาก)
+                self.sticky_drag = false;
+                self.rb_tap_window_ms = 0;
+                self.rb_sticky_released = true;
+                return Some(Action::MouseButton {
+                    button: MouseButton::Left,
+                    down: false,
+                });
+            }
             return Some(Action::MouseButton {
                 button: MouseButton::Left,
                 down: true,
             });
         }
         if self.prev_rb && !pad.buttons.rb {
+            if self.rb_sticky_released {
+                // การกดครั้งนี้เพิ่งปล่อย sticky drag ไปแล้ว — ไม่ปล่อยซ้ำ
+                self.rb_sticky_released = false;
+                return None;
+            }
+            if self.rb_tap_window_ms > 0 {
+                // แตะครั้งที่ 2 เร็ว ๆ = ล็อกปุ่มซ้ายค้างไว้ (ไม่ปล่อย)
+                self.sticky_drag = true;
+                self.rb_tap_window_ms = 0;
+                return None;
+            }
+            self.rb_tap_window_ms = self.cfg.double_tap_ms;
             return Some(Action::MouseButton {
                 button: MouseButton::Left,
                 down: false,
@@ -712,6 +1004,7 @@ impl RuntimeEngine {
             key,
             shift: false,
             ctrl: press.ctrl,
+            alt: press.alt,
         })
     }
 
@@ -758,6 +1051,8 @@ impl RuntimeEngine {
 
     fn open_cmd_wheel(&mut self, pad: &PadState) {
         self.close_wheel();
+        self.caret = false;
+        self.caret_select = false;
         self.wheel = Some(WheelKind::Command);
         // เปิดวงขณะ RS ยังดันค้าง = ยังไม่ armed (spec §3.1 บรรทัดสุดท้าย)
         self.wheel_armed = pad.rs.magnitude() < self.cfg.gesture.rs_release;
@@ -823,6 +1118,7 @@ impl RuntimeEngine {
                     sector.and_then(|dir| self.command_slot(dir).map(|_| dir.index() as u8))
                 }
                 WheelKind::Language => Some(self.lang_index_for(pad.rs)),
+                WheelKind::QuickBar => sector.map(|dir| dir.index() as u8),
             };
             // ทิศที่ไฮไลต์ (ทั้งสองวง) — ใช้กับ HUD
             self.wheel_dir = if index.is_some() { sector } else { None };
@@ -849,6 +1145,7 @@ impl RuntimeEngine {
         match self.wheel? {
             WheelKind::Command => self.run_command(pad, index),
             WheelKind::Language => self.commit_lang(index),
+            WheelKind::QuickBar => self.commit_quickbar(index),
         }
     }
 
@@ -1176,6 +1473,7 @@ mod tests {
                 key: Key::Char('a'),
                 shift: false,
                 ctrl: false,
+                alt: false,
             }))
         );
     }
@@ -1420,6 +1718,7 @@ mod tests {
                 key: Key::Char('a'),
                 shift: false,
                 ctrl: false,
+                alt: false,
             }))
         );
     }
@@ -1554,6 +1853,7 @@ mod tests {
             key: k,
             shift: false,
             ctrl: false,
+            alt: false,
         }))
     }
 
@@ -1619,6 +1919,7 @@ mod tests {
                 key: Key::Char('A'),
                 shift: false,
                 ctrl: true,
+                alt: false,
             })),
             "LB ต้องยังเป็น Ctrl"
         );
@@ -1923,7 +2224,8 @@ mod tests {
             Some(Action::Key(KeyPress {
                 key: Key::Named(NamedKey::Home),
                 shift: false,
-                ctrl: true
+                ctrl: true,
+                alt: false,
             }))
         );
         // ค้างทิศเดิม = ไม่ยิงซ้ำ
@@ -2060,7 +2362,8 @@ mod tests {
             Some(Action::Key(KeyPress {
                 key: Key::Named(NamedKey::Backspace),
                 shift: false,
-                ctrl: true
+                ctrl: true,
+                alt: false,
             }))
         );
         assert_eq!(e.tick(&held, 400), None, "ยิงครั้งเดียวต่อการกด");
@@ -2084,5 +2387,384 @@ mod tests {
         assert_eq!(e.tick(&held, 390), None);
         assert_eq!(e.tick(&held, 10), key(Key::Named(NamedKey::Escape)));
         assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), D), None);
+    }
+
+    /* ---------------- slice 4: quick bar (LB) ---------------- */
+
+    fn lb_pad(rs: (f32, f32)) -> PadState {
+        with(p((0.0, 0.0), rs), |b| b.lb = true)
+    }
+
+    /// กด LB แล้วค้าง 150 ms (ADR-23) — quick bar จะเปิด
+    fn open_quickbar(e: &mut RuntimeEngine, rs: (f32, f32)) {
+        assert_eq!(e.tick(&lb_pad(rs), D), None);
+        assert_eq!(e.tick(&lb_pad(rs), 150), None);
+        assert_eq!(e.wheel(), Some(WheelKind::QuickBar));
+    }
+
+    fn shortcut(ch: char) -> Option<Action> {
+        Some(Action::Key(KeyPress {
+            key: Key::Char(ch),
+            shift: false,
+            ctrl: true,
+            alt: false,
+        }))
+    }
+
+    #[test]
+    fn holding_lb_opens_quickbar_and_releasing_rs_runs_the_shortcut() {
+        let mut e = engine();
+        open_quickbar(&mut e, (0.0, 0.0));
+        assert!(e.wheel_armed());
+
+        // RS ↑ = Copy
+        e.tick(&lb_pad((0.0, 0.9)), D);
+        assert_eq!(e.wheel_index(), Some(Dir8::N.index() as u8));
+        assert_eq!(e.wheel_highlight_dir(), Some(Dir8::N));
+
+        // ปล่อย RS (ยังถือ LB) → ยืนยันหลัง dwell
+        assert_eq!(e.tick(&lb_pad((0.0, 0.0)), 30), None);
+        assert_eq!(e.tick(&lb_pad((0.0, 0.0)), 40), shortcut('c'));
+        assert_eq!(e.wheel(), None);
+
+        // LB ยังค้าง = ไม่เปิดซ้ำ (edge เท่านั้น)
+        for _ in 0..10 {
+            assert_eq!(e.tick(&lb_pad((0.0, 0.0)), D), None);
+        }
+        assert_eq!(e.wheel(), None);
+    }
+
+    #[test]
+    fn quickbar_slot_map_matches_the_interaction_model() {
+        let cases = [
+            (Dir8::N, 'c', false, QuickAction::Copy),
+            (Dir8::NE, 'v', false, QuickAction::Paste),
+            (Dir8::E, 'x', false, QuickAction::Cut),
+            (Dir8::SE, 'z', false, QuickAction::Undo),
+            (Dir8::S, 'y', false, QuickAction::Redo),
+            (Dir8::SW, 'a', false, QuickAction::SelectAll),
+            (Dir8::W, 's', false, QuickAction::Save),
+            (Dir8::NW, '\t', true, QuickAction::SwitchWindow),
+        ];
+        for (dir, ch, alt, quick) in cases {
+            assert_eq!(RuntimeEngine::quickbar_slot(dir), quick, "{dir:?}");
+            let mut e = engine();
+            open_quickbar(&mut e, (0.0, 0.0));
+            let angle = dir.center_deg().to_radians();
+            let rs = Vec2::new(angle.sin(), angle.cos());
+            e.tick(&lb_pad((rs.x, rs.y)), D);
+            assert_eq!(e.wheel_index(), Some(dir.index() as u8), "{dir:?}");
+            e.tick(&lb_pad((0.0, 0.0)), 30);
+            let action = e.tick(&lb_pad((0.0, 0.0)), 40).expect("ต้องทำช่อง");
+            let expected_key = if alt {
+                Key::Named(NamedKey::Tab)
+            } else {
+                Key::Char(ch)
+            };
+            assert_eq!(
+                action,
+                Action::Key(KeyPress {
+                    key: expected_key,
+                    shift: false,
+                    ctrl: !alt,
+                    alt,
+                }),
+                "{dir:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn releasing_lb_closes_quickbar_without_running_anything() {
+        let mut e = engine();
+        open_quickbar(&mut e, (0.0, 0.0));
+        e.tick(&lb_pad((0.0, 0.9)), D);
+        assert_eq!(e.wheel_index(), Some(Dir8::N.index() as u8));
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.9)), D), None);
+        assert_eq!(e.wheel(), None);
+        // ปล่อย RS ต่อ = ไม่มีคีย์หลุด
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), 100), None);
+    }
+
+    #[test]
+    fn pushing_ls_in_quickbar_switches_to_ctrl_typing() {
+        let mut e = engine();
+        open_quickbar(&mut e, (0.0, 0.0));
+        assert_eq!(e.wheel(), Some(WheelKind::QuickBar));
+
+        // ดัน LS ขณะ LB ค้าง = ปิด quickbar แล้วพิมพ์แบบ Ctrl+ตัวอักษร
+        let lb_ls = |ls: (f32, f32), rs: (f32, f32)| with(p(ls, rs), |b| b.lb = true);
+        assert_eq!(e.tick(&lb_ls(LS_N, (0.0, 0.0)), D), None);
+        assert_eq!(e.wheel(), None);
+        e.tick(&lb_ls(LS_N, LS_N), D);
+        e.tick(&lb_ls(LS_N, (0.0, 0.0)), D);
+        assert_eq!(
+            e.tick(&lb_ls(LS_N, (0.0, 0.0)), 64),
+            Some(Action::Key(KeyPress {
+                key: Key::Char('a'),
+                shift: false,
+                ctrl: true,
+                alt: false,
+            }))
+        );
+    }
+
+    #[test]
+    fn quickbar_opened_while_rs_is_held_waits_for_center() {
+        let mut e = engine();
+        e.tick(&lb_pad((0.0, 0.0)), D);
+        e.tick(&lb_pad((0.0, 0.9)), 150);
+        assert_eq!(e.wheel(), Some(WheelKind::QuickBar));
+        assert!(!e.wheel_armed());
+        for _ in 0..20 {
+            assert_eq!(e.tick(&lb_pad((0.0, 0.9)), D), None);
+        }
+        assert_eq!(e.wheel_index(), None);
+        e.tick(&lb_pad((0.0, 0.0)), D);
+        assert!(e.wheel_armed());
+        e.tick(&lb_pad((0.0, 0.9)), D);
+        assert_eq!(e.wheel_index(), Some(Dir8::N.index() as u8));
+    }
+
+    #[test]
+    fn tapping_lb_shorter_than_150ms_never_opens_quickbar() {
+        let mut e = engine();
+        for _ in 0..20 {
+            assert_eq!(e.tick(&lb_pad((0.0, 0.0)), 5), None);
+        }
+        assert_eq!(e.wheel(), None);
+        // ปล่อย LB แล้วเริ่มนับใหม่
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        open_quickbar(&mut e, (0.0, 0.0));
+    }
+
+    /* ---------------- slice 4: caret nav (R3) ---------------- */
+
+    fn tap_r3(e: &mut RuntimeEngine) {
+        e.tick(&button_press(|b| b.rs_click = true), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+    }
+
+    fn arrow(key: NamedKey, shift: bool) -> Option<Action> {
+        Some(Action::Key(KeyPress {
+            key: Key::Named(key),
+            shift,
+            ctrl: false,
+            alt: false,
+        }))
+    }
+
+    #[test]
+    fn r3_toggles_caret_mode_and_rs_sends_arrows_with_repeat() {
+        let mut e = engine();
+        assert!(!e.caret_active());
+        tap_r3(&mut e);
+        assert!(e.caret_active());
+
+        // ดันครั้งแรก = ยิงทันที
+        assert_eq!(
+            e.tick(&p((0.0, 0.0), (0.0, 0.9)), D),
+            arrow(NamedKey::Up, false)
+        );
+        // ยังไม่ครบ 350 ms
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.9)), 300), None);
+        assert_eq!(
+            e.tick(&p((0.0, 0.0), (0.0, 0.9)), 50),
+            arrow(NamedKey::Up, false)
+        );
+        // 90 ms ต่อครั้ง
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.9)), 89), None);
+        assert_eq!(
+            e.tick(&p((0.0, 0.0), (0.0, 0.9)), 1),
+            arrow(NamedKey::Up, false)
+        );
+
+        // เปลี่ยนทิศ = ยิงทันที
+        assert_eq!(
+            e.tick(&p((0.0, 0.0), (0.9, 0.0)), D),
+            arrow(NamedKey::Right, false)
+        );
+        // ปล่อย RS = หยุด
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), 4), None);
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), 500), None);
+
+        // กด R3 อีกครั้ง (พ้นหน้าต่าง double tap) = ปิด
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), 300);
+        tap_r3(&mut e);
+        assert!(!e.caret_active());
+        // ปิดแล้ว RS ไม่ส่งลูกศร
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.9)), D), None);
+    }
+
+    #[test]
+    fn r3_double_tap_enables_selection_and_arrows_carry_shift() {
+        let mut e = engine();
+        tap_r3(&mut e); // เปิดลูกศร
+        assert!(e.caret_active());
+        assert!(!e.caret_selecting());
+
+        // แตะครั้งที่ 2 ภายในหน้าต่าง = เลือกข้อความ (ยังเปิดลูกศร)
+        tap_r3(&mut e);
+        assert!(e.caret_active());
+        assert!(e.caret_selecting());
+
+        assert_eq!(
+            e.tick(&p((0.0, 0.0), (-0.9, 0.0)), D),
+            arrow(NamedKey::Left, true)
+        );
+
+        // แตะเดี่ยวหลังพ้นหน้าต่าง = ปิดทั้งลูกศรและการเลือก
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), 300);
+        tap_r3(&mut e);
+        assert!(!e.caret_active());
+        assert!(!e.caret_selecting());
+    }
+
+    #[test]
+    fn r3_while_selecting_a_character_cancels_typing() {
+        let mut e = engine();
+        e.tick(&p(LS_N, (0.0, 0.0)), D);
+        e.tick(&p(LS_N, LS_N), D);
+        assert_eq!(e.gesture_state(), GestureState::CharSelected);
+
+        tap_r3(&mut e);
+        assert!(e.caret_active());
+        assert_eq!(e.gesture_state(), GestureState::Idle);
+
+        // ปล่อย RS + รอ dwell → ต้องไม่พิมพ์ตัวอักษร
+        e.tick(&p(LS_N, (0.0, 0.0)), D);
+        assert_eq!(e.tick(&p(LS_N, (0.0, 0.0)), 200), None);
+    }
+
+    #[test]
+    fn caret_mode_ignores_ls_and_uses_only_rs_for_arrows() {
+        let mut e = engine();
+        tap_r3(&mut e);
+        // ดัน LS อย่างเดียว = ไม่มีอะไร (ไม่พิมพ์)
+        for _ in 0..20 {
+            assert_eq!(e.tick(&p(LS_N, (0.0, 0.0)), D), None);
+        }
+        assert_eq!(e.gesture_state(), GestureState::Idle);
+        // LS + RS = ลูกศรตาม RS
+        assert_eq!(
+            e.tick(&p(LS_N, (0.0, -0.9)), D),
+            arrow(NamedKey::Down, false)
+        );
+    }
+
+    #[test]
+    fn a_and_b_leave_caret_mode_without_typing_over_the_selection() {
+        // A = ยืนยัน (ออกจากโหมด) ไม่ส่ง Space
+        let mut e = engine();
+        tap_r3(&mut e);
+        assert!(e.caret_active());
+        assert_eq!(e.tick(&button_press(|b| b.a = true), D), None);
+        assert!(!e.caret_active());
+        // หลังจากนั้น A กลับเป็น Space ตามปกติ
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        assert_eq!(
+            tap(&mut e, |b| b.a = true),
+            key(Key::Named(NamedKey::Space))
+        );
+
+        // B = ยกเลิก (ออกจากโหมด) ไม่ส่ง Backspace
+        let mut e = engine();
+        tap_r3(&mut e);
+        assert_eq!(e.tick(&button_press(|b| b.b = true), D), None);
+        assert!(!e.caret_active());
+        // ค้าง B ต่อ = ต้องไม่ยิง Ctrl+Backspace หลังออกจากโหมด
+        assert_eq!(e.tick(&button_press(|b| b.b = true), 500), None);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        assert_eq!(
+            tap(&mut e, |b| b.b = true),
+            key(Key::Named(NamedKey::Backspace))
+        );
+    }
+
+    /* ---------------- slice 4: sticky drag (Mouse) ---------------- */
+
+    #[test]
+    fn double_tapping_rb_locks_the_left_button_until_the_next_tap() {
+        let mut e = engine();
+        to_mouse(&mut e);
+
+        // แตะครั้งที่ 1 = คลิกปกติ
+        assert_eq!(
+            e.tick(&button_press(|b| b.rb = true), D),
+            Some(Action::MouseButton {
+                button: MouseButton::Left,
+                down: true
+            })
+        );
+        assert_eq!(
+            e.tick(&p((0.0, 0.0), (0.0, 0.0)), D),
+            Some(Action::MouseButton {
+                button: MouseButton::Left,
+                down: false
+            })
+        );
+        assert!(!e.sticky_drag());
+
+        // แตะครั้งที่ 2 เร็ว ๆ = กดค้างไว้ (ไม่ปล่อย)
+        assert_eq!(
+            e.tick(&button_press(|b| b.rb = true), D),
+            Some(Action::MouseButton {
+                button: MouseButton::Left,
+                down: true
+            })
+        );
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), D), None);
+        assert!(e.sticky_drag());
+
+        // ลากได้: RS ยังขยับ pointer ระหว่างล็อก
+        assert!(matches!(
+            e.tick(&p((0.0, 0.0), (1.0, 0.0)), 100),
+            Some(Action::MouseMove { .. })
+        ));
+
+        // แตะอีกครั้ง = ปล่อยปุ่มซ้าย
+        assert_eq!(
+            e.tick(&button_press(|b| b.rb = true), D),
+            Some(Action::MouseButton {
+                button: MouseButton::Left,
+                down: false
+            })
+        );
+        assert!(!e.sticky_drag());
+        // ยกนิ้วแล้วต้องไม่ปล่อยซ้ำ
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), D), None);
+    }
+
+    #[test]
+    fn slow_second_rb_tap_is_a_normal_click() {
+        let mut e = engine();
+        to_mouse(&mut e);
+        e.tick(&button_press(|b| b.rb = true), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        // ปล่อยทิ้งไว้จนหน้าต่าง double tap หมด
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), 300);
+        e.tick(&button_press(|b| b.rb = true), D);
+        assert_eq!(
+            e.tick(&p((0.0, 0.0), (0.0, 0.0)), D),
+            Some(Action::MouseButton {
+                button: MouseButton::Left,
+                down: false
+            })
+        );
+        assert!(!e.sticky_drag());
+    }
+
+    #[test]
+    fn sticky_drag_is_cleared_when_leaving_mouse_mode() {
+        let mut e = engine();
+        to_mouse(&mut e);
+        e.tick(&button_press(|b| b.rb = true), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        e.tick(&button_press(|b| b.rb = true), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        assert!(e.sticky_drag());
+
+        e.set_mode(Mode::Type);
+        assert!(!e.sticky_drag());
     }
 }

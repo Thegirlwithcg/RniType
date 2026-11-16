@@ -275,5 +275,58 @@
     "outer": { "kind": "none", "active": -1, "labels": [] },
     "preview": { "char": "", "count": 0 },
     "status": { "text": "พักอยู่", "badges": ["กด 8 เพื่อกลับ"] }
+  },
+  {
+    "version": 1,
+    "visible": true,
+    "mode": "quickbar",
+    "ringAlways": false,
+    "hudHidden": false,
+    "scale": 1.0,
+    "opacity": 0.92,
+    "pivot": { "x": 960, "y": 540 },
+    "layer": 1,
+    "shiftLock": false,
+    "state": "idle",
+    "group": -1,
+    "sector": -1,
+    "language": { "code": "en", "kind": "layout", "enabled": ["en", "th"] },
+    "inner": {
+      "kind": "command",
+      "active": 0,
+      "labels": [
+        { "text": "Copy", "sub": "Ctrl+C" },
+        { "text": "Paste", "sub": "Ctrl+V" },
+        { "text": "Cut", "sub": "Ctrl+X" },
+        { "text": "Undo", "sub": "Ctrl+Z" },
+        { "text": "Redo", "sub": "Ctrl+Y" },
+        { "text": "All", "sub": "Ctrl+A" },
+        { "text": "Save", "sub": "Ctrl+S" },
+        { "text": "Switch", "sub": "Alt+Tab" }
+      ]
+    },
+    "outer": { "kind": "none", "active": -1, "labels": [] },
+    "preview": { "char": "", "count": 0 },
+    "status": { "text": "LB", "badges": [] }
+  },
+  {
+    "version": 1,
+    "visible": true,
+    "mode": "caret",
+    "ringAlways": false,
+    "hudHidden": false,
+    "scale": 1.0,
+    "opacity": 0.92,
+    "pivot": { "x": 960, "y": 540 },
+    "layer": 1,
+    "shiftLock": false,
+    "state": "idle",
+    "group": -1,
+    "sector": -1,
+    "language": { "code": "en", "kind": "layout", "enabled": ["en", "th"] },
+    "inner": { "kind": "none", "active": -1, "labels": [] },
+    "outer": { "kind": "none", "active": -1, "labels": [] },
+    "preview": { "char": "", "count": 0 },
+    "status": { "text": "เลือกข้อความ", "badges": [] }
   }
 ]

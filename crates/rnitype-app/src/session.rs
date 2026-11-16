@@ -14,7 +14,9 @@
 use rnitype_core::keymap::{group_names_for, label_of, lookup_layer};
 use rnitype_core::normalizer::Dir8;
 use rnitype_core::runtime::{LangSlot, RuntimeEngine, WheelKind};
-use rnitype_core::{Action, Command, GestureState, Key, KeyPress, Lang, Mode, PadState};
+use rnitype_core::{
+    Action, Command, GestureState, Key, KeyPress, Lang, Mode, MouseButton, PadState, QuickAction,
+};
 use rnitype_win::Injector;
 use serde_json::{Value, json};
 
@@ -46,6 +48,8 @@ pub struct Session {
     pointer: (f32, f32),
     /// กลางจอหลัก (RS click ในโหมด Mouse = pointer กลับมาที่นี่)
     pointer_home: (f32, f32),
+    /// ขอบเขต pivot ที่ปลอดภัย (พิกัดหน้าจอ) — `None` = ไม่จำกัด
+    pivot_clamp: Option<((f32, f32), (f32, f32))>,
     /// จำนวนคีย์ที่ส่งออกแล้ว (log/สถิติ)
     sent: u32,
 }
@@ -78,6 +82,7 @@ impl Session {
             pivot_home: pivot,
             pointer: pointer_home,
             pointer_home,
+            pivot_clamp: None,
             sent: 0,
         };
         session.refresh_languages();
@@ -97,12 +102,56 @@ impl Session {
         self.pointer = pointer;
     }
 
+    /// จำกัด pivot ให้วง HUD ยังอยู่ใน virtual desktop (ADR-23)
+    ///
+    /// `min`/`max` เป็นพิกัดหน้าจอของจุดศูนย์กลางที่ยังปลอดภัย (เว้นรัศมีวงแล้ว)
+    pub fn set_pivot_clamp(&mut self, min: (f32, f32), max: (f32, f32)) {
+        self.pivot_clamp = Some((min, (max.0.max(min.0), max.1.max(min.1))));
+        self.pivot = self.clamp_pivot(self.pivot);
+    }
+
+    fn clamp_pivot(&self, point: (f32, f32)) -> (f32, f32) {
+        match self.pivot_clamp {
+            Some(((minx, miny), (maxx, maxy))) => {
+                (point.0.clamp(minx, maxx), point.1.clamp(miny, maxy))
+            }
+            None => point,
+        }
+    }
+
     /// 1 เฟรมของ engine — คืน action ที่ "ส่งออกจริง" (สำหรับ log/ทดสอบ)
     pub fn step(&mut self, pad: &PadState, dt_ms: u32) -> Vec<Action> {
         let mut out = Vec::new();
+        let sticky_before = self.engine.sticky_drag();
         if let Some(action) = self.engine.tick(pad, dt_ms) {
             self.apply(action, &mut out);
         }
+
+        // sticky drag ถูกล้างโดย engine (สลับ mode / emergency / จอยหลุด)
+        // ต้องปล่อยปุ่มซ้ายจริง ไม่งั้นเมาส์ค้างกดทั้งเครื่อง
+        if sticky_before && !self.engine.sticky_drag() {
+            let already_released = out.iter().any(|action| {
+                matches!(
+                    action,
+                    Action::MouseButton {
+                        button: MouseButton::Left,
+                        down: false
+                    }
+                )
+            });
+            if !already_released {
+                let release = Action::MouseButton {
+                    button: MouseButton::Left,
+                    down: false,
+                };
+                if let Err(err) = self.injector.apply(release) {
+                    eprintln!("[session] ปล่อย sticky drag ไม่สำเร็จ: {err}");
+                }
+                self.sent = self.sent.saturating_add(1);
+                out.push(release);
+            }
+        }
+
         out
     }
 
@@ -173,11 +222,11 @@ impl Session {
                 None
             }
             Action::MovePivot { dx, dy } => {
-                self.pivot = (self.pivot.0 + dx, self.pivot.1 + dy);
+                self.pivot = self.clamp_pivot((self.pivot.0 + dx, self.pivot.1 + dy));
                 None
             }
             Action::ResetPivot => {
-                self.pivot = self.pivot_home;
+                self.pivot = self.clamp_pivot(self.pivot_home);
                 None
             }
             Action::RecenterPointer => {
@@ -218,11 +267,12 @@ impl Session {
     pub fn hud_state(&self, style: HudStyle, origin: (i32, i32)) -> Value {
         let engine = &self.engine;
         let lang = engine.lang();
-        let mode = hud_mode(engine.mode(), engine.wheel(), lang);
+        let caret = engine.caret_active();
+        let mode = hud_mode(engine.mode(), engine.wheel(), lang, caret);
 
         let group = engine.typing_group();
         let sector = engine.typing_sector();
-        let typing = engine.mode() == Mode::Type && engine.wheel().is_none();
+        let typing = engine.mode() == Mode::Type && engine.wheel().is_none() && !caret;
         let shift_lock = engine.shift_lock();
         let layer = engine.layer();
         let repeating = engine.gesture_state() == GestureState::Repeating;
@@ -239,12 +289,23 @@ impl Session {
             String::new()
         };
         // ADR-13: ล็อกตัวใหญ่แล้ว pill ต้องบอก (HUD แสดงเป็นข้อความใน pill)
-        let status_text = if shift_lock && typing {
+        let status_text = if caret {
+            if engine.caret_selecting() {
+                "เลือกข้อความ"
+            } else {
+                "ลูกศร"
+            }
+        } else if shift_lock && typing {
             "ตัวใหญ่"
         } else {
             ""
         };
         let repeat_count = if repeating { engine.repeat_count() } else { 0 };
+
+        let mut badges: Vec<String> = Vec::new();
+        if engine.sticky_drag() {
+            badges.push("Drag".to_string());
+        }
 
         json!({
             "version": 1,
@@ -276,7 +337,7 @@ impl Session {
                 "y": f64::from(self.pointer.1) - f64::from(origin.1),
                 "visible": engine.mode() == Mode::Mouse,
             },
-            "status": { "text": status_text, "badges": Vec::<String>::new() },
+            "status": { "text": status_text, "badges": badges },
         })
     }
 
@@ -318,6 +379,13 @@ impl Session {
                 let active = engine.wheel_index().map_or(-1, i32::from);
                 json!({ "kind": "language", "active": active, "labels": labels })
             }
+            Some(WheelKind::QuickBar) => {
+                let labels: Vec<Value> = Dir8::ALL
+                    .iter()
+                    .map(|dir| quickbar_label(*dir))
+                    .collect();
+                json!({ "kind": "command", "active": direction, "labels": labels })
+            }
             None if typing => {
                 let labels: Vec<Value> = group_names_for(lang, layer)
                     .iter()
@@ -356,6 +424,7 @@ fn shortcut(ch: char) -> Action {
         key: Key::Char(ch),
         shift: false,
         ctrl: true,
+        alt: false,
     })
 }
 
@@ -376,10 +445,12 @@ fn shifted(text: String, shift_lock: bool) -> String {
         .collect()
 }
 
-fn hud_mode(mode: Mode, wheel: Option<WheelKind>, lang: Lang) -> &'static str {
+fn hud_mode(mode: Mode, wheel: Option<WheelKind>, lang: Lang, caret: bool) -> &'static str {
     match wheel {
         Some(WheelKind::Command) => "cmd",
         Some(WheelKind::Language) => "lang",
+        Some(WheelKind::QuickBar) => "quickbar",
+        None if caret => "caret",
         None => match (mode, lang) {
             (Mode::Type, Lang::Th) => "type-th",
             (Mode::Type, Lang::En) => "type-en",
@@ -428,6 +499,20 @@ fn command_label(engine: &RuntimeEngine, dir: Dir8) -> Value {
         Some(Command::Redo) => json!({ "text": "Redo", "sub": "Ctrl+Y" }),
         Some(Command::Nav) => json!({ "text": "Nav", "sub": "Place UI" }),
         None => json!({ "text": "" }),
+    }
+}
+
+/// ป้ายของช่อง quick bar (LB ค้าง) — ทิศตรงกับ interaction model §5
+fn quickbar_label(dir: Dir8) -> Value {
+    match RuntimeEngine::quickbar_slot(dir) {
+        QuickAction::Copy => json!({ "text": "Copy", "sub": "Ctrl+C" }),
+        QuickAction::Paste => json!({ "text": "Paste", "sub": "Ctrl+V" }),
+        QuickAction::Cut => json!({ "text": "Cut", "sub": "Ctrl+X" }),
+        QuickAction::Undo => json!({ "text": "Undo", "sub": "Ctrl+Z" }),
+        QuickAction::Redo => json!({ "text": "Redo", "sub": "Ctrl+Y" }),
+        QuickAction::SelectAll => json!({ "text": "All", "sub": "Ctrl+A" }),
+        QuickAction::Save => json!({ "text": "Save", "sub": "Ctrl+S" }),
+        QuickAction::SwitchWindow => json!({ "text": "Switch", "sub": "Alt+Tab" }),
     }
 }
 
@@ -498,7 +583,8 @@ mod tests {
             vec![Action::Key(KeyPress {
                 key: Key::Char('a'),
                 shift: false,
-                ctrl: false
+                ctrl: false,
+                alt: false,
             })]
         );
     }
@@ -514,7 +600,8 @@ mod tests {
             vec![Action::Key(KeyPress {
                 key: Key::Named(rnitype_core::NamedKey::Space),
                 shift: false,
-                ctrl: false
+                ctrl: false,
+                alt: false,
             })]
         );
     }
@@ -534,7 +621,8 @@ mod tests {
             vec![Action::Key(KeyPress {
                 key: Key::Char('c'),
                 shift: false,
-                ctrl: true
+                ctrl: true,
+                alt: false,
             })]
         );
     }
@@ -721,7 +809,8 @@ mod tests {
             vec![Action::Key(KeyPress {
                 key: Key::Char('a'),
                 shift: false,
-                ctrl: false
+                ctrl: false,
+                alt: false,
             })]
         );
 
@@ -775,5 +864,188 @@ mod tests {
         session.step(&click, 4);
         let hud = session.hud_state(HudStyle::default(), (0, 0));
         assert_eq!(hud["pivot"]["y"], 540.0);
+    }
+
+    /* ---------------- P2 slice 4 ---------------- */
+
+    fn with_lb(mut pad: PadState) -> PadState {
+        pad.buttons.lb = true;
+        pad
+    }
+
+    #[test]
+    fn quickbar_reaches_the_hud_and_runs_ctrl_c() {
+        let (mut session, _) = session();
+        session.step(&with_lb(pad((0.0, 0.0), (0.0, 0.0))), 4);
+        session.step(&with_lb(pad((0.0, 0.0), (0.0, 0.0))), 150);
+
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["mode"], "quickbar");
+        assert_eq!(hud["inner"]["kind"], "command");
+        let labels = hud["inner"]["labels"].as_array().unwrap();
+        assert_eq!(labels.len(), 8);
+        assert_eq!(labels[0]["text"], "Copy");
+        assert_eq!(labels[0]["sub"], "Ctrl+C");
+        assert_eq!(labels[7]["text"], "Switch");
+        assert_eq!(labels[7]["sub"], "Alt+Tab");
+        assert_eq!(hud["inner"]["active"], -1);
+
+        // RS ↑ = Copy + ปล่อย RS (LB ยังค้าง) = Ctrl+C จริง
+        session.step(&with_lb(pad((0.0, 0.0), (0.0, 0.9))), 4);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["inner"]["active"], 0);
+
+        let actions = session.step(&with_lb(pad((0.0, 0.0), (0.0, 0.0))), 80);
+        assert_eq!(
+            actions,
+            vec![Action::Key(KeyPress {
+                key: Key::Char('c'),
+                shift: false,
+                ctrl: true,
+                alt: false
+            })]
+        );
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["mode"], "type-en");
+        // กลับมาที่วงกลุ่มตามปกติ (ยังไม่มีกลุ่มถูกเลือก)
+        assert_eq!(hud["inner"]["kind"], "group");
+        assert_eq!(hud["inner"]["active"], -1);
+        assert_eq!(hud["preview"]["char"], "");
+    }
+
+    #[test]
+    fn quickbar_alt_tab_is_injected_with_alt() {
+        let (mut session, _) = session();
+        session.step(&with_lb(pad((0.0, 0.0), (0.0, 0.0))), 4);
+        session.step(&with_lb(pad((0.0, 0.0), (0.0, 0.0))), 150);
+        session.step(&with_lb(pad((0.0, 0.0), (-0.7, 0.7))), 4);
+        let actions = session.step(&with_lb(pad((0.0, 0.0), (0.0, 0.0))), 80);
+        assert_eq!(
+            actions,
+            vec![Action::Key(KeyPress {
+                key: Key::Named(rnitype_core::NamedKey::Tab),
+                shift: false,
+                ctrl: false,
+                alt: true
+            })]
+        );
+    }
+
+    #[test]
+    fn caret_mode_shows_in_the_hud_without_rings() {
+        let (mut session, _) = session();
+        let mut click = pad((0.0, 0.0), (0.0, 0.0));
+        click.buttons.rs_click = true;
+        session.step(&click, 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["mode"], "caret");
+        assert_eq!(hud["status"]["text"], "ลูกศร");
+        assert_eq!(hud["inner"]["kind"], "none");
+        assert_eq!(hud["outer"]["kind"], "none");
+        assert_eq!(hud["preview"]["char"], "");
+
+        // แตะ R3 อีกครั้งเร็ว ๆ = เลือกข้อความ
+        let mut click = pad((0.0, 0.0), (0.0, 0.0));
+        click.buttons.rs_click = true;
+        session.step(&click, 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["status"]["text"], "เลือกข้อความ");
+
+        // RS ← = Shift+Left ออกไปจริง
+        let actions = session.step(&pad((0.0, 0.0), (-0.9, 0.0)), 4);
+        assert_eq!(
+            actions,
+            vec![Action::Key(KeyPress {
+                key: Key::Named(rnitype_core::NamedKey::Left),
+                shift: true,
+                ctrl: false,
+                alt: false
+            })]
+        );
+    }
+
+    #[test]
+    fn sticky_drag_shows_a_badge_and_releases_on_mode_switch() {
+        let (mut session, _) = session();
+        switch_mode(&mut session, (0.9, 0.0));
+        assert_eq!(session.engine().mode(), Mode::Mouse);
+
+        let mut rb = pad((0.0, 0.0), (0.0, 0.0));
+        rb.buttons.rb = true;
+        session.step(&rb, 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+        session.step(&rb, 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+        assert!(session.engine().sticky_drag());
+
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert!(hud["status"]["badges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|badge| badge == "Drag"));
+
+        // สลับกลับ Type ผ่านวงคำสั่ง: session ต้องปล่อยปุ่มซ้ายให้ด้วย
+        let mut open = pad((0.0, 0.0), (0.0, 0.0));
+        open.buttons.dpad_left = true;
+        session.step(&open, 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+        session.step(&pad((0.0, 0.0), (0.0, 0.9)), 4);
+        let actions = session.step(&pad((0.0, 0.0), (0.0, 0.0)), 80);
+
+        assert_eq!(
+            actions,
+            vec![Action::MouseButton {
+                button: MouseButton::Left,
+                down: false
+            }],
+            "ต้องปล่อยปุ่มซ้ายเมื่อออกจาก Mouse"
+        );
+        assert!(!session.engine().sticky_drag());
+        assert_eq!(session.engine().mode(), Mode::Type);
+    }
+
+    #[test]
+    fn pivot_is_clamped_to_the_safe_area() {
+        let mut session = Session::with_homes(
+            engine(),
+            Box::new(NullInjector::default()),
+            vec![Lang::En, Lang::Th],
+            (950.0, 520.0),
+            (950.0, 520.0),
+        );
+        session.set_pivot_clamp((300.0, 200.0), (1700.0, 900.0));
+
+        switch_mode(&mut session, (0.9, -0.9));
+        // ดันขึ้นแรงและนาน → ต้องหยุดที่ขอบบน (y = 200) ไม่ลอยออกนอกจอ
+        session.step(&pad((0.0, 1.0), (0.0, 0.0)), 5_000);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["pivot"]["y"], 200.0);
+        assert_eq!(hud["pivot"]["x"], 950.0);
+
+        // กด RS = กลับจุดเริ่มต้น (ยังอยู่ในขอบเขต)
+        let mut click = pad((0.0, 0.0), (0.0, 0.0));
+        click.buttons.rs_click = true;
+        session.step(&click, 4);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["pivot"]["y"], 520.0);
+    }
+
+    #[test]
+    fn pivot_clamp_moves_an_out_of_bounds_home_inside() {
+        let mut session = Session::with_homes(
+            engine(),
+            Box::new(NullInjector::default()),
+            vec![Lang::En, Lang::Th],
+            (10.0, 10.0),
+            (10.0, 10.0),
+        );
+        session.set_pivot_clamp((300.0, 200.0), (1700.0, 900.0));
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["pivot"]["x"], 300.0);
+        assert_eq!(hud["pivot"]["y"], 200.0);
     }
 }

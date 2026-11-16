@@ -33,6 +33,8 @@ const indexOf = (mode, state) => samples.findIndex((s) => s.mode === mode && s.s
 const TYPE_TH = samples[indexOf('type-th', 'repeat')];
 const TYPE_EN = samples[indexOf('type-en', 'char')];
 const COMMAND = samples[indexOf('cmd', 'idle')];
+const QUICKBAR = samples[indexOf('quickbar', 'idle')];
+const CARET = samples[indexOf('caret', 'idle')];
 
 async function setState(state) {
   const res = await fetch(`${BASE}/api/state`, {
@@ -277,6 +279,69 @@ try {
   check('sub วงคำสั่ง ≥ 11.5px', subMin >= 11.5, `${subMin.toFixed(2)}px`);
   const cmdCollisions = collisions(cmd.all);
   check('label + sub ของวงคำสั่งไม่ชนกัน', cmdCollisions.length === 0, cmdCollisions.join(', '));
+
+  /* ---- state 3: quick bar (LB) ---- */
+  await setState(QUICKBAR);
+  await settle();
+
+  const quick = await browser.evaluate(`(() => {
+    const hud = document.getElementById('hud');
+    const chips = [...document.querySelectorAll('.chip--status')].map(el => el.textContent.trim());
+    return {
+      mode: hud.dataset.mode,
+      rings: hud.dataset.rings,
+      slots: document.querySelectorAll('#quickbar .qb__slot').length,
+      active: document.querySelectorAll('#quickbar .qb__slot.is-active').length,
+      labels: [...document.querySelectorAll('#quickbar .qb__label')].map(el => el.textContent),
+      pillMode: document.getElementById('pillMode').textContent.trim(),
+      pillText: document.getElementById('pillText').textContent.trim(),
+      chips,
+    };
+  })()`);
+  check(
+    'quick bar: แถบ 8 ช่อง + active 1 ช่อง',
+    quick.mode === 'quickbar' && quick.rings === 'on' && quick.slots === 8 && quick.active === 1,
+    `${quick.mode}/${quick.rings}/${quick.slots}/${quick.active}`,
+  );
+  check(
+    'quick bar: ช่องตรง interaction model',
+    quick.labels.join(',') === 'Copy,Paste,Cut,Undo,Redo,All,Save,Switch',
+    quick.labels.join(','),
+  );
+  check('quick bar: pill = Quick bar', quick.pillMode === 'Quick bar', quick.pillMode);
+  await browser.screenshot(path.join(SHOTS, 'hud-quickbar-100dpi.png'));
+
+  /* ---- state 4: caret (R3) — ไม่มีวง ---- */
+  await setState(CARET);
+  await settle();
+
+  const caret = await browser.evaluate(`(() => {
+    const hud = document.getElementById('hud');
+    return {
+      mode: hud.dataset.mode,
+      rings: hud.dataset.rings,
+      inner: document.querySelectorAll('#innerRing > *').length,
+      pillMode: document.getElementById('pillMode').textContent.trim(),
+      pillText: document.getElementById('pillText').textContent.trim(),
+      caretPad: getComputedStyle(document.getElementById('caretPad')).opacity,
+    };
+  })()`);
+  check(
+    'caret: ไม่มีวง (เหลือ pill)',
+    caret.mode === 'caret' && caret.rings === 'off' && caret.inner === 0,
+    `${caret.mode}/${caret.rings}/${caret.inner}`,
+  );
+  check(
+    'caret: กากบาท 4 ทิศแสดง (สี mode-caret)',
+    caret.caretPad === '1',
+    `opacity=${caret.caretPad}`,
+  );
+  check(
+    'caret: pill แสดงโหมดเลือกข้อความ',
+    caret.pillMode === 'Caret' && caret.pillText === 'เลือกข้อความ',
+    `${caret.pillMode} · ${caret.pillText}`,
+  );
+  await browser.screenshot(path.join(SHOTS, 'hud-caret-100dpi.png'));
 
   /* ---- 150% DPI + text scale 1.6 (แยกจากขนาดวง) ---- */
   const dpr = await browser.evaluate('window.devicePixelRatio');

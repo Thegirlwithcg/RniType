@@ -29,6 +29,18 @@
         <text class="hud__repeat" id="previewCount" x="0" y="16" text-anchor="middle" dominant-baseline="central"></text>
       </svg>
 
+      <!-- caret nav (R3) — ซ่อนวงพิมพ์ เหลือกากบาท 4 ทิศ (ADR-23) -->
+      <div class="hud__caret" id="caretPad" aria-hidden="true">
+        <span class="caret__arm caret__arm--n">↑</span>
+        <span class="caret__arm caret__arm--e">→</span>
+        <span class="caret__arm caret__arm--s">↓</span>
+        <span class="caret__arm caret__arm--w">←</span>
+        <span class="caret__hint">R3</span>
+      </div>
+
+      <!-- quick bar (LB) — แถบแนวนอน 8 ช่อง (ADR-23) -->
+      <div class="hud__quickbar" id="quickbar" aria-hidden="true"></div>
+
       <div class="hud__status" id="pill" aria-live="polite">
         <span class="chip chip--status">
           <b id="pillMode"></b>

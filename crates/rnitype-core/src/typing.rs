@@ -79,6 +79,7 @@ impl TypingPipeline {
             key,
             shift: pad.buttons.lt,
             ctrl: pad.buttons.lb,
+            alt: false,
         }))
     }
 }
@@ -119,7 +120,8 @@ mod tests {
             Action::Key(KeyPress {
                 key: Key::Char('a'),
                 shift: false,
-                ctrl: false
+                ctrl: false,
+                alt: false,
             })
         );
 
@@ -130,7 +132,8 @@ mod tests {
             Action::Key(KeyPress {
                 key: Key::Char('ก'),
                 shift: false,
-                ctrl: false
+                ctrl: false,
+                alt: false,
             })
         );
     }
@@ -149,7 +152,8 @@ mod tests {
             Action::Key(KeyPress {
                 key: Key::Char('a'),
                 shift: true,
-                ctrl: false
+                ctrl: false,
+                alt: false,
             })
         );
     }
@@ -164,7 +168,8 @@ mod tests {
             Action::Key(KeyPress {
                 key: Key::Char('A'),
                 shift: false,
-                ctrl: false
+                ctrl: false,
+                alt: false,
             })
         );
 

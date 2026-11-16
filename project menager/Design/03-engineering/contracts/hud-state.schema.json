@@ -26,7 +26,7 @@
     "version": { "const": 1 },
     "visible": { "type": "boolean" },
     "mode": {
-      "enum": ["type-en", "type-th", "type-other", "cmd", "lang", "mouse", "nav", "disabled"]
+      "enum": ["type-en", "type-th", "type-other", "cmd", "lang", "quickbar", "caret", "mouse", "nav", "disabled"]
     },
     "ringAlways": { "type": "boolean", "description": "โหมดเรียนรู้ = แสดงวงตลอด" },
     "hudHidden": { "type": "boolean" },

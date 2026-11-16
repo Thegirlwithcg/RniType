@@ -14,6 +14,7 @@ use rnitype_core::{Action, Key, KeyPress, MouseButton, NamedKey};
 pub mod vk {
     pub const SHIFT: u16 = 0x10;
     pub const CONTROL: u16 = 0x11;
+    pub const MENU: u16 = 0x12; // Alt
     pub const BACK: u16 = 0x08;
     pub const TAB: u16 = 0x09;
     pub const RETURN: u16 = 0x0D;
@@ -167,9 +168,13 @@ pub fn plan(action: Action, screen: ScreenRect) -> Vec<Input> {
     out
 }
 
-/// modifier ที่เปิดใน `KeyPress` — กดตามลำดับ ctrl→shift, ปล่อยย้อนลำดับ
+/// modifier ที่เปิดใน `KeyPress` — กดตามลำดับ ctrl→shift→alt, ปล่อยย้อนลำดับ
 fn push_modifiers(out: &mut Vec<Input>, press: KeyPress, down: bool) {
-    let modifiers = [(press.ctrl, vk::CONTROL), (press.shift, vk::SHIFT)];
+    let modifiers = [
+        (press.ctrl, vk::CONTROL),
+        (press.shift, vk::SHIFT),
+        (press.alt, vk::MENU),
+    ];
     if down {
         for (enabled, code) in modifiers {
             if enabled {
@@ -384,7 +389,12 @@ mod tests {
     }
 
     fn tap(key: Key, shift: bool, ctrl: bool) -> Action {
-        Action::Key(KeyPress { key, shift, ctrl })
+        Action::Key(KeyPress {
+            key,
+            shift,
+            ctrl,
+            alt: false,
+        })
     }
 
     #[test]
@@ -562,6 +572,40 @@ mod tests {
     }
 
     #[test]
+    fn alt_wraps_alt_tab_for_the_quick_bar() {
+        let plan = plan(
+            Action::Key(KeyPress {
+                key: Key::Named(NamedKey::Tab),
+                shift: false,
+                ctrl: false,
+                alt: true,
+            }),
+            full_hd(),
+        );
+        assert_eq!(
+            plan,
+            vec![
+                Input::VirtualKey {
+                    vk: vk::MENU,
+                    up: false
+                },
+                Input::VirtualKey {
+                    vk: vk::TAB,
+                    up: false
+                },
+                Input::VirtualKey {
+                    vk: vk::TAB,
+                    up: true
+                },
+                Input::VirtualKey {
+                    vk: vk::MENU,
+                    up: true
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn shift_wraps_named_key_but_not_unicode_letter_case() {
         let named_plan = plan(tap(Key::Named(NamedKey::Tab), true, false), full_hd());
         assert_eq!(
@@ -643,6 +687,7 @@ mod tests {
                 key: Key::Char('v'),
                 shift: false,
                 ctrl: true,
+                alt: false,
             }),
             full_hd(),
         );
@@ -668,6 +713,7 @@ mod tests {
                 key: Key::Char('v'),
                 shift: false,
                 ctrl: true,
+                alt: false,
             }),
             full_hd(),
         );
@@ -689,6 +735,7 @@ mod tests {
             key: Key::Named(NamedKey::Space),
             shift: false,
             ctrl: false,
+            alt: false,
         };
         assert_eq!(
             plan(Action::KeyDown(press), full_hd()),
@@ -863,6 +910,7 @@ mod tests {
                 key,
                 shift: false,
                 ctrl: true,
+                alt: false,
             }),
             full_hd(),
         ));
@@ -885,6 +933,7 @@ mod tests {
             key: Key::Named(NamedKey::Space),
             shift: true,
             ctrl: false,
+            alt: false,
         };
         let mut held = HeldState::default();
         held.track(&plan(Action::KeyDown(press), full_hd()));
@@ -898,6 +947,7 @@ mod tests {
             key: Key::Char('a'),
             shift: false,
             ctrl: false,
+            alt: false,
         });
         let mut held = HeldState::default();
         held.track(&plan(press, full_hd()));

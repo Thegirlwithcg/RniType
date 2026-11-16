@@ -399,7 +399,7 @@ fn setup_overlay(
         }
     } else {
         // ---- runtime จริง: จอย → core → injector → hud:state ----
-        spawn_runtime(app.handle(), options, (vx, vy));
+        spawn_runtime(app.handle(), options, (vx, vy, vw, vh));
     }
 
     // ---- ปิดแอปอัตโนมัติ ----
@@ -421,7 +421,11 @@ fn setup_overlay(
    ============================================================ */
 
 /// เริ่ม thread ที่อ่านจอย 250 Hz และส่ง `hud:state` ≤ 60 Hz (เฉพาะเมื่อเปลี่ยน)
-fn spawn_runtime(app: &tauri::AppHandle, options: &Options, origin: (i32, i32)) {
+fn spawn_runtime(
+    app: &tauri::AppHandle,
+    options: &Options,
+    desktop: (i32, i32, u32, u32),
+) {
     let handle = app.clone();
     let fake_pad = options.fake_pad;
     let pad_log = options.pad_log;
@@ -446,7 +450,7 @@ fn spawn_runtime(app: &tauri::AppHandle, options: &Options, origin: (i32, i32)) 
         };
 
         let config = handle.state::<AppState>().config.lock().unwrap().clone();
-        let mut session = build_session(&config);
+        let mut session = build_session(&config, desktop);
         println!(
             "[pad] พร้อม: {} · language={:?} · languages={:?}",
             if source.name().is_empty() { "ยังไม่พบจอย" } else { "ต่อแล้ว" },
@@ -454,12 +458,12 @@ fn spawn_runtime(app: &tauri::AppHandle, options: &Options, origin: (i32, i32)) 
             session.engine().languages().len()
         );
 
-        run_loop(&handle, source, &mut session, origin, pad_log);
+        run_loop(&handle, source, &mut session, (desktop.0, desktop.1), pad_log);
     });
 }
 
 /// สร้าง engine + session จาก config (`defaults.typing`, `languages`)
-fn build_session(config: &Value) -> Session {
+fn build_session(config: &Value, desktop: (i32, i32, u32, u32)) -> Session {
     let typing = config.get("defaults").and_then(|d| d.get("typing"));
     let dwell = typing
         .and_then(|t| t.get("commitDwellMs"))
@@ -487,6 +491,16 @@ fn build_session(config: &Value) -> Session {
     if let Some(position) = rnitype_win::cursor_position() {
         session.set_pointer(position);
     }
+    // pivot ต้องไม่ล้นจอ: เว้นรัศมีวง HUD (340px × scale / 2 ≈ 172px) จากขอบ virtual desktop
+    let (vx, vy, vw, vh) = desktop;
+    let margin = 172.0 * config::hud_scale(config) as f32;
+    session.set_pivot_clamp(
+        (vx as f32 + margin, vy as f32 + margin),
+        (
+            vx as f32 + vw as f32 - margin,
+            vy as f32 + vh as f32 - margin,
+        ),
+    );
     session
 }
 
@@ -662,9 +676,10 @@ fn log_action(action: &rnitype_core::Action) {
     use rnitype_core::Action;
     match action {
         Action::Key(press) => println!(
-            "[type] {}{}{}",
+            "[type] {}{}{}{}",
             if press.ctrl { "Ctrl+" } else { "" },
             if press.shift { "Shift+" } else { "" },
+            if press.alt { "Alt+" } else { "" },
             press.key
         ),
         Action::KeyDown(press) => println!("[type] down {}", press.key),

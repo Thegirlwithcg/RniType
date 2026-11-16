@@ -22,6 +22,7 @@
     outer: document.getElementById('outerRing'),
     cmd: document.getElementById('cmdRing'),
     lang: document.getElementById('langRing'),
+    quickbar: document.getElementById('quickbar'),
     previewChar: document.getElementById('previewChar'),
     previewCount: document.getElementById('previewCount'),
     pillMode: document.getElementById('pillMode'),
@@ -56,6 +57,8 @@
   const MODE_LABEL = {
     cmd: 'Command',
     lang: 'Language',
+    quickbar: 'Quick bar',
+    caret: 'Caret',
     mouse: 'Mouse',
     nav: 'Place UI',
     disabled: 'Paused',
@@ -328,6 +331,32 @@
     });
   }
 
+  /* ---------------- quick bar ---------------- */
+
+  function renderQuickbar(ring) {
+    const labels = Array.isArray(ring.labels) ? ring.labels : [];
+    if (!labels.length) return;
+    const active = num(ring.active, -1, -1, 7);
+
+    labels.forEach((label, i) => {
+      const slot = document.createElement('div');
+      slot.className = 'qb__slot' + (i === active ? ' is-active' : '');
+
+      const main = document.createElement('span');
+      main.className = 'qb__label';
+      main.textContent = text(label.text);
+      slot.appendChild(main);
+
+      if (text(label.sub)) {
+        const sub = document.createElement('span');
+        sub.className = 'qb__sub';
+        sub.textContent = text(label.sub);
+        slot.appendChild(sub);
+      }
+      dom.quickbar.appendChild(slot);
+    });
+  }
+
   /* ---------------- pill ---------------- */
 
   function modeLabel(s) {
@@ -385,8 +414,8 @@
 
   function ringsVisible(s) {
     const mode = s.mode;
-    if (mode === 'cmd' || mode === 'lang') return true; // โหมดนี้ = เปิดวงอยู่
-    if (!TYPE_MODES.includes(mode)) return false; // mouse / nav / disabled
+    if (mode === 'cmd' || mode === 'lang' || mode === 'quickbar') return true; // โหมดนี้ = เปิดวงอยู่
+    if (!TYPE_MODES.includes(mode)) return false; // mouse / nav / caret / disabled
     if (s.ringAlways === true) return true;
     return RING_STATES.includes(s.state);
   }
@@ -417,12 +446,14 @@
     clear(dom.outer);
     clear(dom.cmd);
     clear(dom.lang);
+    clear(dom.quickbar);
 
     const inner = next.inner && typeof next.inner === 'object' ? next.inner : { kind: 'none' };
     const outer = next.outer && typeof next.outer === 'object' ? next.outer : { kind: 'none' };
 
     if (ringsOn) {
-      if (inner.kind === 'group') renderGroupRing(inner);
+      if (mode === 'quickbar' && inner.kind === 'command') renderQuickbar(inner);
+      else if (inner.kind === 'group') renderGroupRing(inner);
       else if (inner.kind === 'command') renderWheel(dom.cmd, inner, 'command');
       else if (inner.kind === 'language') renderWheel(dom.lang, inner, 'language');
 
