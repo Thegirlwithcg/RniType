@@ -4,6 +4,7 @@
 > v1.1 (2026-11-15) — เพิ่ม `hud:style` (event) + `hud_style` (command) สำหรับ typography · additive ไม่แตะ payload เดิม (ADR-16)
 > v1.2 (2026-11-16) — ระบุรูปแถวของ `rescan_languages` / `set_language_enabled` และ `get_status` ที่ P5 slice 2 ใช้ (additive, ADR-25)
 > v1.3 (2026-11-16) — เพิ่ม `get_stats` (chars/WPM/action latency/uptime) สำหรับ Usage cards (additive, ADR-26)
+> v1.4 (2026-11-16) — เพิ่ม `get_keymap` / `set_keymap_cell` / `reset_keymap` สำหรับ Keymap editor (additive, ADR-27)
 > ไฟล์นี้คือสัญญาที่ P3 (runtime), P4 (HUD), P5 (Settings) ต้องยึด
 > เปลี่ยนชื่อ/รูป payload = ต้อง bump `version` และแจ้ง lead
 
@@ -47,6 +48,9 @@
 | `set_paused` | `{ paused: bool }` | `{ paused: bool }` |
 | `get_status` | — | `app:status` payload |
 | `get_stats` | — | `{ chars, wpm, actions, stepAvgUs, stepMaxUs, uptimeSecs }` |
+| `get_keymap` | `{ code }` | `KeymapPayload` (ดู §5) |
+| `set_keymap_cell` | `{ code, layer, group, sector, text }` | `KeymapPayload` |
+| `reset_keymap` | `{ code, group? }` | `KeymapPayload` |
 | `open_settings` | `{ tab?: "general"\|"languages"\|"keymap"\|"hud" }` | `{ ok: true }` |
 
 ### HUD (read-only + lifecycle)
@@ -140,6 +144,25 @@ Settings ──invoke save_config──▶ app ──validate──▶ config.js
 ```
 
 `wpm` = 5 ตัวอักษร/คำ จาก commits ใน 60 วิ · `step*Us` = เวลา `session.step` (µs) ต่อวินาทีล่าสุด
+
+### `KeymapPayload` — Keymap editor (ADR-27)
+
+```json
+{
+  "code": "th",
+  "label": "Thai",
+  "groups": ["พยัญชนะ", "สระ", "..."],
+  "groups2": ["ฬ ฃ ฅ", "..."],
+  "layers": [
+    { "name": "base", "cells": ["ก", "น", "..."], "defaults": ["ก", "น", "..."] },
+    { "name": "layer 2", "cells": ["ฬ", "..."], "defaults": ["ฬ", "..."] }
+  ],
+  "overrides": { "1-0-0": "z" }
+}
+```
+
+`cells` = ค่าที่ใช้จริง (override ชนะ) · `defaults` = ตารางใน core · `""` = ช่องว่าง (layer 2)
+override เก็บใน `languages[].overrides` key `<layer>-<group>-<sector>` (รูปเก่า `<g>-<s>` = layer 1)
 
 ## 6. Error codes
 

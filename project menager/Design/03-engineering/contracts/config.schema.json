@@ -58,9 +58,9 @@
           "kind": { "enum": ["layout", "ime"] },
           "overrides": {
             "type": "object",
-            "description": "เฉพาะช่องที่ผู้ใช้แก้: key = \"group-sector\" (0-7), value = ข้อความ",
+            "description": "เฉพาะช่องที่ผู้ใช้แก้: key = \"layer-group-sector\" (layer 1-2, group/sector 0-7), value = ตัวอักษร (ว่าง = ไม่มีคีย์ ใน layer 2)",
             "patternProperties": {
-              "^[0-7]-[0-7]$": { "type": "string", "maxLength": 4 }
+              "^([12]-)?[0-7]-[0-7]$": { "type": "string", "maxLength": 4 }
             },
             "additionalProperties": false
           }

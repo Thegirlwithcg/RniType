@@ -65,7 +65,8 @@ tags: [architecture, windows, rust, tauri]
 - **สร้าง 8×8 เริ่มต้น** (`layout`): ใช้ `ToUnicodeEx` กับ HKL ของภาษานั้นทีละ VK (shift states)
   → ได้ตัวอักษรตาม **ตำแหน่ง QWERTY**; cache ไว้ใน config (ยังไม่ทำ — รอ universal mapping)
 - **ไทย/อังกฤษ**: ใช้ตารางที่ออกแบบไว้ ([[02-keymap-en-th]]) เป็นค่าเริ่มต้น
-- **override**: `config.languages[].overrides` เก็บเฉพาะช่องที่ผู้ใช้แก้ (index กลุ่ม-ช่อง — รอแท็บ Keymap)
+- **override**: `config.languages[].overrides` เก็บเฉพาะช่องที่ผู้ใช้แก้ (key `<layer>-<group>-<sector>`)
+  — implemented P5 slice 3 ([[27-keymap-editor-overrides]]); แก้ได้เฉพาะ EN/TH จนมี universal mapping
 - **IME**: ใช้ **scancode path** เท่านั้น (ไม่ใช้ Unicode) เพื่อให้ IME ของ Windows ประกอบข้อความ;
   HUD แสดง QWERTY + badge `IME`; ไม่มี override ตัวอักษร
 - **Settings window**: หน้าต่าง Tauri แยก (ไม่ใช่ overlay) — General/Languages/HUD พร้อม · Keymap รอ mapping
