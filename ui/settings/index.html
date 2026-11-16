@@ -10,90 +10,164 @@
 </head>
 <body>
   <!--
-    Settings window (P5 slice 1 · ADR-22 visual refresh) — English UI
+    Settings window (P5 slice 2 · ADR-14 / ADR-22) — English UI
     Sidebar = macOS System Settings pattern · content = inset groups · ทุกค่ามีผลทันที
-    แท็บ General/Languages/Keymap ยังไม่มี backend (P5 ถัดไป)
+    General: status + pause + exclusion list
+    Languages: rescan HKL, enable/disable (EN/TH พิมพ์ได้จริง), IME badge
+    Keymap: รอ universal mapping (slice ถัดไป) — แสดงเป็น disabled
   -->
   <div class="app">
     <aside class="sidebar">
       <div class="brand">RniType</div>
       <nav class="nav" aria-label="Sections">
-        <span class="nav__item is-active" aria-current="page">HUD</span>
-        <span class="nav__item is-disabled" title="Planned for P5">General</span>
-        <span class="nav__item is-disabled" title="Planned for P5">Languages</span>
-        <span class="nav__item is-disabled" title="Planned for P5">Keymap</span>
+        <button type="button" class="nav__item is-active" data-tab="general" aria-current="page">General</button>
+        <button type="button" class="nav__item" data-tab="languages">Languages</button>
+        <button type="button" class="nav__item" data-tab="hud">HUD</button>
+        <span class="nav__item is-disabled" title="Custom keymaps arrive with universal layouts">Keymap</span>
       </nav>
       <p class="sidebar__note">Settings apply immediately.</p>
     </aside>
 
     <main class="content">
-      <header class="content__head">
-        <h1>HUD</h1>
-        <p class="lead">Size and font of the on-screen keyboard overlay.</p>
-      </header>
+      <!-- ======================= General ======================= -->
+      <section class="pane" data-panel="general">
+        <header class="content__head">
+          <h1>General</h1>
+          <p class="lead">Controller status, typing pause, and the apps RniType should leave alone.</p>
+        </header>
 
-      <section class="group" aria-labelledby="sizeTitle">
-        <h2 id="sizeTitle" class="group__title">Size</h2>
-        <div class="row">
-          <div class="row__body">
-            <label for="textScale">Text size</label>
-            <p class="hint">Labels, characters and badges. Independent from the ring.</p>
+        <section class="group" aria-labelledby="statusTitle">
+          <h2 id="statusTitle" class="group__title">Status</h2>
+          <div class="status-grid">
+            <div class="stat">
+              <span class="stat__label">Controller</span>
+              <b id="statusDevice">—</b>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Typing</span>
+              <b id="statusTyping">—</b>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Version</span>
+              <b id="statusVersion">—</b>
+            </div>
           </div>
-          <output id="textScaleValue" for="textScale">1.40×</output>
-        </div>
-        <input id="textScale" type="range" min="0.8" max="2" step="0.05" value="1.4" />
-        <div class="field__scale" aria-hidden="true"><span>0.8×</span><span>2.0×</span></div>
-
-        <div class="row">
-          <div class="row__body">
-            <label for="ringScale">Ring size</label>
-            <p class="hint">Diameter of the whole wheel. Text keeps its own size.</p>
+          <div class="row">
+            <div class="row__body">
+              <label for="pauseToggle">Pause typing</label>
+              <p class="hint">Same as the tray menu. The controller stays connected; no keys are sent.</p>
+            </div>
+            <label class="switch">
+              <input id="pauseToggle" type="checkbox" />
+              <span class="switch__track" aria-hidden="true"></span>
+            </label>
           </div>
-          <output id="ringScaleValue" for="ringScale">1.00×</output>
-        </div>
-        <input id="ringScale" type="range" min="0.8" max="1.6" step="0.05" value="1" />
-        <div class="field__scale" aria-hidden="true"><span>0.8×</span><span>1.6×</span></div>
+        </section>
+
+        <section class="group" aria-labelledby="exclusionTitle">
+          <h2 id="exclusionTitle" class="group__title">Exclusion list</h2>
+          <p class="hint">When one of these apps has focus, RniType stops sending keys and the HUD shows why. Names match the .exe file; <code>*</code> and <code>?</code> wildcards work.</p>
+          <ul id="exclusionList" class="list"></ul>
+          <form id="exclusionForm" class="inline-form" autocomplete="off">
+            <input id="exclusionInput" type="text" maxlength="260" placeholder="game.exe" aria-label="Executable name" />
+            <button class="btn" type="submit">Add</button>
+          </form>
+        </section>
+
+        <footer class="actions">
+          <button id="resetGeneral" type="button" class="btn">Reset general settings</button>
+          <button id="resetAll" type="button" class="btn btn--danger">Reset all to defaults</button>
+        </footer>
       </section>
 
-      <section class="group" aria-labelledby="fontTitle">
-        <h2 id="fontTitle" class="group__title">Font</h2>
-        <fieldset class="field">
-          <legend class="sr-only">Font family</legend>
-          <label class="option">
-            <input type="radio" name="font" value="ibm-plex-sans-thai" checked />
-            <span class="option__body">
-              <span class="option__name">IBM Plex Sans Thai</span>
-              <span class="option__note">Loopless Thai (default)</span>
-            </span>
-          </label>
-          <label class="option">
-            <input type="radio" name="font" value="noto-sans-thai" />
-            <span class="option__body">
-              <span class="option__name">Noto Sans Thai</span>
-              <span class="option__note">Loopless Thai, wider coverage</span>
-            </span>
-          </label>
-          <label class="option">
-            <input type="radio" name="font" value="system" />
-            <span class="option__body">
-              <span class="option__name">System</span>
-              <span class="option__note">Segoe UI · Leelawadee UI</span>
-            </span>
-          </label>
-        </fieldset>
+      <!-- ======================= Languages ======================= -->
+      <section class="pane" data-panel="languages" hidden>
+        <header class="content__head">
+          <h1>Languages</h1>
+          <p class="lead">Keyboard layouts detected on this PC. Enabled languages appear in the Language wheel.</p>
+        </header>
+
+        <p class="hint" id="langSummary">Scanning installed layouts…</p>
+        <ul id="langList" class="langlist"></ul>
+        <p class="hint">Up to 8 enabled layouts. IME languages pass physical keys through and let Windows compose the text. English and Thai type with the built-in 8×8 tables; other layouts need the universal QWERTY mapping (coming next).</p>
+
+        <footer class="actions">
+          <button id="rescanLangs" type="button" class="btn">Rescan languages</button>
+          <button id="resetLangs" type="button" class="btn">Reset languages</button>
+        </footer>
       </section>
 
-      <section class="preview" aria-label="Preview">
-        <p class="preview__caption">Preview</p>
-        <p class="preview__group">วรรณยุกต์</p>
-        <p class="preview__chars"><b>่</b> <b>้</b> <b>๊</b> <b>๋</b> <span class="sep">·</span> <b>ุ</b> <b>ู</b> <span class="sep">·</span> <b>ก</b> <b>น</b> <b>ร</b> <b>อ</b> <b>ง</b></p>
-        <p class="preview__pill"><i class="preview__dot"></i>Type TH <span class="preview__sep">·</span> ตัวใหญ่ <span class="badge">shift</span></p>
+      <!-- ======================= HUD ======================= -->
+      <section class="pane" data-panel="hud" hidden>
+        <header class="content__head">
+          <h1>HUD</h1>
+          <p class="lead">Size and font of the on-screen keyboard overlay.</p>
+        </header>
+
+        <section class="group" aria-labelledby="sizeTitle">
+          <h2 id="sizeTitle" class="group__title">Size</h2>
+          <div class="row">
+            <div class="row__body">
+              <label for="textScale">Text size</label>
+              <p class="hint">Labels, characters and badges. Independent from the ring.</p>
+            </div>
+            <output id="textScaleValue" for="textScale">1.40×</output>
+          </div>
+          <input id="textScale" type="range" min="0.8" max="2" step="0.05" value="1.4" />
+          <div class="field__scale" aria-hidden="true"><span>0.8×</span><span>2.0×</span></div>
+
+          <div class="row">
+            <div class="row__body">
+              <label for="ringScale">Ring size</label>
+              <p class="hint">Diameter of the whole wheel. Text keeps its own size.</p>
+            </div>
+            <output id="ringScaleValue" for="ringScale">1.00×</output>
+          </div>
+          <input id="ringScale" type="range" min="0.8" max="1.6" step="0.05" value="1" />
+          <div class="field__scale" aria-hidden="true"><span>0.8×</span><span>1.6×</span></div>
+        </section>
+
+        <section class="group" aria-labelledby="fontTitle">
+          <h2 id="fontTitle" class="group__title">Font</h2>
+          <fieldset class="field">
+            <legend class="sr-only">Font family</legend>
+            <label class="option">
+              <input type="radio" name="font" value="ibm-plex-sans-thai" checked />
+              <span class="option__body">
+                <span class="option__name">IBM Plex Sans Thai</span>
+                <span class="option__note">Loopless Thai (default)</span>
+              </span>
+            </label>
+            <label class="option">
+              <input type="radio" name="font" value="noto-sans-thai" />
+              <span class="option__body">
+                <span class="option__name">Noto Sans Thai</span>
+                <span class="option__note">Loopless Thai, wider coverage</span>
+              </span>
+            </label>
+            <label class="option">
+              <input type="radio" name="font" value="system" />
+              <span class="option__body">
+                <span class="option__name">System</span>
+                <span class="option__note">Segoe UI · Leelawadee UI</span>
+              </span>
+            </label>
+          </fieldset>
+        </section>
+
+        <section class="preview" aria-label="Preview">
+          <p class="preview__caption">Preview</p>
+          <p class="preview__group">วรรณยุกต์</p>
+          <p class="preview__chars"><b>่</b> <b>้</b> <b>๊</b> <b>๋</b> <span class="sep">·</span> <b>ุ</b> <b>ู</b> <span class="sep">·</span> <b>ก</b> <b>น</b> <b>ร</b> <b>อ</b> <b>ง</b></p>
+          <p class="preview__pill"><i class="preview__dot"></i>Type TH <span class="preview__sep">·</span> ตัวใหญ่ <span class="badge">shift</span></p>
+        </section>
+
+        <footer class="actions">
+          <button id="reset" type="button" class="btn">Reset HUD to defaults</button>
+        </footer>
       </section>
 
-      <footer class="actions">
-        <button id="reset" type="button" class="btn">Reset HUD to defaults</button>
-        <span id="status" class="status" role="status" aria-live="polite"></span>
-      </footer>
+      <p id="status" class="status status--global" role="status" aria-live="polite"></p>
     </main>
   </div>
 

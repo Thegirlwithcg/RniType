@@ -85,6 +85,12 @@ struct AppState {
     paused: AtomicBool,
     /// HUD เพิ่ง handshake/รีโหลด → รอบถัดไปต้องส่ง state ซ้ำ แม้ payload ไม่เปลี่ยน
     hud_need_resend: AtomicBool,
+    /// เพิ่มทุกครั้งที่ config เปลี่ยน — runtime loop ใช้ reload ค่าที่ต้องมีผลสด
+    config_rev: std::sync::atomic::AtomicU64,
+    /// ชื่อจอยที่ต่ออยู่ (ว่าง = ไม่มี) — สำหรับ General tab
+    device: std::sync::Mutex<String>,
+    /// มีจอยต่ออยู่หรือไม่ (ค่าล่าสุดที่ runtime เห็น)
+    connected: AtomicBool,
 }
 
 impl AppState {
@@ -96,7 +102,15 @@ impl AppState {
             origin: std::sync::Mutex::new((0, 0)),
             paused: AtomicBool::new(false),
             hud_need_resend: AtomicBool::new(false),
+            config_rev: std::sync::atomic::AtomicU64::new(0),
+            device: std::sync::Mutex::new(String::new()),
+            connected: AtomicBool::new(false),
         }
+    }
+
+    /// bump revision → loop รอบถัดไปจะ reload languages/pivot จาก config
+    fn touch_config(&self) {
+        self.config_rev.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -139,7 +153,12 @@ fn main() {
             hud_ready,
             hud_style,
             get_config,
-            save_config
+            save_config,
+            get_status,
+            set_paused,
+            rescan_languages,
+            set_language_enabled,
+            reset_config
         ])
         .setup(move |app| setup_overlay(app, &options, &demo_states))
         .run(tauri::generate_context!())
@@ -518,6 +537,12 @@ fn build_session(config: &Value, desktop: (i32, i32, u32, u32), no_scancode: boo
         session.set_pointer(position);
     }
     // pivot ต้องไม่ล้นจอ: เว้นรัศมีวง HUD (340px × scale / 2 ≈ 172px) จากขอบ virtual desktop
+    apply_pivot_clamp(&mut session, config, desktop);
+    session
+}
+
+/// จำกัด pivot ตามขนาดวงล่าสุด — เรียกทั้งตอนสร้าง session และตอน config เปลี่ยน
+fn apply_pivot_clamp(session: &mut Session, config: &Value, desktop: (i32, i32, u32, u32)) {
     let (vx, vy, vw, vh) = desktop;
     let margin = 172.0 * config::hud_scale(config) as f32;
     session.set_pivot_clamp(
@@ -527,28 +552,51 @@ fn build_session(config: &Value, desktop: (i32, i32, u32, u32), no_scancode: boo
             vy as f32 + vh as f32 - margin,
         ),
     );
-    session
 }
 
-/// ภาษาที่เปิดใน config (`languages[].enabled`) — ว่าง = EN/TH
+/// payload `app:status` (ipc.md §2) — ใช้ทั้ง command และ event
+fn status_payload(state: &AppState) -> Value {
+    let device = state.device.lock().unwrap().clone();
+    json!({
+        "device": if device.is_empty() { Value::Null } else { json!(device) },
+        "connected": state.connected.load(Ordering::Relaxed),
+        "paused": state.paused.load(Ordering::Relaxed),
+        "admin": rnitype_win::target::own_elevated(),
+        "version": env!("CARGO_PKG_VERSION"),
+    })
+}
+
+/// push `app:status` ให้ Settings (on change)
+fn emit_status(handle: &tauri::AppHandle) {
+    let payload = {
+        let state = handle.state::<AppState>();
+        status_payload(&state)
+    };
+    let _ = handle.emit_to("settings", "app:status", &payload);
+}
+
+/// ภาษาที่เปิดใน config (`languages[].enabled`) — EN เป็น base เสมอ
+///
+/// `languages` ไม่มี/ว่าง = ค่าเริ่มต้น EN+TH · มีรายการ = ใช้ตามที่เปิด (EN บังคับเปิด)
 fn enabled_languages(config: &Value) -> Vec<Lang> {
-    let mut out = Vec::new();
-    if let Some(list) = config.get("languages").and_then(Value::as_array) {
-        for entry in list {
-            let enabled = entry.get("enabled").and_then(Value::as_bool).unwrap_or(false);
-            let code = entry.get("code").and_then(Value::as_str).unwrap_or("");
-            if !enabled {
-                continue;
-            }
-            match code {
-                "en" => out.push(Lang::En),
-                "th" => out.push(Lang::Th),
-                _ => {}
-            }
-        }
-    }
-    if out.is_empty() {
-        out = vec![Lang::En, Lang::Th];
+    let list = config
+        .get("languages")
+        .and_then(Value::as_array)
+        .filter(|list| !list.is_empty());
+    let Some(list) = list else {
+        return vec![Lang::En, Lang::Th];
+    };
+
+    let enabled = |code: &str| {
+        list.iter().any(|entry| {
+            entry.get("code").and_then(Value::as_str) == Some(code)
+                && entry.get("enabled").and_then(Value::as_bool).unwrap_or(false)
+        })
+    };
+
+    let mut out = vec![Lang::En];
+    if enabled("th") {
+        out.push(Lang::Th);
     }
     out
 }
@@ -585,6 +633,7 @@ fn run_loop(
     let mut was_paused = false;
     let own_elevated = rnitype_win::target::own_elevated();
     let mut last_guard_ms = 0u64;
+    let mut last_config_rev = handle.state::<AppState>().config_rev.load(Ordering::Relaxed);
     if own_elevated {
         println!("[guard] แอปรันแบบ admin — UIPI guard จะไม่บล็อกหน้าต่าง elevated");
     }
@@ -606,16 +655,32 @@ fn run_loop(
                 session.unpause();
             }
             was_paused = paused;
+            emit_status(handle);
         }
 
         // exclusion list / UIPI — ตรวจทุก 250 ms (ไม่ต้อง query process token ทุกเฟรม 250 Hz)
         if now.saturating_sub(last_guard_ms) >= 250 {
             last_guard_ms = now;
+            let app_state = handle.state::<AppState>();
             let exclusion = {
-                let app_state = handle.state::<AppState>();
                 let config = app_state.config.lock().unwrap();
                 config::exclusion_list(&config)
             };
+
+            // config เปลี่ยนจาก Settings → ภาษา/ขนาด pivot มีผลสดโดยไม่ต้องรีสตาร์ต
+            let rev = app_state.config_rev.load(Ordering::Relaxed);
+            if rev != last_config_rev {
+                last_config_rev = rev;
+                let config = app_state.config.lock().unwrap().clone();
+                session.set_enabled_languages(enabled_languages(&config));
+                apply_pivot_clamp(session, &config, virtual_desktop());
+                println!(
+                    "[config] runtime reload: languages={:?} hudScale={:.2}",
+                    session.engine().languages().len(),
+                    config::hud_scale(&config)
+                );
+            }
+
             let target = rnitype_win::target::foreground_target();
             let reason =
                 rnitype_win::target::guard_reason(target.as_ref(), &exclusion, own_elevated);
@@ -652,6 +717,11 @@ fn run_loop(
             }
             had_pad = has_pad;
             last_emit_ms = 0; // บังคับ emit รอบถัดไป
+            let app_state = handle.state::<AppState>();
+            *app_state.device.lock().unwrap() =
+                if has_pad { source.name() } else { String::new() };
+            app_state.connected.store(has_pad, Ordering::Relaxed);
+            emit_status(handle);
         }
 
         // ไม่มีจอย = บอกทุก 5 วิ (ให้รู้ว่าโปรเซสยังมีชีวิต ไม่ใช่ค้าง)
@@ -825,7 +895,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// หน้าต่าง Settings (P5 slice 1) — หน้าต่างจริง มีขอบ มี focus (ต่างจาก HUD)
+/// หน้าต่าง Settings (P5 slice 2) — หน้าต่างจริง มีขอบ มี focus (ต่างจาก HUD)
 fn open_settings(app: &tauri::AppHandle) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window("settings") {
         let _ = window.show();
@@ -939,11 +1009,134 @@ fn save_config(
     // หน้าต่าง Settings อื่น ๆ (ถ้าเปิดหลายตัว) ให้เห็นค่าใหม่
     let _ = app.emit_to("settings", "settings:config", &config);
 
+    // runtime loop เห็นค่าใหม่รอบถัดไป (ภาษา/ขนาด pivot/exclusion)
+    state.touch_config();
+
     println!(
         "[config] บันทึกแล้ว: {}",
         serde_json::to_string(&style).unwrap_or_default()
     );
     json!({ "ok": true, "data": config })
+}
+
+/// General tab — สถานะจอย/pause/admin/version (ipc.md §3 `get_status`)
+#[tauri::command]
+fn get_status(state: tauri::State<'_, AppState>) -> Value {
+    json!({ "ok": true, "data": status_payload(&state) })
+}
+
+/// General tab — พัก/กลับมาพิมพ์จาก Settings (เท่ากับเมนู tray)
+#[tauri::command]
+fn set_paused(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    paused: bool,
+) -> Value {
+    state.paused.store(paused, Ordering::Relaxed);
+    let payload = status_payload(&state);
+    let _ = app.emit_to("settings", "app:status", &payload);
+    println!(
+        "[settings] {}",
+        if paused { "พักการพิมพ์" } else { "กลับมาพิมพ์" }
+    );
+    json!({ "ok": true, "data": payload })
+}
+
+/// Languages tab — ตรวจ layout/IME ที่ติดตั้ง แล้วรวมกับ config เป็นแถวของ UI
+#[tauri::command]
+fn rescan_languages(state: tauri::State<'_, AppState>) -> Value {
+    let detected = rnitype_win::language::installed_languages();
+    let config = state.config.lock().unwrap().clone();
+    let rows = config::language_rows(&config, &detected);
+    let enabled = rows
+        .iter()
+        .filter(|row| row.get("enabled").and_then(Value::as_bool).unwrap_or(false))
+        .count();
+    println!(
+        "[languages] ตรวจพบ {} layout/IME · เปิดใช้ {enabled}",
+        detected.len()
+    );
+    for row in &rows {
+        println!(
+            "[languages] {} {} ({}) {}",
+            row.get("code").and_then(Value::as_str).unwrap_or("?"),
+            row.get("label").and_then(Value::as_str).unwrap_or(""),
+            row.get("klid").and_then(Value::as_str).unwrap_or(""),
+            if row.get("enabled").and_then(Value::as_bool).unwrap_or(false) {
+                "enabled"
+            } else {
+                "off"
+            }
+        );
+    }
+    json!({ "ok": true, "data": rows })
+}
+
+/// Languages tab — เปิด/ปิดภาษา (เก็บลง config + ให้ runtime เห็นทันที)
+#[tauri::command]
+fn set_language_enabled(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    code: String,
+    enabled: bool,
+) -> Value {
+    let mut next = state.config.lock().unwrap().clone();
+    if !config::set_language_enabled(&mut next, &code, enabled) {
+        return json!({
+            "ok": false,
+            "error": {
+                "code": "CONFIG_INVALID",
+                "message": format!("เปิดได้สูงสุด {} ภาษา", config::MAX_ENABLED_LANGUAGES)
+            }
+        });
+    }
+    if let Err(message) = config::validate_languages(&next) {
+        return json!({ "ok": false, "error": { "code": "CONFIG_INVALID", "message": message } });
+    }
+    if let Err(message) = config::save(&next) {
+        eprintln!("[config] {message}");
+        return json!({ "ok": false, "error": { "code": "CONFIG_IO", "message": message } });
+    }
+
+    *state.config.lock().unwrap() = next.clone();
+    state.touch_config();
+    let _ = app.emit_to("settings", "settings:config", &next);
+    println!(
+        "[languages] {code}: {}",
+        if enabled { "enabled" } else { "disabled" }
+    );
+    json!({ "ok": true, "data": next })
+}
+
+/// Reset เฉพาะส่วน (General/HUD/Languages) หรือทั้งหมด — คืน config ใหม่
+#[tauri::command]
+fn reset_config(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    section: String,
+) -> Value {
+    let mut next = state.config.lock().unwrap().clone();
+    if !config::reset_section(&mut next, &section) {
+        return json!({
+            "ok": false,
+            "error": { "code": "CONFIG_INVALID", "message": format!("ไม่รู้จักส่วน {section}") }
+        });
+    }
+    if let Err(message) = config::validate_languages(&next) {
+        return json!({ "ok": false, "error": { "code": "CONFIG_INVALID", "message": message } });
+    }
+    if let Err(message) = config::save(&next) {
+        eprintln!("[config] {message}");
+        return json!({ "ok": false, "error": { "code": "CONFIG_IO", "message": message } });
+    }
+
+    *state.config.lock().unwrap() = next.clone();
+    state.touch_config();
+    let style = config::ui_style(&next);
+    let _ = app.emit_to("hud", "hud:style", &style);
+    let _ = app.emit_to("settings", "settings:config", &next);
+    println!("[config] reset section={section}");
+    json!({ "ok": true, "data": next })
 }
 
 /* ============================================================
@@ -1078,4 +1271,30 @@ fn fallback_icon_rgba() -> Vec<u8> {
         }
     }
     rgba
+}
+
+#[cfg(test)]
+mod enabled_language_tests {
+    use super::*;
+
+    #[test]
+    fn missing_language_list_defaults_to_en_and_th() {
+        assert_eq!(enabled_languages(&json!({})), vec![Lang::En, Lang::Th]);
+        assert_eq!(
+            enabled_languages(&json!({ "languages": [] })),
+            vec![Lang::En, Lang::Th]
+        );
+    }
+
+    #[test]
+    fn disabled_thai_leaves_english_as_the_only_language() {
+        let config = json!({ "languages": [ { "code": "th", "enabled": false } ] });
+        assert_eq!(enabled_languages(&config), vec![Lang::En]);
+    }
+
+    #[test]
+    fn enabled_thai_is_added_after_english() {
+        let config = json!({ "languages": [ { "code": "th", "enabled": true } ] });
+        assert_eq!(enabled_languages(&config), vec![Lang::En, Lang::Th]);
+    }
 }
