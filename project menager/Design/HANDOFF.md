@@ -1,11 +1,11 @@
 ---
 title: HANDOFF — RniType (อ่านก่อนเริ่ม session ใหม่)
-status: v0.6
+status: v0.7
 updated: 2026-11-16
 tags: [handoff]
 ---
 
-# HANDOFF — RniType v0.6 (2026-11-16)
+# HANDOFF — RniType v0.7 (2026-11-16)
 
 > เอกสารนี้ทำให้ session ใหม่ทำงานต่อได้ใน \~5 นาที · อ่านจบ = รู้ทุกอย่างที่จำเป็น
 
@@ -15,11 +15,11 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2 slice 3 · visual refresh (ADR-22) · P3/P4/P5 slice 1 · runtime จอยจริงต่อได้และพิมพ์ได้ — 145 tests** |
+| สถานะ | **P0/P1 ปิด · P2 slice 4 · visual refresh (ADR-22) · P3/P4/P5 slice 1 · runtime จอยจริงต่อได้และพิมพ์ได้ — 166 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, XInput) + `SendInput` |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
-| งานถัดไป | **P2 slice 4**: quick bar (LB) + caret nav (R3) + sticky drag (RB 2 taps) + pivot clamp |
-| ค้างยืนยัน | owner ต้อง retest หลังแก้ "UI ค้างจอ" (ADR-20) — ดู §4.8 |
+| งานถัดไป | **P3 ที่เหลือ** (exclusion/UIPI, scancode/IME, timer) หรือ **P5 Settings** (General/Languages/Keymap) |
+| ค้างยืนยัน | owner ต้อง retest หลังแก้ "UI ค้างจอ" (ADR-20) + ตรวจ quick bar/caret/sticky drag/pivot clamp บนจอยจริง — ดู §4.8 |
 
 ## 2. การตัดสินใจที่ล็อกแล้ว (ห้ามถามซ้ำ)
 
@@ -43,6 +43,7 @@ tags: [handoff]
 19. **Ctrl + ตัวอักษร ASCII = VirtualKey** (ไม่ใช่ Unicode) ไม่งั้น Copy/Paste/Undo/Redo ไม่ทำงาน — [[18-runtime-wiring]]
 20. **P2 slice 3**: Mouse = สูตร deadzone 0.15/gamma 1.7/vmax 1600/smoothing 0.5 (LT ×0.3 · LB ×1.8) · Nav LS 900 / RS 320 px/s · auto-repeat 350/90 ms (ดัน RS กลับทิศเดิมหลัง commit) · layer 2 = RB/RT (ค้าง = ชั่วคราว · แตะ < 280 ms โดยไม่พิมพ์ = ล็อก) · A double-tap 280 ms = Enter (Space แรกออกแล้ว) · B hold 400 ms = Ctrl+Backspace · Y hold = Esc — [[21-mouse-nav-repeat-layer2]]
 21. **Visual language (ADR-22)**: accent เดียว **Apple blue `#0A84FF`** · mode = Type blue / Mouse orange / Nav purple · HUD = แผ่นทึบ `.88` + ขอบสองชั้น **ไม่มี `backdrop-filter`** · active wedge = fill + stroke 2px + dim อื่น **0 ms** · pill 28px + dot สีโหมด + idle 3 วิ · Settings = sidebar 200px + inset group (760×640) · motion 80/140 ms + reduced-motion — [[05-visual-language]] · [[22-visual-refresh-apple-style]]
+22. **P2 slice 4 (ADR-23)**: **Quick bar = LB ค้าง 150 ms** (แตะสั้นไม่เปิด · ปล่อย LB = ปิด · ดัน LS = ปิดแล้วพิมพ์ Ctrl+ตัวอักษร) ช่อง ↑Copy ↗Paste →Cut ↘Undo ↓Redo ↙Select All ←Save ↖Alt+Tab · **caret = R3** (RS = ลูกศร 350/90 ms · R3×2 < 280 ms = Shift+ลูกศร · ไม่มีวง เหลือกากบาท) · **sticky drag = RB 2 แตะ** ใน Mouse (แตะอีกครั้ง = ปล่อย; session ปล่อยปุ่มให้เมื่อสลับ mode) · **pivot clamp ฝั่งแอป** margin 172×`hudScale` จากขอบ virtual desktop · `KeyPress` มี `alt` แล้ว — [[23-quickbar-caret-sticky-drag-pivot-clamp]]
 
 ## 3. โครงสร้างไฟล์
 
@@ -73,7 +74,8 @@ project menager/
    │  ├─ 19-revert-sector-scaling-and-shift-labels.md ← ADR-19 เลิก scale + Shift→A-Z
    │  ├─ 20-hud-state-delivery.md ← ADR-20 resend/heartbeat/single instance
    │  ├─ 21-mouse-nav-repeat-layer2.md ← ADR-21 mouse/Nav math · repeat · layer 2 · double-tap/hold
-   │  └─ 22-visual-refresh-apple-style.md ← ADR-22 tokens/HUD plate/Settings sidebar
+   │  ├─ 22-visual-refresh-apple-style.md ← ADR-22 tokens/HUD plate/Settings sidebar
+   │  └─ 23-quickbar-caret-sticky-drag-pivot-clamp.md ← ADR-23 quick bar/caret/sticky drag/pivot clamp
    └─ 05-mockup/
       ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (อ้างอิงดีไซน์ ไม่ใช่ของจริง)
       └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings, runtime)
@@ -110,18 +112,18 @@ project menager/
 
 | Track | ทำแล้ว | เหลือ |
 | --- | --- | --- |
-| P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons + **slice 3: mouse math, Nav pivot, auto-repeat, layer 2, double-tap/hold** (84 tests) | quickbar, caret nav, sticky drag, pivot clamp/DPI |
-| P3 win | SendInput Unicode/VK/mouse + **HWheel** + Ctrl+ASCII→VK (36 tests) | scancode/IME, exclusion/UIPI |
-| P4 HUD | renderer ครบ mode + overlay + typography + **visual refresh ADR-22** (plate/active/pill/mode colours) + `HudState` จริง (+ `layer`/`repeat`/`pointer`) (30 checks) | latency, pivot per-monitor/mixed-DPI |
-| Runtime | `input.rs` + `session.rs` + tray Pause + resend/heartbeat + single instance + **mouse/Nav recenter/reset** | ทดสอบ mouse/Nav กับจอยจริง |
+| P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons + **slice 3: mouse math, Nav pivot, auto-repeat, layer 2, double-tap/hold** + **slice 4: quick bar, caret nav, sticky drag, pivot clamp** (98 tests) | — (P2 ปิด; เหลือแค่ mixed-DPI) |
+| P3 win | SendInput Unicode/VK/mouse + **HWheel** + Ctrl+ASCII→VK + **Alt (Alt+Tab)** (37 tests) | scancode/IME, exclusion/UIPI |
+| P4 HUD | renderer ครบ mode + overlay + typography + **visual refresh ADR-22** + **quickbar/caret mode** + `HudState` จริง (+ `layer`/`repeat`/`pointer`) (36 checks) | latency, pivot per-monitor/mixed-DPI |
+| Runtime | `input.rs` + `session.rs` + tray Pause + resend/heartbeat + single instance + **mouse/Nav recenter/reset** + **sticky-drag safety release** + **pivot clamp** | ทดสอบ mouse/Nav/quickbar/caret กับจอยจริง |
 | P5 Settings | slice 1: หน้าต่าง + แท็บ HUD + persist config | แท็บ General/Languages/Keymap, rescan HKL, profiles |
 
 ### 4.3 ขั้นถัดไป (เรียง)
 
-1. **P2 slice 4** — quick bar (LB ค้าง 8 ช่อง) · caret nav (R3 toggle + repeat) · sticky drag (RB 2 แตะ) · pivot clamp ตามขอบจอ
-2. **P3 ที่เหลือ** — exclusion list/UIPI (กันเกม), scancode/IME path, `timeBeginPeriod(1)`
-3. **P5 Settings ที่เหลือ** — General/Languages/Keymap + rescan HKL + keymap editor
-4. **P6** — วัด WPM/latency, ทดสอบคนจริง, installer/Steam/itch
+1. **P3 ที่เหลือ** — exclusion list/UIPI (กันเกม), scancode/IME path, `timeBeginPeriod(1)`
+2. **P5 Settings ที่เหลือ** — General/Languages/Keymap + rescan HKL + keymap editor
+3. **P6** — วัด WPM/latency, ทดสอบคนจริง, installer/Steam/itch
+4. **P2 ที่เหลือ (เล็ก)** — pivot clamp แบบ per-monitor/mixed-DPI (ตอนนี้ clamp ด้วย virtual desktop เดียว)
 
 ### 4.4 รัน / ตรวจ
 
@@ -133,10 +135,10 @@ crates\rnitype-app\run.ps1 --demo --settings --seconds 30  # HUD จาก state
 ```
 
 ```powershell
-cargo test --workspace                      # 145 tests
-node tools/contracts/validate.mjs           # 10/10
+cargo test --workspace                      # 166 tests
+node tools/contracts/validate.mjs           # 12/12
 node tools/tests/hud-smoke.mjs              # 54/54 (ม็อกอัป)
-node tools/tests/hud-typography.mjs         # 30/30 + screenshot
+node tools/tests/hud-typography.mjs         # 36/36 + screenshot
 ```
 
 - Tray: **คลิกซ้าย = Settings** · คลิกขวา = Pause typing / Settings… / Quit
@@ -186,6 +188,21 @@ node tools/tests/hud-typography.mjs         # 30/30 + screenshot
    - A แตะ 2 ครั้ง = Enter · กด B ค้าง 400 ms = ลบทั้งคำ · กด Y ค้าง = Esc
 5. **Visual refresh (ADR-22)**: เปิด Settings → ตรวจ sidebar/inset group/preview · เปิด HUD แล้วดูว่าแผ่น `.88` อ่านชัดบนทั้งพื้นมืด/สว่าง · pill มี dot สีโหมดและจางหลัง idle 3 วิ
    - ถ้าอยากให้แผ่นบางลง/เข้มขึ้น ปรับ `--hud-plate` ที่ `ui/shared/tokens.css` แล้วแจ้งค่าที่ชอบ
+6. **Quick bar (ADR-23)**: Type → กด LB ค้าง ~150 ms → แถบ 8 ช่อง (Copy/Paste/Cut/Undo/Redo/All/Save/Switch) → RS ↑ แล้วปล่อย = Ctrl+C · ปล่อย LB = ปิดไม่มีอะไรเกิดขึ้น · กด LB + ดัน LS = พิมพ์ Ctrl+ตัวอักษร
+7. **Caret nav (ADR-23)**: Type → กด R3 = pill `Caret · ลูกศร` (ไม่มีวง) → RS ←/→ เลื่อน caret · ค้าง = repeat · กด R3 เร็ว ๆ 2 ครั้ง = `เลือกข้อความ` แล้ว RS = Shift+ลูกศร · กด R3 ครั้งเดียว (พ้น 280 ms) = ปิด
+8. **Sticky drag (ADR-23)**: Mouse → แตะ RB 2 ครั้งเร็ว ๆ → badge `Drag` → RS ลาก → แตะ RB อีกครั้ง = ปล่อย (ตรวจว่าไม่มีเมาส์ค้าง)
+9. **Pivot clamp (ADR-23)**: Nav → ดัน LS จนสุดขอบจอ → วงต้องหยุดก่อนล้นขอบ (margin 172×hudScale) · R3 = กลับจุดเริ่มต้น
+
+### 4.9 P2 slice 4 (2026-11-16) — ✅ ปิดแล้ว (ADR-23)
+
+| เรื่อง | ผล |
+| --- | --- |
+| Quick bar (LB ค้าง 8 ช่อง) | `WheelKind::QuickBar` — เปิดหลังค้าง 150 ms · RS เลือก · ปล่อย RS = คีย์ลัด · ปล่อย LB/D-pad ←/B = ยกเลิก · LS = Ctrl+ตัวอักษร · HUD เป็นแถบแนวนอน 8 ช่อง · Alt+Tab ใช้ `alt` ใหม่ใน `KeyPress` |
+| Caret nav (R3) | 350/90 ms ตาม state machine §4 · R3×2 = Shift+ลูกศร · ไม่มีวง (pill `ลูกศร`/`เลือกข้อความ`) · A/B ออกจากโหมดโดยไม่พิมพ์ทับ selection · หน้าต่าง double-tap รีเซ็ตเมื่อออกจาก Type |
+| Sticky drag (RB 2 แตะ) | 280 ms window · แตะครั้งที่ 3 = ปล่อย · `Session` ปล่อยปุ่มซ้ายให้ถ้า engine ล้างค่า (สลับ mode/emergency) · badge `Drag` |
+| Pivot clamp | `Session::set_pivot_clamp` — margin 172×`hudScale` รอบ virtual desktop · clamp ตอน Move/Reset/เริ่มต้น |
+| Contract | `mode` เพิ่ม `quickbar`/`caret` · sample +2 → **12/12** · HUD แสดง quickbar ด้วย `inner.kind = command` |
+| ตัวเลข | cargo **166** (core 98 · win 37 · app 31) · typography **36/36** · hud-smoke 54/54 |
 
 ## 5. คำถามที่ยังค้าง
 
@@ -201,7 +218,7 @@ Q1, Q2, Q5, Q15, Q16, Q17 = ตัดสินแล้ว
 ## 6. Environment & เคล็ดลับ debug
 
 - vault = `D:\Erin's Works\Programming\RniType` — เขียนเฉพาะในนี้ · MCP `nizylanote` เรียก `vault_info` ก่อนเขียน
-- **Git**: commit ก่อน session นี้ `72ed7dc` (handoff v0.5) · commit งานเป็นชุด `feat(...)` + `docs(...)` (`.nznote/`, `.opencode/` ถูก ignore)
+- **Git**: commit ก่อน session นี้ `72ed7dc` (handoff v0.5) · งาน P2 slice 4 = `41f6ae0` · commit งานเป็นชุด `feat(...)` + `docs(...)` (`.nznote/`, `.opencode/` ถูก ignore)
 - **เทอร์มินัล cp874** → log ไทยใน console เป็น `???` (ไม่ใช่บั๊ก) · ไฟล์เป็น UTF-8
 - **PowerShell กิน `--` ตัวแรก** → `run.ps1` เติมให้แล้ว ใช้ `run.ps1 --seconds 30`
 - `Chrome_WidgetWin_0 ... 1412` ตอนปิด = WebView2 noise ไม่มีผล

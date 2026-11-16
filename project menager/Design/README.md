@@ -64,6 +64,7 @@ updated: 2026-11-15
 | [[20-hud-state-delivery]] | ADR: HUD ต้องได้ state เสมอ (resend ตอน handshake + heartbeat 2 วิ) + ห้ามเปิดแอปซ้ำ |
 | [[21-mouse-nav-repeat-layer2]] | ADR: Mouse/Nav math, auto-repeat 350/90, layer 2 (RB/RT), A double-tap, B/Y hold |
 | [[22-visual-refresh-apple-style]] | ADR: tokens/HUD plate/Settings sidebar — Apple/macOS-inspired visual refresh |
+| [[23-quickbar-caret-sticky-drag-pivot-clamp]] | ADR: Quick bar (LB), caret nav (R3), sticky drag (RB×2), pivot clamp ฝั่งแอป |
 | [[hud-v0.9]] | บันทึก HUD: ภาพเทียบ A/B (v0.9) + สรุป v0.10 |
 | `05-mockup/hud-prototype/` | ม็อกอัป HUD v0.11 (เน้น EN+TH, หลายภาษา, Settings window, Keymap editor, pivot) |
 | `05-mockup/hud-shots/` | screenshot ตรวจรับ typography (100%/150% DPI), overlay จริง, Settings |
@@ -78,6 +79,8 @@ updated: 2026-11-15
 | เมาส์ | RS = pointer (มี accel), กด RS = กลับกลางจอหลัก, RB = คลิกซ้าย, RT = คลิกขวา — pointer แสดงเฉพาะโหมดนี้ |
 | Nav | ใช้ย้าย **pivot** (ตำแหน่ง UI): LS หยาบ · RS ละเอียด · R3/R กลับตำแหน่ง |
 | mode + แก้ข้อความ | **D-pad ←** เปิดวงคำสั่งวงใน 8 ช่อง (EN, Language, Mouse, Place UI, Copy/Paste/Undo/Redo) — **เลือกด้วย RS, ปล่อย = ยืนยัน**; วงในขณะพิมพ์ยังเป็น LS |
+| ทางลัด | **LB ค้าง = Quick bar** 8 ช่อง (Copy/Paste/Cut/Undo/Redo/Select All/Save/Alt+Tab) · **LB + LS = Ctrl+ตัวอักษร** · RB 2 แตะใน Mouse = ลากค้าง (sticky drag) |
+| แก้ caret | **R3 = เปิด/ปิดลูกศร** (RS ย้าย caret, ค้าง repeat 350/90 ms) · **R3 ×2 = เลือกข้อความ** (Shift+ลูกศร) — [[23-quickbar-caret-sticky-drag-pivot-clamp]] |
 | ภาษา | ทุก layout ที่ติดตั้งใน Windows — EN/TH ใช้ตารางออกแบบ, อื่นๆ map จาก QWERTY แล้วแก้ได้; IME ส่งคีย์ให้ OS ประกอบ · **ช่องภาษาอื่น**: 1 ภาษา = สลับทันที, หลายภาษา = `Lang`, ไม่มีภาษา = ซ่อน |
 | ตั้งค่า | หน้าต่างแยก ภาษาอังกฤษ (General · Languages · Keymap · HUD) + Reset all to defaults |
 | HUD | ตรึงที่ **pivot** (ไม่ตามเมาส์) — Nav = โหมดจัดตำแหน่ง UI |
@@ -85,7 +88,7 @@ updated: 2026-11-15
 | ภาษาไทย | วรรณยุกต์ ่ ้ ๊ ๋ อยู่กลุ่ม ↘ เดียวกัน · สระล่าง ุ ู มีขีดกำกับใน HUD |
 | หลักการ HUD | วงใน = สิ่งที่ LS เลือก · วงนอก = สิ่งที่ RS เลือก · idle เหลือ pill สถานะ (เปิดวงตลอดได้) |
 | เทคโนโลยี | Rust + Tauri v2 + gilrs/SDL3 + SendInput (แผนสำรอง: C# .NET 8) — ดู [[03-stack-rust]] |
-| สถานะ | **P0/P1 ปิด · P2 slice 3 · visual refresh (ADR-22) · P3/P4/P5 slice 1 · runtime จอยจริง** — 145 tests |
+| สถานะ | **P0/P1 ปิด · P2 slice 4 · visual refresh (ADR-22) · P3/P4/P5 slice 1 · runtime จอยจริง** — 166 tests |
 
 ## หมายเหตุการทำงาน
 

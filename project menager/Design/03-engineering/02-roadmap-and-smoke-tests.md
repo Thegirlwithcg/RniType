@@ -27,7 +27,7 @@ tags: [plan, testing]
 | **M0 Spike** | อ่านค่าจอย, ตรวจชนิดจอย, log แกนดิบ | เห็นค่า LS/RS/trigger/ปุ่มครบ **Xbox** · **DualSense เลื่อนไปทดสอบก่อน release** (ยังไม่มีฮาร์ดแวร์) · ระบุรุ่นได้ | 1–2 วัน |
 | **M1 Typing core** | normalizer + state machine + keymap EN + injector | พิมพ์ประโยค 20 คำใน Notepad ได้ถูกต้อง 100%, วัด WPM ได้ | 3–4 วัน |
 | **M2 Mouse** | pointer + accel + คลิก + recenter หลายจอ | ข้ามจอ 1920 px < 1.5 s, ชี้ target 32 px สำเร็จ > 80% | 2–3 วัน |
-| **M2.5 HUD polish** | variant B (idle เหลือ pill, วงโผล่เมื่อดัน LS), วงคำสั่งวงใน, เปลี่ยนกลุ่มด้วย LS | mockup v0.9 ผ่าน 35 checks; ผู้ใช้ใหม่เปิดวงคำสั่ง/สลับโหมดได้ < 2 s; ไม่มี feedback ซ้ำซ้อน | 1–2 วัน |
+| **M2.5 HUD polish** | variant B (idle เหลือ pill, วงโผล่เมื่อดัน LS), วงคำสั่งวงใน, เปลี่ยนกลุ่มด้วย LS | mockup v0.9 ผ่าน 36 checks; ผู้ใช้ใหม่เปิดวงคำสั่ง/สลับโหมดได้ < 2 s; ไม่มี feedback ซ้ำซ้อน | 1–2 วัน |
 | **M3 HUD** | overlay 2 ring + preview + pill สถานะ + idle pill | เปิด/ปิดได้, ไม่แย่ง focus, latency HUD < 16 ms | 3 วัน |
 | **M4 Config UI** | tray, หน้าตั้งค่า, profile ต่อแอป, autostart | ตั้งค่าแล้วมีผลทันที, reload ได้, crash-free 1 ชม. | 5 วัน |
 | **M5 Thai + polish** | keymap TH, layer 2, quick bar, exclusion list | 12 WPM ไทย, 20 WPM อังกฤษ, error < 1.5% | 5+ วัน |
@@ -46,10 +46,10 @@ tags: [plan, testing]
 
 | Script | ทำอะไร | ผลล่าสุด |
 | --- | --- | --- |
-| `tools/contracts/validate.mjs` | ตรวจ `hud-state.samples.json` + `config.sample.json` กับ schema | **10/10** |
+| `tools/contracts/validate.mjs` | ตรวจ `hud-state.samples.json` + `config.sample.json` กับ schema | **12/12** |
 | `tools/tests/hud-smoke.mjs` | ขับม็อกอัป v0.11 ด้วย CDP (วง/คำสั่ง/โหมด/สถานะ) | **54/54** |
-| `tools/tests/hud-typography.mjs` | ตรวจขนาดขั้นต่ำ/การชนกัน/contrast/emphasis + screenshot 100%–150% DPI | **30/30** |
-| `cargo test --workspace` | core 52 · win 36 · app 21 (config/input/session) | **109/109** |
+| `tools/tests/hud-typography.mjs` | ตรวจขนาดขั้นต่ำ/การชนกัน/contrast/emphasis + quick bar/caret + screenshot 100%–150% DPI | **36/36** |
+| `cargo test --workspace` | core 98 · win 37 · app 31 (config/input/session) | **166/166** |
 
 **ชุดประโยคทดสอบ**: ใช้ 500 phrases ของ MacKenzie & Soukoreff (มาตรฐานงานวิจัย text entry)
 → ผลของเราจะเทียบกับงานวิจัย (TwoStick 13–14.9 WPM) ได้ตรงๆ
@@ -67,6 +67,7 @@ tags: [plan, testing]
 | 2026-11-15 | UI r3 | — | — | — | — | ยกเลิก scale sector (วงเพี้ยน) · Shift→A-Z บนวง · 109 tests · typography 30/30 |
 | 2026-11-16 | P2 slice 3 | — | — | — | — | Mouse math (1600 px/s · gamma 1.7 · smooth 0.5) · Nav pivot 900/320 · repeat 350/90 ms · layer 2 · double-tap/hold · 145 tests · ยังไม่วัด WPM |
 | 2026-11-16 | UX refresh | — | — | — | — | ADR-22: Apple-style tokens · HUD plate .88 (no blur) · active 0 ms · pill 28px · Settings sidebar 760×640 · hud-smoke 54/54 · typography 30/30 |
+| 2026-11-16 | P2 slice 4 | — | — | — | — | ADR-23: Quick bar LB (8 ช่อง + Alt+Tab) · caret R3 (350/90 ms, R3×2 = select) · sticky drag RB×2 · pivot clamp 172×scale · **166 tests** · contracts 12/12 · typography 36/36 |
 
 ## 5. ความเสี่ยงและทางถอย
 
