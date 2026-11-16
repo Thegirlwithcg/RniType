@@ -40,6 +40,7 @@ P5 slice 1 เปิดหน้าต่าง Settings ได้ แต่ม�
   (`builtin: true`); layout ที่ติดตั้งได้ badge `Detected`
 - **EN = base**: toggle ถูกล็อก (`locked: true`) ปิดไม่ได้
 - ภาษาอื่นที่ยังไม่มีตาราง: toggle ปิด + badge `Needs mapping` → เปิดได้เมื่อ universal mapping มา
+  (**อัปเดต ADR-28**: layout ทุกตัวที่ติดตั้งสร้างตาราง QWERTY ได้แล้ว → เปิดได้ · IME ยังปิด)
 - เปิดได้สูงสุด **8** ภาษา (`MAX_ENABLED_LANGUAGES`) — เกิน = `CONFIG_INVALID`
 - `rescan_languages` คืนแถวที่ merge กับ config แล้ว (detected/builtin/enabled/supported/locked)
 

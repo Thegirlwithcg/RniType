@@ -63,7 +63,8 @@ tags: [architecture, windows, rust, tauri]
 - **EN/TH เป็น built-in**: มีตาราง 8×8 ในแอปเสมอ (แสดงแม้ Windows ไม่ได้ติดตั้ง layout) · EN = base (ปิดไม่ได้)
 - **จำแนกชนิด**: layout ที่มี IME (JA/ZH/KO) → `kind: ime`; ที่เหลือ → `layout`
 - **สร้าง 8×8 เริ่มต้น** (`layout`): ใช้ `ToUnicodeEx` กับ HKL ของภาษานั้นทีละ VK (shift states)
-  → ได้ตัวอักษรตาม **ตำแหน่ง QWERTY**; cache ไว้ใน config (ยังไม่ทำ — รอ universal mapping)
+  → ได้ตัวอักษรตาม **ตำแหน่ง QWERTY** — implemented P5 slice 4 ([[28-universal-qwerty-mapping]])
+  `Keymap` dynamic ใน core + `build_keymap(klid)` ฝั่ง win · ภาษาอื่นเก็บ `klid/label/kind` ใน config
 - **ไทย/อังกฤษ**: ใช้ตารางที่ออกแบบไว้ ([[02-keymap-en-th]]) เป็นค่าเริ่มต้น
 - **override**: `config.languages[].overrides` เก็บเฉพาะช่องที่ผู้ใช้แก้ (key `<layer>-<group>-<sector>`)
   — implemented P5 slice 3 ([[27-keymap-editor-overrides]]); แก้ได้เฉพาะ EN/TH จนมี universal mapping

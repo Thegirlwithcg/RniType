@@ -71,6 +71,7 @@ ADR-14 กำหนดให้แท็บ Keymap แก้ได้ทีล�
 
 - **Universal QWERTY mapping** สำหรับ layout อื่น (RU/EL/JA…) — ยังขึ้น `Needs mapping`
   และ toggle ปิดอยู่ · แท็บ Keymap แก้ได้เฉพาะ EN/TH
+  (**อัปเดต ADR-28**: universal QWERTY ทำแล้ว · layout ปกติแก้ใน Keymap ได้ · IME ยังปิด)
 - IME ยังต้องใช้ scancode path (ไม่ map ตัวอักษร) ตาม ADR-14 §5
 - Shift-lock แสดงตัวพิมพ์ใหญ่บน HUD ตาม ADR-13 (ไม่ใช่ override)
 

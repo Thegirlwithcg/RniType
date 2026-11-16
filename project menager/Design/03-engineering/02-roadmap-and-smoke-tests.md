@@ -49,7 +49,7 @@ tags: [plan, testing]
 | `tools/contracts/validate.mjs` | ตรวจ `hud-state.samples.json` + `config.sample.json` กับ schema | **12/12** |
 | `tools/tests/hud-smoke.mjs` | ขับม็อกอัป v0.11 ด้วย CDP (วง/คำสั่ง/โหมด/สถานะ) | **54/54** |
 | `tools/tests/hud-typography.mjs` | ตรวจขนาดขั้นต่ำ/การชนกัน/contrast/emphasis + quick bar/caret + screenshot 100%–150% DPI | **36/36** |
-| `cargo test --workspace` | core 100 · win 56 · app 57 (config/input/session/stats) | **213/213** |
+| `cargo test --workspace` | core 101 · win 58 · app 60 (config/input/session/stats) | **219/219** |
 
 **ชุดประโยคทดสอบ**: ใช้ 500 phrases ของ MacKenzie & Soukoreff (มาตรฐานงานวิจัย text entry)
 → ผลของเราจะเทียบกับงานวิจัย (TwoStick 13–14.9 WPM) ได้ตรงๆ
@@ -72,6 +72,8 @@ tags: [plan, testing]
 | 2026-11-16 | P5 slice 2 | — | — | — | — | ADR-25: General (status/pause/exclusion UI) · Languages (HKL scan, EN/TH built-in, IME badge) · `config_rev` live reload · reset แยกส่วน · **201 tests** · settings-smoke **19/19** · E2E ปิด TH → `languages=0` |
 | 2026-11-16 | P6 slice 1 | 3.0\* | — | — | avg 0.005 / max 0.748 (action) | ADR-26: WPM 60 วิ (5 ตัวอักษร/คำ) · action latency avg/max · `[stats]` ทุก 10 วิ · Usage cards · **205 tests** · settings-smoke **20/20** · \*fake-pad steady ~15–17 WPM (ยังไม่ใช่ผู้ใช้จริง) |
 | 2026-11-16 | P5 slice 3 | — | — | — | — | ADR-27: Keymap editor EN/TH · override `<layer>-<g>-<s>` · live reload · **213 tests** · settings-smoke **28/28** · E2E ตั้ง override → พิมพ์ `z` → reset → `ก` |
+| 2026-11-16 | P5 slice 4 | — | — | — | — | ADR-28: universal QWERTY จาก HKL (RU `a→ф`, EL `a→α`) · `Keymap` dynamic + `LangSlot {code,label,keymap}` · **219 tests** · E2E `[type] ф к и Э 5` |
+| 2026-11-16 | P6 slice 2 | — | — | — | cpu 3.1% · rss 32 MB | ADR-29: CPU/RAM ของโปรเซส + corrections (Backspace proxy) · Footprint cards · log `cpu=3.1% rss=32 MB` |
 
 ## 5. ความเสี่ยงและทางถอย
 
@@ -97,7 +99,7 @@ tags: [plan, testing]
 | 4 | วัดผล UI กับคน 3–5 คน | เวลาเปิดวงคำสั่ง < 2 s, เปลี่ยนกลุ่มถูกใน < 1.2 s, คะแนน "รก" ลดลง vs v0.7 |
 | 5 | ปรับ pill สถานะให้ครบ (mode/selection/layer/shift/arrow) | ไม่มีสถานะไหนต้องเดา |
 | 6 | Onboarding เรื่อง pivot/Nav | ผู้ใช้ย้าย UI ได้เองโดยไม่ต้องเปิดเอกสาร |
-| 7 | **Language support (v1)**: ตรวจ layout, QWERTY default, override, IME passthrough | เปิด RU/EL พิมพ์ได้, IME ประกอบข้อความเหมือนคีย์บอร์ดจริง |
+| 7 | **Language support (v1)**: ตรวจ layout, QWERTY default, override, IME passthrough | ✅ layout + override + QWERTY (P5 slice 3–4) · IME passthrough ยังไม่ทำ |
 | 8 | **Settings window แยก** (English) + Reset all | ตั้งค่า/รีเซ็ตได้โดยไม่แตะ overlay |
 | 8a | Settings แท็บ HUD: text size / font / reset + persist | ✅ P5 slice 1 — [[16-hud-typography-and-fonts]] |
 | 8b | Settings แท็บ General / Languages | ✅ P5 slice 2 — [[25-settings-general-languages-live-reload]] |

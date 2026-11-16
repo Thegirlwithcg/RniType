@@ -5,6 +5,7 @@
 > v1.2 (2026-11-16) — ระบุรูปแถวของ `rescan_languages` / `set_language_enabled` และ `get_status` ที่ P5 slice 2 ใช้ (additive, ADR-25)
 > v1.3 (2026-11-16) — เพิ่ม `get_stats` (chars/WPM/action latency/uptime) สำหรับ Usage cards (additive, ADR-26)
 > v1.4 (2026-11-16) — เพิ่ม `get_keymap` / `set_keymap_cell` / `reset_keymap` สำหรับ Keymap editor (additive, ADR-27)
+> v1.5 (2026-11-16) — `get_stats` เพิ่ม CPU/RAM/corrections (ADR-29) · `get_keymap` ใช้ได้กับ layout ที่สร้างจาก KLID (ADR-28)
 > ไฟล์นี้คือสัญญาที่ P3 (runtime), P4 (HUD), P5 (Settings) ต้องยึด
 > เปลี่ยนชื่อ/รูป payload = ต้อง bump `version` และแจ้ง lead
 
@@ -47,7 +48,7 @@
 | `import_profile` | `{ json }` | `Config` |
 | `set_paused` | `{ paused: bool }` | `{ paused: bool }` |
 | `get_status` | — | `app:status` payload |
-| `get_stats` | — | `{ chars, wpm, actions, stepAvgUs, stepMaxUs, uptimeSecs }` |
+| `get_stats` | — | `{ chars, wpm, actions, stepAvgUs, stepMaxUs, uptimeSecs, cpuPercent, rssBytes, corrections }` |
 | `get_keymap` | `{ code }` | `KeymapPayload` (ดู §5) |
 | `set_keymap_cell` | `{ code, layer, group, sector, text }` | `KeymapPayload` |
 | `reset_keymap` | `{ code, group? }` | `KeymapPayload` |
@@ -139,11 +140,15 @@ Settings ──invoke save_config──▶ app ──validate──▶ config.js
   "actions": 75,
   "stepAvgUs": 4,
   "stepMaxUs": 846,
-  "uptimeSecs": 51
+  "uptimeSecs": 51,
+  "cpuPercent": 3.1,
+  "rssBytes": 33554432,
+  "corrections": 0
 }
 ```
 
 `wpm` = 5 ตัวอักษร/คำ จาก commits ใน 60 วิ · `step*Us` = เวลา `session.step` (µs) ต่อวินาทีล่าสุด
+`cpuPercent` = เฉพาะโปรเซส RniType (ไม่รวม WebView2 child) · `corrections` = จำนวน Backspace (proxy ของ error rate)
 
 ### `KeymapPayload` — Keymap editor (ADR-27)
 
@@ -163,6 +168,7 @@ Settings ──invoke save_config──▶ app ──validate──▶ config.js
 
 `cells` = ค่าที่ใช้จริง (override ชนะ) · `defaults` = ตารางใน core · `""` = ช่องว่าง (layer 2)
 override เก็บใน `languages[].overrides` key `<layer>-<group>-<sector>` (รูปเก่า `<g>-<s>` = layer 1)
+`get_keymap` ใช้ได้กับทุกภาษาที่เปิด: EN/TH = built-in · layout อื่นสร้างจาก KLID (`build_keymap`)
 
 ## 6. Error codes
 

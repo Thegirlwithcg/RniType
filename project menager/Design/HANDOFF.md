@@ -1,11 +1,11 @@
 ---
 title: HANDOFF — RniType (อ่านก่อนเริ่ม session ใหม่)
-status: v1.1
+status: v1.2
 updated: 2026-11-16
 tags: [handoff]
 ---
 
-# HANDOFF — RniType v1.1 (2026-11-16)
+# HANDOFF — RniType v1.2 (2026-11-16)
 
 > เอกสารนี้ทำให้ session ใหม่ทำงานต่อได้ใน \~5 นาที · อ่านจบ = รู้ทุกอย่างที่จำเป็น
 
@@ -15,11 +15,11 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · P4/P5 slice 1–3 · P6 slice 1 · visual refresh (ADR-22) — 213 tests** |
+| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · P4/P5 slice 1–4 · P6 slice 1–2 · visual refresh (ADR-22) — 219 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, XInput) + `SendInput` (auto scancode/Unicode) |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
-| งานถัดไป | **universal QWERTY mapping** (RU/EL) หรือ **P6 ที่เหลือ** (error rate/CPU, installer) |
-| ค้างยืนยัน | owner retest §4.8 — quick bar/caret/sticky drag, exclusion/scancode, Settings, WPM, **Keymap editor** |
+| งานถัดไป | **IME passthrough** หรือ **error rate จากข้อความอ้างอิง** หรือ **installer/Steam/itch** |
+| ค้างยืนยัน | owner retest §4.8 — quick bar/caret/sticky drag, exclusion/scancode, Settings, WPM, Keymap, **RU/EL บนจอยจริง** |
 
 ## 2. การตัดสินใจที่ล็อกแล้ว (ห้ามถามซ้ำ)
 
@@ -47,7 +47,9 @@ tags: [handoff]
 23. **P3 slice 2 (ADR-24)**: **exclusion/UIPI guard** ตรวจ foreground ทุก 250 ms → exe ใน `system.exclusion` หรือ target elevated → หยุด `session.step`, HUD `disabled` + เหตุผล, กลับมาเป็น mode เดิม · **scancode path อัตโนมัติ** (`VkKeyScanExW` + `MapVirtualKeyExW` ตาม HKL ของ foreground) → เกม/IME เห็นเหมือนคีย์บอร์ดจริง, พิมพ์ไม่ได้ = Unicode fallback, `--no-scancode` ปิดได้ · **`timeBeginPeriod(1)`** ระหว่างรัน loop — [[24-target-guard-scancode-timer]]
 24. **P5 slice 2 (ADR-25)**: **General** = status (`get_status`/`app:status`) + Pause + **exclusion list UI** · **Languages** = `GetKeyboardLayoutList` → EN/TH built-in แสดงเสมอ, EN = base (locked), ภาษาอื่นต้องมี mapping, เปิดได้ ≤ 8 · **live reload** `config_rev` → runtime เปลี่ยนภาษา/pivot clamp ภายใน 250 ms · Reset แยก section (general/hud/languages/all) — [[25-settings-general-languages-live-reload]]
 25. **P6 slice 1 (ADR-26)**: **WPM = 5 ตัวอักษร/คำ ในหน้าต่าง 60 วิ** (นับเฉพาะ `Key::Char`) · **action latency** = เวลา `session.step` (avg/max ต่อวินาที) · log `[stats]` ทุก 10 วิ + การ์ด Usage ใน Settings General (`get_stats`) — [[26-usage-stats-wpm-latency]]
-26. **P5 slice 3 (ADR-27)**: **Keymap editor** (แท็บจริง) — override รายช่องใน `languages[].overrides` key `<layer>-<group>-<sector>` (รูปเก่า `<g>-<s>` = layer 1) · core override ชนะตาราง static ทั้งพิมพ์จริง/preview · `get_keymap`/`set_keymap_cell`/`reset_keymap` + live reload · แก้ได้เฉพาะ EN/TH (ภาษาอื่นรอ universal QWERTY) — [[27-keymap-editor-overrides]]
+26. **P5 slice 3 (ADR-27)**: **Keymap editor** (แท็บจริง) — override รายช่องใน `languages[].overrides` key `<layer>-<group>-<sector>` (รูปเก่า `<g>-<s>` = layer 1) · core override ชนะตาราง static ทั้งพิมพ์จริง/preview · `get_keymap`/`set_keymap_cell`/`reset_keymap` + live reload — [[27-keymap-editor-overrides]]
+27. **P5 slice 4 (ADR-28)**: **Universal QWERTY mapping** — `Keymap` dynamic ใน core + `LangSlot { code, label, keymap }` · สร้างตารางจาก HKL ด้วย `VkKeyScanExW`+`ToUnicodeEx` (EN เป็น reference) · RU/EL พิมพ์ได้ทันที (`a→ф`) · IME ยังปิด · override key ด้วย `code` — [[28-universal-qwerty-mapping]]
+28. **P6 slice 2 (ADR-29)**: **CPU/RAM ของโปรเซส** (`GetProcessTimes`, `K32GetProcessMemoryInfo`) + **corrections** (นับ Backspace เป็น proxy ของ error rate) → log `[stats]` และการ์ด Footprint ใน Settings General — [[29-stats-cpu-memory-corrections]]
 
 ## 3. โครงสร้างไฟล์
 
@@ -83,7 +85,9 @@ project menager/
    │  ├─ 24-target-guard-scancode-timer.md ← ADR-24 exclusion/UIPI · scancode · 1 ms timer
    │  ├─ 25-settings-general-languages-live-reload.md ← ADR-25 General/Languages · exclusion UI · live reload
    │  ├─ 26-usage-stats-wpm-latency.md ← ADR-26 WPM 60 วิ · action latency · Usage cards
-   │  └─ 27-keymap-editor-overrides.md ← ADR-27 Keymap editor · override รายช่อง (EN/TH)
+   │  ├─ 27-keymap-editor-overrides.md ← ADR-27 Keymap editor · override รายช่อง
+   │  ├─ 28-universal-qwerty-mapping.md ← ADR-28 Universal QWERTY (RU/EL) จาก HKL
+   │  └─ 29-stats-cpu-memory-corrections.md ← ADR-29 CPU/RAM · corrections proxy
    └─ 05-mockup/
       ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (อ้างอิงดีไซน์ ไม่ใช่ของจริง)
       └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings, runtime)
@@ -103,7 +107,7 @@ project menager/
 | `crates/rnitype-win/src/sendinput.rs` | Windows sender: Unicode/VK/**scancode** ของ HKL เป้าหมาย |
 | `crates/rnitype-win/src/target.rs` | foreground exe + elevated (exclusion/UIPI guard) |
 | `crates/rnitype-win/src/timer.rs` | `timeBeginPeriod(1)` แบบ RAII |
-| `crates/rnitype-win/src/language.rs` | `GetKeyboardLayoutList` → code/label/kind (layout vs IME) |
+| `crates/rnitype-win/src/language.rs` | `GetKeyboardLayoutList` → code/label/kind · **`build_keymap(klid)`** (QWERTY→layout) |
 | `crates/rnitype-core/src/keymap.rs` | ตาราง EN/TH 8×8 + ชั้น 2 + ชื่อกลุ่ม (static default) |
 | `crates/rnitype-core/src/typing.rs` | gesture → key lookup + **override รายช่อง** (`BTreeMap`) |
 | `crates/rnitype-app/src/stats.rs` | WPM (5 ตัวอักษร/คำ) · format latency/uptime |
@@ -131,13 +135,13 @@ project menager/
 | P3 win | SendInput Unicode/VK/mouse + **HWheel** + Ctrl+ASCII→VK + **Alt** + **scancode auto** + **exclusion/UIPI guard** + **1 ms timer** (56 tests) | Task Scheduler/"Run as admin" (P6) |
 | P4 HUD | renderer ครบ mode + overlay + typography + **visual refresh ADR-22** + **quickbar/caret mode** + `HudState` จริง (+ `layer`/`repeat`/`pointer`) (36 checks) | latency, pivot per-monitor/mixed-DPI |
 | Runtime | `input.rs` + `session.rs` + tray Pause + resend/heartbeat + single instance + **mouse/Nav recenter/reset** + **sticky-drag safety release** + **pivot clamp** + **guard/pause คืน mode เดิม** + **live config reload** + **WPM/commit stats** | ทดสอบ mouse/Nav/quickbar/caret กับจอยจริง |
-| P5 Settings | slice 1: หน้าต่าง + HUD tab + persist · slice 2: **General + Languages + Reset + live reload** · slice 3: **Keymap editor (EN/TH, override รายช่อง)** (28 checks) | universal QWERTY mapping (ภาษาอื่น) · profiles · autostart/runAsAdmin จริง |
-| P6 measurement | slice 1: **WPM 60 วิ + action latency + uptime** (`[stats]` log + Usage cards) | error rate, CPU, คนจริง, installer/Steam/itch |
+| P5 Settings | slice 1: HUD tab · slice 2: **General + Languages + Reset + live reload** · slice 3: **Keymap editor** · slice 4: **universal QWERTY (RU/EL)** (29 checks) | IME passthrough · profiles · autostart/runAsAdmin จริง |
+| P6 measurement | slice 1: **WPM + action latency** · slice 2: **CPU/RAM + corrections** | error rate จากข้อความอ้างอิง · คนจริง · installer/Steam/itch |
 
 ### 4.3 ขั้นถัดไป (เรียง)
 
-1. **universal QWERTY mapping** — `ToUnicodeEx` ตาม HKL ของ layout ที่ติดตั้ง → ตาราง 8×8 สำหรับ RU/EL ฯลฯ แล้วเปิด toggle ใน Languages/Keymap
-2. **P6 ที่เหลือ** — error rate (reference text/diff), CPU/RAM, ทดสอบคนจริง, installer/Steam/itch, Task Scheduler/"Run as admin"
+1. **IME passthrough** — JA/ZH/KO ส่ง scancode/VK ให้ Windows IME ประกอบ (ยังปิด toggle)
+2. **error rate จริง** — reference text + diff (เช่น พิมพ์ประโยคมาตรฐานแล้วเทียบ) + installer/Steam/itch
 3. **P2 ที่เหลือ (เล็ก)** — pivot clamp แบบ per-monitor/mixed-DPI (ตอนนี้ clamp ด้วย virtual desktop เดียว)
 
 ### 4.4 รัน / ตรวจ
@@ -151,11 +155,11 @@ crates\rnitype-app\run.ps1 --demo --settings --seconds 30  # HUD จาก state
 ```
 
 ```powershell
-cargo test --workspace                      # 213 tests
+cargo test --workspace                      # 219 tests
 node tools/contracts/validate.mjs           # 12/12
 node tools/tests/hud-smoke.mjs              # 54/54 (ม็อกอัป)
 node tools/tests/hud-typography.mjs         # 36/36 + screenshot
-node tools/tests/settings-smoke.mjs         # 28/28 + screenshot Settings
+node tools/tests/settings-smoke.mjs         # 29/29 + screenshot Settings
 ```
 
 - Tray: **คลิกซ้าย = Settings** · คลิกขวา = Pause typing / Settings… / Quit
@@ -218,6 +222,8 @@ node tools/tests/settings-smoke.mjs         # 28/28 + screenshot Settings
 16. **Reset (ADR-25)**: Reset languages → config `languages: []` (EN/TH กลับมา) · Reset general **ต้องไม่ลบ exclusion** · Reset all คืนทั้งไฟล์
 17. **Usage stats (ADR-26)**: เปิด Settings → General → พิมพ์ด้วยจอยจริง ~1 นาที → Characters/WPM ต้องขยับ · log ต้องมี `[stats] chars=… wpm=… step avg=… max=… uptime=…` ทุก 10 วิ · รายงาน WPM ไทย/อังกฤษเทียบเป้า 12/20
 18. **Keymap editor (ADR-27)**: Settings → Keymap → เลือก TH → กลุ่ม 1 → คลิกช่อง A (บนกลาง) → พิมพ์ `z` → Enter → จุดฟ้า + พิมพ์ด้วยจอยได้ `z` · Reset group → กลับ `ก` · สลับ Base/Layer 2 แล้วแก้ layer 2 ได้ · Restart แอปแล้วค่าต้องอยู่
+19. **Universal layout (ADR-28)**: ติดตั้งภาษา RU/EL ใน Windows → Settings → Languages เปิด RU → วงภาษามี `RU` · พิมพ์ด้วยจอยต้องได้ `ф`/`α` ตามตำแหน่ง QWERTY (a→ф, q→й) · แท็บ Keymap เลือก RU แล้วเห็นตารางที่สร้างมาและแก้ได้
+20. **CPU/RAM (ADR-29)**: เปิด `--pad-log`/Settings → Footprint ต้องเห็น CPU ~0–5% ตอน idle, Memory ~30–80 MB · `[stats]` มี `cpu=…% rss=… MB corrections=…`
 
 ### 4.9 P2 slice 4 (2026-11-16) — ✅ ปิดแล้ว (ADR-23)
 
@@ -273,6 +279,27 @@ node tools/tests/settings-smoke.mjs         # 28/28 + screenshot Settings
 | E2E จริง | `[keymap] th L1 G0 S0 = "z"` → runtime พิมพ์ `[type] z` → reset → กลับ `[type] ก` |
 | ตัวเลข | cargo **213** (core 100 · win 56 · app 57) · settings-smoke **28/28** · schema 12/12 |
 
+### 4.14 P5 slice 4 (2026-11-16) — ✅ ปิดแล้ว (ADR-28)
+
+| เรื่อง | ผล |
+| --- | --- |
+| Core | `Keymap` dynamic + `LangSlot { code, label, keymap }` · `TypingPipeline` table/profile · override key ด้วย `code` |
+| Win | `build_keymap(klid)`: EN reference → `VkKeyScanExW` + `ToUnicodeEx` ตาม HKL เป้าหมาย · ตรวจ lang id กัน KLID ปลอม |
+| App | `language_slots()` สร้างตารางให้ layout ที่เปิด (เก็บ klid/label/kind ตอน enable) · mode `"ru"` เปิดได้ · IME ยังปิด |
+| Keymap | `keymap_payload` ใช้ตารางจริงของ RU/EL · แก้/Reset ได้เหมือน EN/TH |
+| E2E จริง | config mode=ru + fake pad → `[type] ф к и Э 5` · WebView: `get_keymap ru` → `ф`/`Ф`, set `z` → `z`, reset → `ф` |
+| ตัวเลข | cargo **219** (core 101 · win 58 · app 60) · settings-smoke **29/29** |
+
+### 4.15 P6 slice 2 (2026-11-16) — ✅ ปิดแล้ว (ADR-29)
+
+| เรื่อง | ผล |
+| --- | --- |
+| CPU | `GetProcessTimes` delta / wall → % (เฉพาะโปรเซส RniType) |
+| Memory | `K32GetProcessMemoryInfo` WorkingSet → MB |
+| Corrections | นับ Backspace ที่ส่ง (`Session::backspaces`) — proxy ของ error rate |
+| แสดงผล | `[stats]` + การ์ด Footprint (CPU / Memory / Corrections) ใน General |
+| หลักฐานจริง | `[stats] chars=15 wpm=3.0 actions=15 corrections=0 step avg=0.004 ms max=0.729 ms cpu=3.1% rss=32 MB uptime=10s` |
+
 ## 5. คำถามที่ยังค้าง
 
 | # | เรื่อง | ข้อเสนอ |
@@ -287,7 +314,7 @@ Q1, Q2, Q5, Q15, Q16, Q17 = ตัดสินแล้ว
 ## 6. Environment & เคล็ดลับ debug
 
 - vault = `D:\Erin's Works\Programming\RniType` — เขียนเฉพาะในนี้ · MCP `nizylanote` เรียก `vault_info` ก่อนเขียน
-- **Git**: commit ก่อน session นี้ `4cba441` (handoff v0.8) · P5 slice 2 = `d3f17a2` · P6 slice 1 = `c3a7404` · P5 slice 3 = `741a60c` (+ docs commit ถัดจากนั้น) · commit งานเป็นชุด `feat(...)` + `docs(...)` (`.nznote/`, `.opencode/` ถูก ignore)
+- **Git**: commit ก่อน session นี้ `4cba441` (handoff v0.8) · P5 slice 2 = `d3f17a2` · P6 slice 1 = `c3a7404` · P5 slice 3 = `741a60c` · universal + P6 slice 2 = `31df934` (+ docs commit ถัดจากนั้น) · commit งานเป็นชุด `feat(...)` + `docs(...)` (`.nznote/`, `.opencode/` ถูก ignore)
 - **เทอร์มินัล cp874** → log ไทยใน console เป็น `???` (ไม่ใช่บั๊ก) · ไฟล์เป็น UTF-8
 - **PowerShell กิน `--` ตัวแรก** → `run.ps1` เติมให้แล้ว ใช้ `run.ps1 --seconds 30`
 - `Chrome_WidgetWin_0 ... 1412` ตอนปิด = WebView2 noise ไม่มีผล
@@ -299,6 +326,10 @@ Q1, Q2, Q5, Q15, Q16, Q17 = ตัดสินแล้ว
 - **latency** วัดฝั่งเรา (`session.step`) ไม่รวมเวลา OS/เกมประมวลผลคีย์
 - **Keymap editor** แก้ได้เฉพาะ EN/TH (มีตารางใน core) · ภาษาอื่นยัง `Needs mapping` จนมี universal QWERTY
 - override เก็บเป็น diff (`<layer>-<g>-<s>`) ไม่ใช่ตารางเต็ม — config ที่เขียนมือต้องใช้รูปแบบนี้
+- **IME (JA/ZH/KO) ยังเปิดไม่ได้** — toggle ตอบ `LANG_NOT_FOUND`; ต้องทำ passthrough scancode ก่อน
+- **universal table** สร้างจาก KLID ของ layout ที่ติดตั้ง/โหลดได้ · ถ้า Windows ไม่มี layout นั้นจริง ๆ จะไม่มีแถวให้เปิด (เขียน config เองได้ถ้ามี KLID)
+- **CPU ที่แสดงไม่รวม WebView2 child** — ตัวเลข Task Manager จะสูงกว่านี้
+- **corrections ≠ error rate** — เป็นจำนวน Backspace เท่านั้น ยังไม่มี diff กับข้อความอ้างอิง
 - **Chrome headless**: `C:\Users\User\AppData\Local\ms-playwright\chromium-1208\chrome-win64\chrome.exe` (`CHROME_PATH`)
 - เครื่องนี้ 2 จอ: virtual desktop 3840×1080 เริ่มที่ x = −1920 · จอหลัก 1920×1080 (pivot เริ่มที่กลางจอหลัก)
 
