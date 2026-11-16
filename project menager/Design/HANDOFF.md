@@ -1,11 +1,11 @@
 ---
 title: HANDOFF — RniType (อ่านก่อนเริ่ม session ใหม่)
-status: v0.7
+status: v0.8
 updated: 2026-11-16
 tags: [handoff]
 ---
 
-# HANDOFF — RniType v0.7 (2026-11-16)
+# HANDOFF — RniType v0.8 (2026-11-16)
 
 > เอกสารนี้ทำให้ session ใหม่ทำงานต่อได้ใน \~5 นาที · อ่านจบ = รู้ทุกอย่างที่จำเป็น
 
@@ -15,11 +15,11 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2 slice 4 · visual refresh (ADR-22) · P3/P4/P5 slice 1 · runtime จอยจริงต่อได้และพิมพ์ได้ — 166 tests** |
-| สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, XInput) + `SendInput` |
+| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · visual refresh (ADR-22) · P4/P5 slice 1 · runtime จอยจริงต่อได้และพิมพ์ได้ — 188 tests** |
+| สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, XInput) + `SendInput` (auto scancode/Unicode) |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
-| งานถัดไป | **P3 ที่เหลือ** (exclusion/UIPI, scancode/IME, timer) หรือ **P5 Settings** (General/Languages/Keymap) |
-| ค้างยืนยัน | owner ต้อง retest หลังแก้ "UI ค้างจอ" (ADR-20) + ตรวจ quick bar/caret/sticky drag/pivot clamp บนจอยจริง — ดู §4.8 |
+| งานถัดไป | **P5 Settings** (General/Languages/Keymap + exclusion UI) หรือ **P6** วัด WPM/latency |
+| ค้างยืนยัน | owner retest ADR-20 (UI ค้างจอ) + quick bar/caret/sticky drag + **exclusion guard/scancode บนแอปจริง** — ดู §4.8 |
 
 ## 2. การตัดสินใจที่ล็อกแล้ว (ห้ามถามซ้ำ)
 
@@ -44,6 +44,7 @@ tags: [handoff]
 20. **P2 slice 3**: Mouse = สูตร deadzone 0.15/gamma 1.7/vmax 1600/smoothing 0.5 (LT ×0.3 · LB ×1.8) · Nav LS 900 / RS 320 px/s · auto-repeat 350/90 ms (ดัน RS กลับทิศเดิมหลัง commit) · layer 2 = RB/RT (ค้าง = ชั่วคราว · แตะ < 280 ms โดยไม่พิมพ์ = ล็อก) · A double-tap 280 ms = Enter (Space แรกออกแล้ว) · B hold 400 ms = Ctrl+Backspace · Y hold = Esc — [[21-mouse-nav-repeat-layer2]]
 21. **Visual language (ADR-22)**: accent เดียว **Apple blue `#0A84FF`** · mode = Type blue / Mouse orange / Nav purple · HUD = แผ่นทึบ `.88` + ขอบสองชั้น **ไม่มี `backdrop-filter`** · active wedge = fill + stroke 2px + dim อื่น **0 ms** · pill 28px + dot สีโหมด + idle 3 วิ · Settings = sidebar 200px + inset group (760×640) · motion 80/140 ms + reduced-motion — [[05-visual-language]] · [[22-visual-refresh-apple-style]]
 22. **P2 slice 4 (ADR-23)**: **Quick bar = LB ค้าง 150 ms** (แตะสั้นไม่เปิด · ปล่อย LB = ปิด · ดัน LS = ปิดแล้วพิมพ์ Ctrl+ตัวอักษร) ช่อง ↑Copy ↗Paste →Cut ↘Undo ↓Redo ↙Select All ←Save ↖Alt+Tab · **caret = R3** (RS = ลูกศร 350/90 ms · R3×2 < 280 ms = Shift+ลูกศร · ไม่มีวง เหลือกากบาท) · **sticky drag = RB 2 แตะ** ใน Mouse (แตะอีกครั้ง = ปล่อย; session ปล่อยปุ่มให้เมื่อสลับ mode) · **pivot clamp ฝั่งแอป** margin 172×`hudScale` จากขอบ virtual desktop · `KeyPress` มี `alt` แล้ว — [[23-quickbar-caret-sticky-drag-pivot-clamp]]
+23. **P3 slice 2 (ADR-24)**: **exclusion/UIPI guard** ตรวจ foreground ทุก 250 ms → exe ใน `system.exclusion` หรือ target elevated → หยุด `session.step`, HUD `disabled` + เหตุผล, กลับมาเป็น mode เดิม · **scancode path อัตโนมัติ** (`VkKeyScanExW` + `MapVirtualKeyExW` ตาม HKL ของ foreground) → เกม/IME เห็นเหมือนคีย์บอร์ดจริง, พิมพ์ไม่ได้ = Unicode fallback, `--no-scancode` ปิดได้ · **`timeBeginPeriod(1)`** ระหว่างรัน loop — [[24-target-guard-scancode-timer]]
 
 ## 3. โครงสร้างไฟล์
 
@@ -75,7 +76,8 @@ project menager/
    │  ├─ 20-hud-state-delivery.md ← ADR-20 resend/heartbeat/single instance
    │  ├─ 21-mouse-nav-repeat-layer2.md ← ADR-21 mouse/Nav math · repeat · layer 2 · double-tap/hold
    │  ├─ 22-visual-refresh-apple-style.md ← ADR-22 tokens/HUD plate/Settings sidebar
-   │  └─ 23-quickbar-caret-sticky-drag-pivot-clamp.md ← ADR-23 quick bar/caret/sticky drag/pivot clamp
+   │  ├─ 23-quickbar-caret-sticky-drag-pivot-clamp.md ← ADR-23 quick bar/caret/sticky drag/pivot clamp
+   │  └─ 24-target-guard-scancode-timer.md ← ADR-24 exclusion/UIPI · scancode · 1 ms timer
    └─ 05-mockup/
       ├─ hud-prototype/        ← ม็อกอัป HUD v0.11 (อ้างอิงดีไซน์ ไม่ใช่ของจริง)
       └─ hud-shots/            ← screenshot ตรวจรับ (100%/150% DPI, overlay จริง, Settings, runtime)
@@ -91,7 +93,10 @@ project menager/
 | `crates/rnitype-app/src/config.rs` | `%APPDATA%\RniType\config.json` + `ui_style()` / `hud_scale()` / `validate_ui()` |
 | `crates/rnitype-core/src/{runtime,typing,keymap,gesture,normalizer}.rs` | state machine, keymap EN/TH (ชั้น 1+2), sector tracker, auto-repeat |
 | `crates/rnitype-core/src/pointer.rs` | Mouse math (deadzone/gamma/vmax/smoothing) · Nav pivot · scroll |
-| `crates/rnitype-win/src/plan.rs` | `Action` → SendInput plan (**Ctrl+ASCII = VK**) |
+| `crates/rnitype-win/src/plan.rs` | `Action` → SendInput plan (**Ctrl+ASCII = VK** · `plan_scancode`) |
+| `crates/rnitype-win/src/sendinput.rs` | Windows sender: Unicode/VK/**scancode** ของ HKL เป้าหมาย |
+| `crates/rnitype-win/src/target.rs` | foreground exe + elevated (exclusion/UIPI guard) |
+| `crates/rnitype-win/src/timer.rs` | `timeBeginPeriod(1)` แบบ RAII |
 | `ui/hud/{index.html,hud.css,hud.js}` | HUD จริง — วาดจาก `hud:state` · typography จาก `hud:style` |
 | `ui/settings/*` | Settings window (แท็บ HUD: Text size / Ring size / Font / Reset) |
 | `ui/shared/{tokens.css,fonts.css,fonts.js,fonts/*.ttf}` | สี + ฟอนต์ (IBM Plex Sans Thai + Noto Sans Thai + OFL) |
@@ -113,17 +118,16 @@ project menager/
 | Track | ทำแล้ว | เหลือ |
 | --- | --- | --- |
 | P2 core | วงคำสั่ง/วงภาษา/mode/shift/face buttons + **slice 3: mouse math, Nav pivot, auto-repeat, layer 2, double-tap/hold** + **slice 4: quick bar, caret nav, sticky drag, pivot clamp** (98 tests) | — (P2 ปิด; เหลือแค่ mixed-DPI) |
-| P3 win | SendInput Unicode/VK/mouse + **HWheel** + Ctrl+ASCII→VK + **Alt (Alt+Tab)** (37 tests) | scancode/IME, exclusion/UIPI |
+| P3 win | SendInput Unicode/VK/mouse + **HWheel** + Ctrl+ASCII→VK + **Alt** + **scancode auto** + **exclusion/UIPI guard** + **1 ms timer** (53 tests) | Settings UI สำหรับ exclusion · Task Scheduler/"Run as admin" (P5/P6) |
 | P4 HUD | renderer ครบ mode + overlay + typography + **visual refresh ADR-22** + **quickbar/caret mode** + `HudState` จริง (+ `layer`/`repeat`/`pointer`) (36 checks) | latency, pivot per-monitor/mixed-DPI |
-| Runtime | `input.rs` + `session.rs` + tray Pause + resend/heartbeat + single instance + **mouse/Nav recenter/reset** + **sticky-drag safety release** + **pivot clamp** | ทดสอบ mouse/Nav/quickbar/caret กับจอยจริง |
+| Runtime | `input.rs` + `session.rs` + tray Pause + resend/heartbeat + single instance + **mouse/Nav recenter/reset** + **sticky-drag safety release** + **pivot clamp** + **guard/pause คืน mode เดิม** | ทดสอบ mouse/Nav/quickbar/caret กับจอยจริง |
 | P5 Settings | slice 1: หน้าต่าง + แท็บ HUD + persist config | แท็บ General/Languages/Keymap, rescan HKL, profiles |
 
 ### 4.3 ขั้นถัดไป (เรียง)
 
-1. **P3 ที่เหลือ** — exclusion list/UIPI (กันเกม), scancode/IME path, `timeBeginPeriod(1)`
-2. **P5 Settings ที่เหลือ** — General/Languages/Keymap + rescan HKL + keymap editor
-3. **P6** — วัด WPM/latency, ทดสอบคนจริง, installer/Steam/itch
-4. **P2 ที่เหลือ (เล็ก)** — pivot clamp แบบ per-monitor/mixed-DPI (ตอนนี้ clamp ด้วย virtual desktop เดียว)
+1. **P5 Settings ที่เหลือ** — General/Languages/Keymap + **exclusion list UI** + rescan HKL + keymap editor
+2. **P6** — วัด WPM/latency, ทดสอบคนจริง, installer/Steam/itch, Task Scheduler/"Run as admin"
+3. **P2 ที่เหลือ (เล็ก)** — pivot clamp แบบ per-monitor/mixed-DPI (ตอนนี้ clamp ด้วย virtual desktop เดียว)
 
 ### 4.4 รัน / ตรวจ
 
@@ -131,11 +135,12 @@ project menager/
 crates\rnitype-app\run.ps1 --seconds 120              # จอยจริง
 crates\rnitype-app\run.ps1 --fake-pad --seconds 20    # จอยปลอม (จะพิมพ์ลงหน้าต่างที่ focus)
 crates\rnitype-app\run.ps1 --pad-log --seconds 60     # log ค่าจอยทุก 250 ms
+crates\rnitype-app\run.ps1 --no-scancode --seconds 30 # บังคับ Unicode path (ถ้าเกม/IME มีปัญหา)
 crates\rnitype-app\run.ps1 --demo --settings --seconds 30  # HUD จาก state ตัวอย่าง
 ```
 
 ```powershell
-cargo test --workspace                      # 166 tests
+cargo test --workspace                      # 188 tests
 node tools/contracts/validate.mjs           # 12/12
 node tools/tests/hud-smoke.mjs              # 54/54 (ม็อกอัป)
 node tools/tests/hud-typography.mjs         # 36/36 + screenshot
@@ -192,6 +197,10 @@ node tools/tests/hud-typography.mjs         # 36/36 + screenshot
 7. **Caret nav (ADR-23)**: Type → กด R3 = pill `Caret · ลูกศร` (ไม่มีวง) → RS ←/→ เลื่อน caret · ค้าง = repeat · กด R3 เร็ว ๆ 2 ครั้ง = `เลือกข้อความ` แล้ว RS = Shift+ลูกศร · กด R3 ครั้งเดียว (พ้น 280 ms) = ปิด
 8. **Sticky drag (ADR-23)**: Mouse → แตะ RB 2 ครั้งเร็ว ๆ → badge `Drag` → RS ลาก → แตะ RB อีกครั้ง = ปล่อย (ตรวจว่าไม่มีเมาส์ค้าง)
 9. **Pivot clamp (ADR-23)**: Nav → ดัน LS จนสุดขอบจอ → วงต้องหยุดก่อนล้นขอบ (margin 172×hudScale) · R3 = กลับจุดเริ่มต้น
+10. **Scancode (ADR-24)**: เปิด Notepad (layout EN) → พิมพ์ `a` → ต้องได้ `a` · สลับ layout เป็นไทยแล้วพิมพ์ `ก` → ต้องได้ `ก` · ถ้าเกมอ่านคีย์ไม่ได้ ให้ลอง `run.ps1 --no-scancode` เพื่อเทียบ
+11. **Exclusion guard (ADR-24)**: เพิ่ม `"system": { "exclusion": ["notepad.exe"] }` ใน `%APPDATA%\RniType\config.json` → โฟกัส Notepad → pill ต้องเป็น `Paused · แอปนี้อยู่ในรายการกัน` และพิมพ์ไม่ออก · สลับไปหน้าต่างอื่น → กลับมาพิมพ์ได้ mode เดิม
+12. **UIPI (ADR-24)**: เปิด Task Manager (elevated) แล้วโฟกัส → pill `Paused · ต้องรันแบบ admin` · ปิด Task Manager → กลับมาทำงาน
+13. **Timer (ADR-24)**: เปิด `--pad-log` ต้องเห็น `[timer] 1 ms resolution: เปิด` และ `[pad-log]` อัปเดตทุก ~250 ms
 
 ### 4.9 P2 slice 4 (2026-11-16) — ✅ ปิดแล้ว (ADR-23)
 
@@ -203,6 +212,16 @@ node tools/tests/hud-typography.mjs         # 36/36 + screenshot
 | Pivot clamp | `Session::set_pivot_clamp` — margin 172×`hudScale` รอบ virtual desktop · clamp ตอน Move/Reset/เริ่มต้น |
 | Contract | `mode` เพิ่ม `quickbar`/`caret` · sample +2 → **12/12** · HUD แสดง quickbar ด้วย `inner.kind = command` |
 | ตัวเลข | cargo **166** (core 98 · win 37 · app 31) · typography **36/36** · hud-smoke 54/54 |
+
+### 4.10 P3 slice 2 (2026-11-16) — ✅ ปิดแล้ว (ADR-24)
+
+| เรื่อง | ผล |
+| --- | --- |
+| Exclusion / UIPI guard | `target.rs`: foreground exe (basename, wildcard `*?`) + token elevated · ตรวจทุก 250 ms · ถูกกัน = ไม่เรียก `session.step`, HUD `disabled` + `แอปนี้อยู่ในรายการกัน` / `ต้องรันแบบ admin` · กลับมาแล้วคืน mode เดิม |
+| Scancode path | `plan_scancode` + `VkKeyScanExW`/`MapVirtualKeyExW` ตาม HKL ของ foreground · Ctrl/Alt chord + NamedKey ยังเป็น VK · พิมพ์ไม่ได้ = Unicode fallback · `--no-scancode` ปิด |
+| Timer | `timeBeginPeriod(1)` แบบ RAII ใน runtime thread · log `[timer] 1 ms resolution: เปิด` |
+| Bug fix | tray Pause/unpause คืน mode เดิม (เดิม unpause แล้วพิมพ์ต่อไม่ได้) + ไม่รีเซ็ต deadman ระหว่าง emergency |
+| ตัวเลข | cargo **188** (core 98 · win 53 · app 37) · log จริง: `[timer] เปิด`, `[inject] auto scancode`, พิมพ์ไทยผ่าน |
 
 ## 5. คำถามที่ยังค้าง
 
@@ -218,10 +237,12 @@ Q1, Q2, Q5, Q15, Q16, Q17 = ตัดสินแล้ว
 ## 6. Environment & เคล็ดลับ debug
 
 - vault = `D:\Erin's Works\Programming\RniType` — เขียนเฉพาะในนี้ · MCP `nizylanote` เรียก `vault_info` ก่อนเขียน
-- **Git**: commit ก่อน session นี้ `72ed7dc` (handoff v0.5) · งาน P2 slice 4 = `41f6ae0` · commit งานเป็นชุด `feat(...)` + `docs(...)` (`.nznote/`, `.opencode/` ถูก ignore)
+- **Git**: commit ก่อน session นี้ `9fb6c4d` (handoff v0.7) · P3 slice 2 = `10d4db4` · commit งานเป็นชุด `feat(...)` + `docs(...)` (`.nznote/`, `.opencode/` ถูก ignore)
 - **เทอร์มินัล cp874** → log ไทยใน console เป็น `???` (ไม่ใช่บั๊ก) · ไฟล์เป็น UTF-8
 - **PowerShell กิน `--` ตัวแรก** → `run.ps1` เติมให้แล้ว ใช้ `run.ps1 --seconds 30`
 - `Chrome_WidgetWin_0 ... 1412` ตอนปิด = WebView2 noise ไม่มีผล
+- **scancode path** ใช้ HKL ของหน้าต่างที่ focus — ถ้าเกม/IME พิมพ์เพี้ยน ใช้ `--no-scancode` แล้วรายงาน HKL กับชื่อเกม
+- **guard** ตรวจทุก 250 ms — ระหว่างถูกกัน `[pad-log]` ยังเดินแต่ไม่มี `[type]` ออก
 - **Chrome headless**: `C:\Users\User\AppData\Local\ms-playwright\chromium-1208\chrome-win64\chrome.exe` (`CHROME_PATH`)
 - เครื่องนี้ 2 จอ: virtual desktop 3840×1080 เริ่มที่ x = −1920 · จอหลัก 1920×1080 (pivot เริ่มที่กลางจอหลัก)
 

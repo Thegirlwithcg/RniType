@@ -49,7 +49,7 @@ tags: [plan, testing]
 | `tools/contracts/validate.mjs` | ตรวจ `hud-state.samples.json` + `config.sample.json` กับ schema | **12/12** |
 | `tools/tests/hud-smoke.mjs` | ขับม็อกอัป v0.11 ด้วย CDP (วง/คำสั่ง/โหมด/สถานะ) | **54/54** |
 | `tools/tests/hud-typography.mjs` | ตรวจขนาดขั้นต่ำ/การชนกัน/contrast/emphasis + quick bar/caret + screenshot 100%–150% DPI | **36/36** |
-| `cargo test --workspace` | core 98 · win 37 · app 31 (config/input/session) | **166/166** |
+| `cargo test --workspace` | core 98 · win 53 · app 37 (config/input/session) | **188/188** |
 
 **ชุดประโยคทดสอบ**: ใช้ 500 phrases ของ MacKenzie & Soukoreff (มาตรฐานงานวิจัย text entry)
 → ผลของเราจะเทียบกับงานวิจัย (TwoStick 13–14.9 WPM) ได้ตรงๆ
@@ -68,6 +68,7 @@ tags: [plan, testing]
 | 2026-11-16 | P2 slice 3 | — | — | — | — | Mouse math (1600 px/s · gamma 1.7 · smooth 0.5) · Nav pivot 900/320 · repeat 350/90 ms · layer 2 · double-tap/hold · 145 tests · ยังไม่วัด WPM |
 | 2026-11-16 | UX refresh | — | — | — | — | ADR-22: Apple-style tokens · HUD plate .88 (no blur) · active 0 ms · pill 28px · Settings sidebar 760×640 · hud-smoke 54/54 · typography 30/30 |
 | 2026-11-16 | P2 slice 4 | — | — | — | — | ADR-23: Quick bar LB (8 ช่อง + Alt+Tab) · caret R3 (350/90 ms, R3×2 = select) · sticky drag RB×2 · pivot clamp 172×scale · **166 tests** · contracts 12/12 · typography 36/36 |
+| 2026-11-16 | P3 slice 2 | — | — | — | — | ADR-24: exclusion/UIPI guard (250 ms) · scancode auto ตาม HKL + Unicode fallback · `timeBeginPeriod(1)` · tray unpause คืน mode · **188 tests** · log `[timer] เปิด`/`[inject] auto scancode` |
 
 ## 5. ความเสี่ยงและทางถอย
 

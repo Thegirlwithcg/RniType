@@ -71,7 +71,7 @@ tags: [architecture, windows, rust, tauri]
 
 ## 3. การส่งคีย์ (สำคัญที่สุดของแอปนี้)
 
-**สองเส้นทาง เลือกอัตโนมัติ**
+**สองเส้นทาง เลือกอัตโนมัติ** (implemented P3 slice 2 — [[24-target-guard-scancode-timer]])
 
 1. **Scancode/VK path** (ค่าเริ่มต้น) — แปลงตัวอักษร → `(VK, shift)` ด้วย `VkKeyScanEx`
    ของ layout ที่ active; ส่ง `KEYEVENTF_SCANCODE` → พฤติกรรมเหมือนพิมพ์จริง
