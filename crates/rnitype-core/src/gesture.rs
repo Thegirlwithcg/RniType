@@ -314,13 +314,12 @@ impl GestureEngine {
 
 /* ---------------- Fast mode (ADR-32 / ADR-33) ---------------- */
 //
-// Fast mode v2 = "push-through" (ADR-33)
-//   HIDDEN   : ยังไม่มี UI · A ไม่ทำอะไร · B = Backspace (runtime)
-//   CATEGORY : เอียง LS กลาง ๆ (0.30–0.75) = เลือกหมวด · วงนอกยังไม่ไฮไลต์
-//   LETTER   : ดันสุด (≥ 0.85 ค้าง 60 ms) = ล็อกหมวด แล้ว LS เลือกตัวอักษร · A = พิมพ์
+// Fast mode v3 = "tilt-then-sweep" (owner 2026-11-17, แทน push-through ของ ADR-33)
+//   HIDDEN : ยังไม่มี UI · A = พิมพ์ตัวที่ไฮไลต์ล่าสุด (ถ้ามี) · B = Backspace (runtime)
+//   LETTER : ทิศแรกที่โยก LS ออกจากศูนย์ = หมวด (ล็อก) · เอียงแรง (≥ 0.70) แล้วเลื่อน = เลือกตัวอักษร · A = พิมพ์
+//   CATEGORY: ถึงได้จาก B (ย้อน) หรือ D-pad เท่านั้น
 //
-// - ดึงกลับ < 0.70 = กลับไปเลือกหมวดโดยไม่ต้องผ่านศูนย์
-// - LS ศูนย์ค้าง 250 ms = ซ่อน UI + ล้างหมวด (กัน spring-back สร้างทิศผี)
+// - LS กลับศูนย์ 40 ms = ล้างหมวด + ซ่อน UI ทันที (เปลี่ยนหมวด = ปล่อยแล้วโยกทิศใหม่)
 // - D-pad ↑/↓ = ±1 · → = เข้าลึก/หมวดถัดไป · ← หรือ B = ย้อน 1 ระดับ (runtime)
 // - เจ้าของเมนู = ตัวที่ขยับล่าสุด · LS แย่งกลับเมื่อ r > 0.5 และข้าม sector
 // - `letterPick: "dpad"` = พฤติกรรม 0.2.5: LS เปลี่ยนหมวดได้ตลอด · D-pad เลือกตัวอักษร
@@ -329,22 +328,16 @@ impl GestureEngine {
 pub const FAST_CENTER_IN: f32 = 0.20;
 /// โซนหมวด: เริ่มที่ค่านี้
 pub const FAST_CENTER_OUT: f32 = 0.30;
-/// โซนตัวอักษร: ต้องดันถึงค่านี้
-pub const FAST_LETTER_IN: f32 = 0.85;
-/// ออกจากโซนตัวอักษรเมื่อต่ำกว่านี้
+/// เลื่อนหาตัวอักษรได้เมื่อเอียงถึงค่านี้
 pub const FAST_LETTER_OUT: f32 = 0.70;
-/// หมวดต้องนิ่งกี่ ms ก่อน latch
+/// ต้องโยกออกจากศูนย์กี่ ms ก่อนล็อกหมวด
 pub const FAST_LATCH_MS: u32 = 60;
 /// อยู่ศูนย์ต่อเนื่องกี่ ms แล้วซ่อน UI
 pub const FAST_CENTER_RESET_MS: u32 = 40;
-/// อยู่ศูนย์ต่อเนื่องกี่ ms แล้วล้างการเลือกจริง (ยังกด A พิมพ์ตัวที่เลือกไว้ได้ก่อนหน้านี้)
-pub const FAST_RESET_MS: u32 = 1500;
 /// ละเว้นทิศหลังเข้าศูนย์ (กัน spring-back)
 pub const FAST_DIR_IGNORE_MS: u32 = 80;
 /// กันกด A รัวหลังเปลี่ยนโซน — A ที่กดในช่วงนี้ถูก "เก็บไว้" พิมพ์ทีหลัง ไม่ถูกทิ้ง (v0.3.5)
 pub const FAST_LOCKOUT_MS: u32 = 100;
-/// อยู่ระหว่าง 0.20–0.70 นานเท่านี้ถึงนับว่า "ดึงกลับ" (ต่ำกว่า = Analog เด้งกลับศูนย์ ไม่ล้างช่อง)
-pub const FAST_PULLBACK_MS: u32 = 100;
 /// A ใช้ช่องที่ไฮไลต์ก่อนกดภายในเวลานี้ (anti-flick)
 pub const FAST_LOOKBACK_MS: u32 = 40;
 /// เมนูที่ขับด้วย D-pad และไม่มี input = ซ่อน
@@ -432,8 +425,6 @@ pub struct FastGesture {
     sector_age_ms: u32,
     phase_ms: u32,
     quiet_ms: u32,
-    /// เวลาที่ LS อยู่ช่วงกลาง (CENTER_IN..LETTER_OUT) ขณะอยู่โซนตัวอักษร
-    band_ms: u32,
     /// A ที่กดตอนยังติด lockout / ตอนกำลัง latch — พิมพ์ทันทีเมื่อพร้อม (ไม่ถูกทิ้ง)
     pending_accept: bool,
     /// ช่องที่ไฮไลต์ถูกพิมพ์ไปแล้ว (ยังดัน LS ค้างเลยคงไฮไลต์ไว้) — พอปล่อย LS A ต้องเป็น Space
@@ -462,7 +453,6 @@ impl FastGesture {
             sector_age_ms: u32::MAX,
             phase_ms: 0,
             quiet_ms: 0,
-            band_ms: 0,
             pending_accept: false,
             consumed: false,
             radius: 0.0,
@@ -512,7 +502,7 @@ impl FastGesture {
 
     /// UI ถูกซ่อนเพราะปล่อย Analog แล้ว (แต่ยังพิมพ์ตัวที่เลือกไว้ได้)
     pub fn ui_hidden(&self) -> bool {
-        self.ui_hidden
+        self.ui_hidden || self.zone == FastZone::Hidden
     }
 
     /// auto-repeat ไม่มีใน Fast mode (A ซ้ำ = พิมพ์ตัวเดิม)
@@ -578,7 +568,6 @@ impl FastGesture {
         self.sector_age_ms = u32::MAX;
         self.phase_ms = 0;
         self.quiet_ms = 0;
-        self.band_ms = 0;
         self.pending_accept = false;
         self.radius = 0.0;
         self.ui_hidden = false;
@@ -593,7 +582,6 @@ impl FastGesture {
         self.center_ms = 0;
         self.stable_ms = 0;
         self.quiet_ms = 0;
-        self.band_ms = 0;
         self.pending_accept = false;
         self.ui_hidden = false;
         self.ls.reset();
@@ -679,48 +667,31 @@ impl FastGesture {
                     }
                     return None;
                 }
+                // ทิศที่โยกออกจากศูนย์ = หมวด → เข้าเลือกตัวอักษรทันที (owner 2026-11-17)
                 if r > FAST_CENTER_OUT {
                     self.hold_ms = self.hold_ms.saturating_add(dt_ms);
-                    if self.hold_ms >= FAST_LATCH_MS {
-                        self.zone = FastZone::Category;
+                    if self.hold_ms >= FAST_LATCH_MS
+                        && self.ignore_ms == 0
+                        && let Some(dir) = self.ls.update(pad.ls, FAST_CENTER_OUT)
+                    {
                         self.owner = FastOwner::Stick;
+                        self.group = Some(dir);
+                        self.last_group = Some(dir);
+                        self.zone = FastZone::Letter;
                         self.phase_ms = 0;
                         self.stable_ms = 0;
+                        self.set_sector(dir);
+                        if input.accept {
+                            self.pending_accept = true;
+                        }
                     }
                 }
             }
 
             FastZone::Category => match self.owner {
+                // ถึงได้จาก B (ย้อน) เท่านั้น — ปล่อย LS กลับศูนย์แล้วค่อยเลือกหมวดใหม่
                 FastOwner::Stick => {
-                    if self.ignore_ms == 0
-                        && r >= FAST_CENTER_OUT
-                        && let Some(dir) = self.ls.update(pad.ls, FAST_CENTER_OUT)
-                        && Some(dir) != self.group
-                    {
-                        self.group = Some(dir);
-                        self.last_group = Some(dir);
-                        self.stable_ms = 0;
-                        self.last_pick = None;
-                    }
-                    if r >= FAST_LETTER_IN && self.group.is_some() {
-                        // A ที่กดระหว่างรอ latch (60 ms) ไม่ถูกทิ้ง — พิมพ์ทันทีหลังเข้าโซนตัวอักษร
-                        if input.accept && self.stable_ms > 0 {
-                            self.pending_accept = true;
-                        }
-                        self.stable_ms = self.stable_ms.saturating_add(dt_ms);
-                        if self.stable_ms >= FAST_LATCH_MS {
-                            self.zone = FastZone::Letter;
-                            self.phase_ms = 0;
-                            self.band_ms = 0;
-                            if let Some(group) = self.group {
-                                self.set_sector(group);
-                            }
-                        }
-                    } else {
-                        self.stable_ms = 0;
-                        self.pending_accept = false;
-                    }
-                    if self.center_ms >= FAST_RESET_MS {
+                    if self.center_ms >= FAST_CENTER_RESET_MS {
                         self.hide();
                     }
                 }
@@ -754,34 +725,21 @@ impl FastGesture {
                 match self.owner {
                     FastOwner::Stick => {
                         if r >= FAST_LETTER_OUT {
-                            // เปลี่ยนช่องได้เฉพาะตอนดันสุดจริง — ระหว่าง Analog เด้งกลับศูนย์ (r ลดผ่าน
-                            // 0.7→0.2) ทิศสั่นไม่มีผล จึงไม่เปลี่ยนตัวที่ไฮไลต์ไว้
-                            self.band_ms = 0;
+                            // เลื่อนหาตัวอักษรได้เฉพาะตอนเอียงแรง — ระหว่าง Analog เด้งกลับศูนย์
+                            // ทิศสั่นไม่มีผล จึงไม่เปลี่ยนตัวที่ไฮไลต์ไว้
                             if self.ignore_ms == 0
                                 && let Some(dir) = self.ls.update(pad.ls, FAST_CENTER_OUT)
                             {
                                 self.set_sector(dir);
                             }
-                        } else if r < FAST_CENTER_IN {
-                            // ปล่อย Analog = ซ่อน UI แต่ยังไม่ล้างช่องที่เลือก → A ยังพิมพ์ได้
-                            self.band_ms = 0;
-                            if self.center_ms >= FAST_RESET_MS {
-                                self.hide();
-                                return None;
+                        } else if self.center_ms >= FAST_CENTER_RESET_MS {
+                            // LS กลับศูนย์ = ล้างหมวด/เมนู · A ยังพิมพ์ตัวที่ไฮไลต์ล่าสุดได้ (last_pick)
+                            let pending = self.pending_accept || input.accept;
+                            self.hide();
+                            if pending && let Some((group, sector)) = self.last_pick.take() {
+                                return Some(FastCommit { group, sector });
                             }
-                        } else {
-                            // ช่วงกลาง: ผ่านเร็ว ๆ = เด้งกลับ (คงช่อง) · ค้างอยู่ = ดึงกลับเลือกหมวดใหม่
-                            self.band_ms = self.band_ms.saturating_add(dt_ms);
-                            if self.band_ms >= FAST_PULLBACK_MS {
-                                self.zone = FastZone::Category;
-                                self.sector = None;
-                                self.prev_sector = None;
-                                self.stable_ms = 0;
-                                self.phase_ms = 0;
-                                self.band_ms = 0;
-                                self.pending_accept = false;
-                                return None;
-                            }
+                            return None;
                         }
                     }
                     FastOwner::Dpad => {
@@ -1128,7 +1086,7 @@ mod tests {
         f.tick(&pad(ls, (0.0, 0.0)), 4, none())
     }
 
-    /// ดัน LS กลาง ๆ 80 ms → CATEGORY
+    /// โยก LS 80 ms → ล็อกหมวด (LETTER)
     fn category(f: &mut FastGesture, dir: (f32, f32)) {
         for _ in 0..20 {
             step(f, dir);
@@ -1144,7 +1102,7 @@ mod tests {
     }
 
     #[test]
-    fn hidden_needs_60ms_and_a_does_nothing_in_category() {
+    fn the_tilt_direction_picks_the_group_then_moving_picks_the_letter() {
         let mut f = fast();
         assert_eq!(f.zone(), FastZone::Hidden);
 
@@ -1154,13 +1112,16 @@ mod tests {
         }
         assert_eq!(f.zone(), FastZone::Hidden);
 
+        // โยกครบ = ทิศนั้นเป็นหมวด และเข้าเลือกตัวอักษรเลย (ไม่ต้องดันสุด)
         category(&mut f, (0.0, 0.5));
-        assert_eq!(f.zone(), FastZone::Category);
+        assert_eq!(f.zone(), FastZone::Letter);
         assert_eq!(f.group(), Some(Dir8::N));
-        assert_eq!(f.sector(), None, "วงนอกยังไม่ไฮไลต์ช่อง");
+        assert_eq!(f.sector(), Some(Dir8::N));
 
-        // A ในจังหวะหมวด (เจ้าของ = LS) ต้องไม่พิมพ์
-        assert_eq!(f.tick(&pad((0.0, 0.5), (0.0, 0.0)), 4, accept()), None);
+        // เลื่อนไปทางขวา = เปลี่ยนตัวอักษร หมวดเดิม
+        step(&mut f, (0.9, 0.0));
+        assert_eq!(f.group(), Some(Dir8::N));
+        assert_eq!(f.sector(), Some(Dir8::E));
     }
 
     #[test]
@@ -1237,23 +1198,25 @@ mod tests {
     }
 
     #[test]
-    fn pulling_back_returns_to_category_and_lets_the_group_change() {
+    fn returning_to_centre_clears_the_group_and_a_new_tilt_picks_a_new_one() {
         let mut f = fast();
         letter(&mut f, (0.0, 0.9));
-        assert_eq!(f.zone(), FastZone::Letter);
+        assert_eq!(f.group(), Some(Dir8::N));
 
-        // ดึงกลับ < 0.70 แล้วค้างอยู่ช่วงกลาง ≥ 100 ms → CATEGORY, ไม่ต้องผ่านศูนย์
-        for _ in 0..30 {
-            step(&mut f, (0.0, 0.5));
+        // กลับศูนย์ 40 ms = ล้างหมวด/เมนู
+        for _ in 0..12 {
+            step(&mut f, (0.0, 0.0));
         }
-        assert_eq!(f.zone(), FastZone::Category);
-        assert_eq!(f.sector(), None);
+        assert_eq!(f.zone(), FastZone::Hidden);
+        assert_eq!(f.group(), None);
+        assert!(f.ui_hidden());
 
-        // หมุนไปทางขวา = เปลี่ยนหมวดได้ทันที
-        for _ in 0..10 {
+        // โยกทิศใหม่ = หมวดใหม่
+        for _ in 0..25 {
             step(&mut f, (0.6, 0.0));
         }
         assert_eq!(f.group(), Some(Dir8::E));
+        assert_eq!(f.sector(), Some(Dir8::E));
     }
 
     #[test]
@@ -1267,8 +1230,7 @@ mod tests {
             step(&mut f, (0.0, 0.0));
         }
         assert!(f.ui_hidden());
-        assert_eq!(f.zone(), FastZone::Letter);
-        assert_eq!(f.sector(), Some(Dir8::N));
+        assert_eq!(f.zone(), FastZone::Hidden);
 
         // A ยังพิมพ์ตัวที่เลือกไว้ได้ (bug "กด A ไม่ได้")
         assert_eq!(
@@ -1354,17 +1316,14 @@ mod tests {
         letter(&mut f, (0.0, 0.9)); // หมวด N ช่อง N
         assert!(f.tick(&pad((0.0, 0.9), (0.0, 0.0)), 4, accept()).is_some());
 
-        // ปล่อย → ดึงกลับช่วงกลาง = กลับไปเลือกหมวด
+        // ปล่อย = ล้างหมวด
         for _ in 0..10 {
             step(&mut f, (0.0, 0.0));
         }
-        for _ in 0..30 {
-            step(&mut f, (0.5, 0.0));
-        }
-        assert_eq!(f.zone(), FastZone::Category);
+        assert_eq!(f.zone(), FastZone::Hidden);
 
-        // ดันสุดทางขวา = latch หมวด E แล้วพิมพ์ได้ (รอพ้น lockout 100 ms)
-        for _ in 0..40 {
+        // โยกทางขวา = หมวด E แล้วพิมพ์ได้ (รอพ้น lockout 100 ms)
+        for _ in 0..60 {
             step(&mut f, (0.9, 0.0));
         }
         assert_eq!(f.zone(), FastZone::Letter);
@@ -1436,17 +1395,6 @@ mod tests {
             step(&mut f, (0.0, 0.25));
         }
         assert!(f.ui_hidden(), "ต่ำกว่า 0.30 ครบ 120 ms ต้องซ่อน UI");
-    }
-
-    #[test]
-    fn hovering_in_the_band_for_100ms_is_a_pull_back_not_a_release() {
-        let mut f = fast();
-        letter(&mut f, (0.0, 0.9));
-        for _ in 0..26 {
-            step(&mut f, (0.0, 0.5));
-        }
-        assert_eq!(f.zone(), FastZone::Category);
-        assert_eq!(f.sector(), None);
     }
 
     #[test]
@@ -1537,13 +1485,12 @@ mod tests {
         for _ in 0..50 {
             step(&mut f, (0.0, 0.0));
         }
-        // เด้งไปฝั่งตรงข้าม (r = 0.4 แค่ 60 ms): ไม่ใช่การดึงกลับ → หมวด/ช่องต้องยังเป็น N
+        // เด้งไปฝั่งตรงข้าม (r = 0.4 แค่ 60 ms): ต้องไม่สร้างหมวดผี
         for _ in 0..15 {
             step(&mut f, (0.0, -0.4));
         }
-        assert_eq!(f.zone(), FastZone::Letter);
-        assert_eq!(f.group(), Some(Dir8::N), "ช่วง ignore ต้องไม่เปลี่ยนหมวด");
-        assert_eq!(f.sector(), Some(Dir8::N), "เด้งกลับต้องไม่เปลี่ยนช่อง");
+        assert_eq!(f.zone(), FastZone::Hidden);
+        assert_eq!(f.group(), None, "ช่วง ignore ต้องไม่ล็อกหมวด");
     }
 
     #[test]

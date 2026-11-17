@@ -271,7 +271,10 @@ fn to_win_input(input: &Input) -> INPUT {
                 ki: KEYBDINPUT {
                     wVk: code,
                     wScan: 0,
-                    dwFlags: keyup_flag(up),
+                    // ลูกศร/Home/End ต้องเป็น extended — ไม่งั้น Windows มองเป็นปุ่ม numpad
+                    // แล้วปล่อย Shift ปลอมตอน NumLock เปิด → Shift+ลูกศร ไม่ highlight
+                    dwFlags: keyup_flag(up)
+                        | if is_extended_vk(code) { KEYEVENTF_EXTENDEDKEY } else { 0 },
                     time: 0,
                     dwExtraInfo: 0,
                 },
@@ -437,6 +440,14 @@ mod tests {
         let input = mouse(&Input::HWheel { delta: 120 });
         assert_eq!(input.mouseData, 120);
         assert_eq!(input.dwFlags, MOUSEEVENTF_HWHEEL);
+    }
+
+    #[test]
+    fn arrow_virtual_keys_are_sent_as_extended() {
+        let left = keyboard(&Input::VirtualKey { vk: 0x25, up: false });
+        assert_eq!(left.dwFlags, KEYEVENTF_EXTENDEDKEY);
+        let shift = keyboard(&Input::VirtualKey { vk: 0x10, up: true });
+        assert_eq!(shift.dwFlags, KEYEVENTF_KEYUP);
     }
 
     #[test]

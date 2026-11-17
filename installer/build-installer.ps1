@@ -5,8 +5,8 @@
 #
 # ใช้: .\installer\build-installer.ps1
 # ผลลัพธ์:
-#   dist\RniType_0.3.8_x64-setup.exe     ← installer (current user, ไม่ต้อง admin)
-#   dist\RniType-portable-0.3.8.zip      ← portable exe + วิธีใช้
+#   dist\RniType_0.3.9_x64-setup.exe     ← installer (current user, ไม่ต้อง admin)
+#   dist\RniType-portable-0.3.9.zip      ← portable exe + วิธีใช้
 #
 # build แบบ release ปกติ (ไม่มี feature `console`) → เปิดแอปแล้วไม่มีหน้าต่าง terminal
 # ถ้าต้อง debug ด้วย console: เติม `--features console` เองตอน build

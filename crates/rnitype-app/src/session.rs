@@ -493,7 +493,7 @@ impl Session {
         } else if fast && typing {
             match fast_zone {
                 FastZone::Letter => "A พิมพ์",
-                FastZone::Category => "LS หมวด · ดันสุดเพื่อพิมพ์",
+                FastZone::Category => "ปล่อย LS แล้วโยกทิศใหม่",
                 FastZone::Hidden => "",
             }
         } else if shift_lock && typing {
@@ -933,16 +933,13 @@ mod tests {
         let (mut session, _) = session();
         session.set_fast(true);
 
-        // เอียงกลาง ๆ = โซนหมวด · วงนอกยังไม่ไฮไลต์
+        // โยก = ทิศนั้นเป็นหมวด → โซนตัวอักษรทันที
         push_for(&mut session, (0.0, 0.5), 100);
         let hud = session.hud_state(HudStyle::default(), (0, 0));
         assert_eq!(hud["fast"]["on"], true);
-        assert_eq!(hud["fast"]["phase"], "group");
-        assert_eq!(hud["fast"]["zone"], "category");
+        assert_eq!(hud["fast"]["zone"], "letter");
         assert_eq!(hud["group"], 0, "หมวด N");
-        assert_eq!(hud["sector"], -1);
 
-        // ดันสุด = latch หมวด → โซนตัวอักษร
         push_for(&mut session, (0.0, 0.9), 300);
         let hud = session.hud_state(HudStyle::default(), (0, 0));
         assert_eq!(hud["fast"]["phase"], "char");
@@ -1009,11 +1006,12 @@ mod tests {
         assert_eq!(hud["group"], 2, "หมวดที่ latch ต้องไม่เปลี่ยน");
         assert_eq!(hud["sector"], 0);
 
-        // ดึงกลับ = กลับไปโซนหมวด แล้วเปลี่ยนหมวดได้
-        push_for(&mut session, (0.0, 0.5), 120);
+        // ปล่อย LS = ล้างหมวด → โยกทิศใหม่ = หมวดใหม่
+        push_for(&mut session, (0.0, 0.0), 60);
+        push_for(&mut session, (0.0, -0.9), 120);
         let hud = session.hud_state(HudStyle::default(), (0, 0));
-        assert_eq!(hud["state"], "group");
-        assert_eq!(hud["sector"], -1);
+        assert_eq!(hud["state"], "char");
+        assert_eq!(hud["group"], 4, "หมวด S");
     }
 
     #[test]

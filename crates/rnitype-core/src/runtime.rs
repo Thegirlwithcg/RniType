@@ -3238,16 +3238,11 @@ mod tests {
         e.set_fast(true);
         assert!(e.fast());
 
-        // เอียงกลาง ๆ 80 ms = โซนหมวด · A ยังไม่พิมพ์
+        // โยก = ทิศนั้นเป็นหมวด → โซนตัวอักษรทันที
         push(&mut e, (0.0, 0.5), 80);
-        assert_eq!(e.fast_zone(), FastZone::Category);
+        assert_eq!(e.fast_zone(), FastZone::Letter);
         assert_eq!(e.fast_group(), Some(Dir8::N));
-        assert_eq!(e.fast_sector(), None);
-        let mut hold_a = p((0.0, 0.5), (0.0, 0.0));
-        hold_a.buttons.a = true;
-        assert_eq!(e.tick(&hold_a, D), None);
 
-        // ดันสุด 240 ms = latch หมวด → โซนตัวอักษร
         push(&mut e, (0.0, 0.9), 240);
         assert_eq!(e.fast_zone(), FastZone::Letter);
         assert_eq!(e.fast_sector(), Some(Dir8::N));
@@ -3266,10 +3261,11 @@ mod tests {
             "A ในโซนตัวอักษรต้องพิมพ์: {action:?}"
         );
 
-        // ดึงกลับ = กลับไปโซนหมวด แล้วเปลี่ยนหมวดได้
-        push(&mut e, (0.0, 0.5), 120);
-        assert_eq!(e.fast_zone(), FastZone::Category);
-        push(&mut e, (0.9, 0.0), 80);
+        // ปล่อย LS = ล้างหมวด แล้วโยกทิศใหม่ = หมวดใหม่
+        push(&mut e, (0.0, 0.0), 60);
+        assert_eq!(e.fast_zone(), FastZone::Hidden);
+        assert_eq!(e.fast_group(), None);
+        push(&mut e, (0.9, 0.0), 120);
         assert_eq!(e.fast_group(), Some(Dir8::E));
     }
 
@@ -3380,13 +3376,13 @@ mod tests {
 
         // เปิดเมนู Fast ด้วย LS — D-pad ↑/↓/→ ต้องไม่เปลี่ยนโซน/ช่อง
         push(&mut e, (0.0, 0.5), 80);
-        assert_eq!(e.fast_zone(), FastZone::Category);
+        assert_eq!(e.fast_zone(), FastZone::Letter);
         let group = e.fast_group();
         e.tick(&button_press(|b| b.dpad_down = true), D);
         e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
         e.tick(&button_press(|b| b.dpad_right = true), D);
         e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
-        assert_eq!(e.fast_zone(), FastZone::Category);
+        assert_eq!(e.fast_zone(), FastZone::Letter);
         assert_eq!(e.fast_group(), group, "D-pad ต้องไม่เลือกเมนูแทน LS");
 
         // ← ยังเปิดวงคำสั่งได้แม้เมนู Fast เปิดอยู่ (พฤติกรรม Mode ปกติ)
