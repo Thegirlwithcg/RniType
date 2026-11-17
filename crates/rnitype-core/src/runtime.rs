@@ -35,6 +35,7 @@
 //! - ตรวจ exclusion list / จอยหลุด (เป็นงานฝั่ง app–win ไม่ใช่ core)
 
 use crate::action::{Action, Command, Key, KeyPress, Mode, MouseButton, NamedKey, QuickAction};
+use crate::gesture::{FAST_CENTER_OUT, FastInput, FastNav, FastPhase, FastZone};
 use crate::gesture::{GestureConfig, GestureState};
 use crate::keymap::{Keymap, Lang};
 use crate::normalizer::{Dir8, SectorTracker};
@@ -159,6 +160,9 @@ pub struct RuntimeEngine {
     disabled_remaining_ms: u32,
     emergency_hold_ms: u32,
     prev_dpad_left: bool,
+    prev_dpad_up: bool,
+    prev_dpad_down: bool,
+    prev_dpad_right: bool,
     prev_a: bool,
     prev_b: bool,
     prev_x: bool,
@@ -167,6 +171,22 @@ pub struct RuntimeEngine {
     prev_rb: bool,
     prev_rt: bool,
     prev_rs_click: bool,
+    prev_ls_click: bool,
+    prev_view: bool,
+    /// Fast mode (Feature 1): LS เลือกกลุ่ม → ล็อก → LS เลือกตัวอักษร → A พิมพ์
+    fast: bool,
+    /// Fast mode (Feature 3): R3 สองครั้ง = ลูกศร + Shift (highlight)
+    fast_select: bool,
+    /// action ของ Fast mode ที่ชนกับ A ในเฟรมเดียว (ลูกศร/Backspace/Enter) — ส่งเฟรมถัดไป ไม่ทิ้ง
+    fast_queued: Option<Action>,
+    /// A ค้าง = พิมพ์ซ้ำ (เหมือนกด Spacebar ค้าง) — เก็บคีย์ที่เพิ่งพิมพ์
+    a_repeat: Option<crate::action::KeyPress>,
+    a_hold_ms: u32,
+    a_repeat_ms: u32,
+    /// B ค้าง = Backspace ซ้ำ
+    b_repeat_ms: u32,
+    /// อนุญาตให้ B ค้างลบซ้ำได้เฉพาะเมื่อการกดครั้งนี้เริ่มด้วย Backspace จริง
+    b_repeat_ok: bool,
     /// ADR-13: LT = สลับตัวพิมพ์ใหญ่ (toggle) — คงอยู่จนกดอีกครั้ง ไม่รีเซ็ตหลังพิมพ์
     shift_lock: bool,
     /// ชั้น 2 (RB/RT): แตะ = ล็อก · ค้าง = ชั่วคราว
@@ -213,6 +233,9 @@ pub struct RuntimeEngine {
 #[derive(Clone, Copy, Debug, Default)]
 struct Edges {
     dpad_left: bool,
+    dpad_up: bool,
+    dpad_down: bool,
+    dpad_right: bool,
     a: bool,
     b: bool,
     x: bool,
@@ -221,6 +244,8 @@ struct Edges {
     rb: bool,
     rt: bool,
     rs_click: bool,
+    ls_click: bool,
+    view: bool,
 }
 
 impl RuntimeEngine {
@@ -242,6 +267,9 @@ impl RuntimeEngine {
             disabled_remaining_ms: 0,
             emergency_hold_ms: 0,
             prev_dpad_left: false,
+            prev_dpad_up: false,
+            prev_dpad_down: false,
+            prev_dpad_right: false,
             prev_a: false,
             prev_b: false,
             prev_x: false,
@@ -250,6 +278,16 @@ impl RuntimeEngine {
             prev_rb: false,
             prev_rt: false,
             prev_rs_click: false,
+            prev_ls_click: false,
+            prev_view: false,
+            fast: false,
+            fast_select: false,
+            fast_queued: None,
+            a_repeat: None,
+            a_hold_ms: 0,
+            a_repeat_ms: 0,
+            b_repeat_ms: 0,
+            b_repeat_ok: false,
             shift_lock: false,
             layer2_lock: false,
             layer2_held: false,
@@ -316,6 +354,84 @@ impl RuntimeEngine {
         self.typing.repeat_count()
     }
 
+    /* ---------------- Fast mode (Feature 1) ---------------- */
+
+    /// Fast mode เปิดอยู่ (config `defaults.typing.fastMode`)
+    pub fn fast(&self) -> bool {
+        self.fast
+    }
+
+    /// เปิด/ปิด Fast mode จาก config — ปิดแล้วล้างไฮไลต์ทันที
+    pub fn set_fast(&mut self, on: bool) {
+        if self.fast == on {
+            return;
+        }
+        self.fast = on;
+        self.fast_select = false;
+        self.fast_queued = None;
+        self.typing.set_fast(on);
+        self.typing.fast_reset();
+        self.r3_window_ms = 0;
+        self.caret = false;
+        self.caret_select = false;
+        self.caret_dir = None;
+    }
+
+    /// Fast mode: จังหวะปัจจุบัน (Group = เลือกกลุ่ม · Char = เลือกตัวอักษร)
+    pub fn fast_phase(&self) -> FastPhase {
+        self.typing.fast_phase()
+    }
+
+    /// Fast mode: โซนปัจจุบัน (ซ่อน / หมวด / ตัวอักษร)
+    pub fn fast_zone(&self) -> FastZone {
+        self.typing.fast_zone()
+    }
+
+    /// Fast mode: ระยะเอียง LS ล่าสุด (HUD gauge)
+    pub fn fast_radius(&self) -> f32 {
+        self.typing.fast_radius()
+    }
+
+    /// Fast mode: HUD ถูกซ่อนเพราะปล่อย Analog (ยังพิมพ์ต่อได้)
+    pub fn fast_ui_hidden(&self) -> bool {
+        self.typing.fast_ui_hidden()
+    }
+
+    /// สลับโหมดเลือกตัวอักษร (`letterPick`)
+    pub fn set_fast_push(&mut self, push: bool) {
+        self.typing.set_fast_push(push);
+    }
+
+    /// ย้อน 1 ระดับ (B / D-pad ←) — `true` = ใช้เป็น cancel แล้ว
+    pub fn fast_cancel(&mut self) -> bool {
+        self.typing.fast_cancel()
+    }
+
+    /// Fast mode: กลุ่มที่ไฮไลต์/ล็อกอยู่
+    pub fn fast_group(&self) -> Option<Dir8> {
+        self.typing.fast_group()
+    }
+
+    /// Fast mode: ตัวอักษรที่ไฮไลต์อยู่
+    pub fn fast_sector(&self) -> Option<Dir8> {
+        self.typing.fast_sector()
+    }
+
+    /// Fast mode: R3 สองครั้ง = ลูกศร + Shift (เลือกข้อความหลายตัว)
+    pub fn fast_selecting(&self) -> bool {
+        self.fast && self.fast_select
+    }
+
+    /// Fast mode: RS กำลังชี้ทิศอยู่ (ลูกศรทำงาน) — HUD ใช้วงล้อโชว์ตอนดัน Analog ขวา
+    pub fn fast_arrows_active(&self) -> bool {
+        self.fast && self.caret_dir.is_some()
+    }
+
+    /// Fast mode: จำนวนครั้งที่พิมพ์ซ้ำด้วยการค้าง LS
+    pub fn fast_repeat_count(&self) -> u32 {
+        self.typing.fast_repeat_count()
+    }
+
     /// Type mode: R3 เปิดโหมดลูกศรอยู่ (RS = ลูกศร)
     pub fn caret_active(&self) -> bool {
         self.caret
@@ -376,13 +492,21 @@ impl RuntimeEngine {
         self.y_hold_ms = 0;
         self.y_pending = false;
         self.y_hold_fired = false;
+        self.a_repeat = None;
+        self.a_hold_ms = 0;
+        self.a_repeat_ms = 0;
+        self.b_repeat_ms = 0;
+        self.b_repeat_ok = false;
         self.caret = false;
         self.caret_select = false;
+        self.fast_select = false;
+        self.fast_queued = None;
         self.r3_window_ms = 0;
         self.caret_dir = None;
         self.caret_ms = 0;
         self.caret_fired = false;
         self.caret_sector.reset();
+        self.typing.fast_reset();
         self.lb_hold_ms = 0;
         self.lb_hold_armed = false;
         self.sticky_drag = false;
@@ -480,12 +604,20 @@ impl RuntimeEngine {
 
     /// กลุ่มที่ LS เลือกอยู่ (สำหรับ HUD) — `None` = ยังไม่มี gesture
     pub fn typing_group(&self) -> Option<Dir8> {
-        self.typing.group()
+        if self.fast {
+            self.fast_group()
+        } else {
+            self.typing.group()
+        }
     }
 
-    /// ช่องที่ RS เลือกอยู่ (สำหรับ HUD preview/วงนอก)
+    /// ช่องที่ RS เลือกอยู่ (สำหรับ HUD preview/วงนอก) — Fast mode ใช้ไฮไลต์ของ LS
     pub fn typing_sector(&self) -> Option<Dir8> {
-        self.typing.sector()
+        if self.fast {
+            self.fast_sector()
+        } else {
+            self.typing.sector()
+        }
     }
 
     /// เวลาที่เหลือของการถูกปิด (`0` = ไม่ได้ถูกปิดด้วย emergency)
@@ -512,6 +644,9 @@ impl RuntimeEngine {
     pub fn tick(&mut self, pad: &PadState, dt_ms: u32) -> Option<Action> {
         let edges = Edges {
             dpad_left: pad.buttons.dpad_left && !self.prev_dpad_left,
+            dpad_up: pad.buttons.dpad_up && !self.prev_dpad_up,
+            dpad_down: pad.buttons.dpad_down && !self.prev_dpad_down,
+            dpad_right: pad.buttons.dpad_right && !self.prev_dpad_right,
             a: pad.buttons.a && !self.prev_a,
             b: pad.buttons.b && !self.prev_b,
             x: pad.buttons.x && !self.prev_x,
@@ -520,11 +655,16 @@ impl RuntimeEngine {
             rb: pad.buttons.rb && !self.prev_rb,
             rt: pad.buttons.rt && !self.prev_rt,
             rs_click: pad.buttons.rs_click && !self.prev_rs_click,
+            ls_click: pad.buttons.ls_click && !self.prev_ls_click,
+            view: pad.buttons.view && !self.prev_view,
         };
 
         let action = self.step(pad, dt_ms, edges);
 
         self.prev_dpad_left = pad.buttons.dpad_left;
+        self.prev_dpad_up = pad.buttons.dpad_up;
+        self.prev_dpad_down = pad.buttons.dpad_down;
+        self.prev_dpad_right = pad.buttons.dpad_right;
         self.prev_a = pad.buttons.a;
         self.prev_b = pad.buttons.b;
         self.prev_x = pad.buttons.x;
@@ -533,6 +673,8 @@ impl RuntimeEngine {
         self.prev_rb = pad.buttons.rb;
         self.prev_rt = pad.buttons.rt;
         self.prev_rs_click = pad.buttons.rs_click;
+        self.prev_ls_click = pad.buttons.ls_click;
+        self.prev_view = pad.buttons.view;
         action
     }
 
@@ -562,7 +704,8 @@ impl RuntimeEngine {
             return self.tick_disabled(dt_ms);
         }
 
-        // 3) D-pad ← เปิด/ปิดวงคำสั่ง (ตัด gesture การพิมพ์ที่ค้าง)
+        // 3) D-pad ← : Fast mode จัดการใน `tick_fast` (ซ่อน = วงคำสั่ง · เมนูเปิด = ย้อน)
+        // 3) D-pad ← เปิด/ปิดวงคำสั่ง — พฤติกรรมเดิมของ Mode ปกติ (owner 2026-11-17)
         if edges.dpad_left {
             self.toggle_cmd_wheel(pad);
             return None;
@@ -576,9 +719,15 @@ impl RuntimeEngine {
             }
         }
 
+        // Fast mode: ปุ่ม View ก็เปิดวงคำสั่งได้ (ทางเลือกนอกจาก D-pad ←)
+        if self.fast && self.mode == Mode::Type && self.wheel.is_none() && edges.view {
+            self.toggle_cmd_wheel(pad);
+            return None;
+        }
+
         // 5) วงเปิดอยู่ = A/B + RS เท่านั้น (LS ไม่มีผล · X/Y ไม่มีผล — วงชนะ)
         if self.wheel.is_some() {
-            return self.tick_wheel(pad, dt_ms, edges.a, edges.b);
+            return self.tick_wheel(pad, dt_ms, edges);
         }
 
         // 6) Modifier: LT แตะ = สลับ Shift lock (ADR-13) — เฉพาะ Type
@@ -595,13 +744,23 @@ impl RuntimeEngine {
             self.tick_layer2(pad, dt_ms, edges.rb, edges.rt);
             // เปลี่ยนชั้นกลาง gesture = ยกเลิก (กันพิมพ์ผิดชุด)
             let layer = self.layer();
-            if layer != self.prev_layer && self.typing.state() != GestureState::Idle {
-                self.typing.cancel();
+            if layer != self.prev_layer {
+                if self.typing.state() != GestureState::Idle {
+                    self.typing.cancel();
+                }
+                // Fast mode: ไม่ล้างช่องที่ไฮไลต์ตอนเปลี่ยนชั้น — A อ่านคีย์ตามชั้นปัจจุบันตอนกดอยู่แล้ว
+                // (เดิมล้างช่อง → ปล่อย LS แล้วแตะ RB/RT → A ไม่พิมพ์จนกว่าจะดัน LS ใหม่)
             }
             self.prev_layer = layer;
         } else {
             self.layer2_held = false;
             self.prev_layer = 1;
+        }
+
+        // 8) Fast mode: LS = เลือกกลุ่ม→ตัวอักษร · A = พิมพ์ · RS = ลูกศร
+        //    (ปุ่มหน้า A/B/X/Y ถูกจัดการใน `tick_fast` — A ห้ามกลายเป็น Space)
+        if self.fast && self.mode == Mode::Type {
+            return self.tick_fast(pad, dt_ms, edges);
         }
 
         // 8) ปุ่มหน้า A/B/X/Y + double-tap / hold (spec §4)
@@ -616,9 +775,10 @@ impl RuntimeEngine {
             self.caret_sector.reset();
             self.a_window_ms = 0;
             if edges.b {
-                // กัน hold-B ยิง Ctrl+Backspace หลังออกจากโหมด
+                // กัน hold-B ยิง Backspace/Ctrl+Backspace ต่อหลังออกจากโหมด
                 self.b_hold_ms = 0;
                 self.b_hold_fired = true;
+                self.b_repeat_ok = false;
             }
             return None;
         }
@@ -699,7 +859,8 @@ impl RuntimeEngine {
     /// จัดการปุ่มหน้า — คืน action เดียวต่อเฟรม (ท่อ injector รับทีละ action)
     ///
     /// - A: Space · แตะเร็ว 2 ครั้ง = Enter (Space แรกออกไปแล้ว — ดู ADR-21)
-    /// - B: Backspace · ค้าง 400 ms = Ctrl+Backspace (ลบทั้งคำ)
+    ///   **ค้าง 400 ms = ส่ง Space ซ้ำทุก 90 ms** (owner 2026-11-17)
+    /// - B: Backspace · **ค้าง 400 ms = ส่ง Backspace ซ้ำทุก 80 ms**
     /// - X: Enter
     /// - Y: Tab on release · ค้าง 400 ms = Esc
     fn tick_face(&mut self, pad: &PadState, dt_ms: u32, edges: Edges) -> Option<Action> {
@@ -715,11 +876,13 @@ impl RuntimeEngine {
         if edges.b {
             self.b_hold_ms = 0;
             self.b_hold_fired = false;
+            self.b_repeat_ms = 0;
         } else if pad.buttons.b {
             self.b_hold_ms = self.b_hold_ms.saturating_add(dt_ms);
         } else {
             self.b_hold_ms = 0;
             self.b_hold_fired = false;
+            self.b_repeat_ms = 0;
         }
 
         // Y hold — Tab ตอนปล่อย, Esc เมื่อค้างครบ 400 ms
@@ -735,10 +898,38 @@ impl RuntimeEngine {
         if edges.a {
             if self.a_window_ms > 0 {
                 self.a_window_ms = 0;
+                self.a_repeat = None;
                 return Some(self.named_key(NamedKey::Enter, false));
             }
             self.a_window_ms = self.cfg.double_tap_ms;
-            return Some(self.named_key(NamedKey::Space, false));
+            let press = KeyPress {
+                key: Key::Named(NamedKey::Space),
+                shift: false,
+                ctrl: false,
+                alt: false,
+            };
+            self.a_repeat = Some(press);
+            self.a_hold_ms = 0;
+            self.a_repeat_ms = 0;
+            return Some(Action::Key(press));
+        }
+
+        // A ค้าง = Space ซ้ำ (เหมือนกด Spacebar ค้าง)
+        if pad.buttons.a {
+            if let Some(press) = self.a_repeat {
+                self.a_hold_ms = self.a_hold_ms.saturating_add(dt_ms);
+                if self.a_hold_ms >= self.cfg.face_hold_ms {
+                    self.a_repeat_ms = self.a_repeat_ms.saturating_add(dt_ms);
+                    if self.a_repeat_ms >= self.cfg.gesture.repeat_rate_ms {
+                        self.a_repeat_ms = 0;
+                        return Some(Action::Key(press));
+                    }
+                }
+            }
+        } else {
+            self.a_repeat = None;
+            self.a_hold_ms = 0;
+            self.a_repeat_ms = 0;
         }
 
         if edges.x {
@@ -750,12 +941,24 @@ impl RuntimeEngine {
             if typing_active {
                 return None;
             }
+            self.b_repeat_ok = true;
             return Some(self.named_key(NamedKey::Backspace, pad.buttons.lb));
         }
 
+        // B ค้าง = Backspace ซ้ำ (ไม่ใช่ Ctrl+Backspace แล้ว — owner 2026-11-17)
         if pad.buttons.b && !self.b_hold_fired && self.b_hold_ms >= self.cfg.face_hold_ms {
             self.b_hold_fired = true;
-            return Some(self.named_key(NamedKey::Backspace, true));
+            self.b_repeat_ms = 0;
+            return Some(self.named_key(NamedKey::Backspace, false));
+        }
+        if pad.buttons.b && self.b_hold_fired && self.b_repeat_ok {
+            self.b_repeat_ms = self.b_repeat_ms.saturating_add(dt_ms);
+            if self.b_repeat_ms >= self.cfg.gesture.repeat_rate_ms {
+                self.b_repeat_ms = 0;
+                return Some(self.named_key(NamedKey::Backspace, false));
+            }
+        } else if !pad.buttons.b {
+            self.b_repeat_ok = false;
         }
 
         if self.y_pending {
@@ -813,6 +1016,15 @@ impl RuntimeEngine {
 
     /// RS = ลูกศร · ดันครั้งแรกยิงทันที · ค้าง repeat ตาม 350/90 ms
     fn tick_caret(&mut self, pad: &PadState, dt_ms: u32) -> Option<Action> {
+        self.tick_arrows(pad, dt_ms, self.caret_select)
+    }
+
+    /// Fast mode: RS = ลูกศร (มี repeat) — R3 สองครั้ง = ลูกศร + Shift
+    fn tick_fast_arrows(&mut self, pad: &PadState, dt_ms: u32) -> Option<Action> {
+        self.tick_arrows(pad, dt_ms, self.fast_select)
+    }
+
+    fn tick_arrows(&mut self, pad: &PadState, dt_ms: u32, select: bool) -> Option<Action> {
         let cfg = self.cfg.gesture;
         let rm = pad.rs.magnitude();
 
@@ -822,7 +1034,7 @@ impl RuntimeEngine {
                 self.caret_dir = dir;
                 self.caret_ms = 0;
                 self.caret_fired = false;
-                return dir.map(|_| self.arrow(pad.rs));
+                return dir.map(|_| self.arrow(pad.rs, select));
             }
             self.caret_ms = self.caret_ms.saturating_add(dt_ms);
             let interval = if self.caret_fired {
@@ -833,7 +1045,7 @@ impl RuntimeEngine {
             if self.caret_ms >= interval {
                 self.caret_ms = 0;
                 self.caret_fired = true;
-                return self.caret_dir.map(|_| self.arrow(pad.rs));
+                return self.caret_dir.map(|_| self.arrow(pad.rs, select));
             }
             return None;
         }
@@ -848,7 +1060,7 @@ impl RuntimeEngine {
     }
 
     /// ทิศ RS → ลูกศร (แกนที่เบี่ยงมากกว่าเป็นตัวตัดสิน · จอย y ขึ้น = Up)
-    fn arrow(&self, rs: Vec2) -> Action {
+    fn arrow(&self, rs: Vec2, select: bool) -> Action {
         let key = if rs.x.abs() >= rs.y.abs() {
             if rs.x >= 0.0 {
                 NamedKey::Right
@@ -862,14 +1074,169 @@ impl RuntimeEngine {
         };
         Action::Key(KeyPress {
             key: Key::Named(key),
-            shift: self.caret_select,
+            shift: select,
             ctrl: false,
             alt: false,
         })
     }
 
-    /* ---------------- quick bar (LB) ---------------- */
+    /* ---------------- Fast mode (ADR-32 / ADR-33) ---------------- */
 
+    /// 1 เฟรมของ Fast mode
+    ///
+    /// - **push-through**: LS เอียง = หมวด · ดันสุด = โซนตัวอักษร · A = พิมพ์
+    /// - **D-pad ↑/↓** = ±1 · **→** = เข้าลึก · **←** = ย้อน (ตอนซ่อน = เมนูโหมด)
+    /// - **B** = ย้อน 1 ระดับ · ไม่มีเมนู + LS ศูนย์ = Backspace
+    /// - L3 = ล้างช่อง · X = Enter · Y = Tab/Esc
+    /// - **RS = ลูกศร** · R3 สองครั้ง = highlight (Shift+ลูกศร)
+    fn tick_fast(&mut self, pad: &PadState, dt_ms: u32, edges: Edges) -> Option<Action> {
+        let queued = self.fast_queued.take();
+
+        // R3: แตะ 2 ครั้ง = สลับโหมดเลือกข้อความ
+        if edges.rs_click {
+            if self.r3_window_ms > 0 {
+                self.r3_window_ms = 0;
+                self.fast_select = !self.fast_select;
+            } else {
+                self.r3_window_ms = self.cfg.double_tap_ms;
+            }
+            self.caret_sector.reset();
+            self.caret_dir = None;
+            self.caret_ms = 0;
+            self.caret_fired = false;
+        }
+
+        // L3 = ล้างช่องที่เลือก
+        if edges.ls_click {
+            self.typing.fast_unlock();
+        }
+
+        // ห้าม return กลางทางในฟังก์ชันนี้: ทุกเฟรมต้องไปถึง `typing.tick_fast` เสมอ
+        // ไม่งั้น A edge (เกิดเฟรมเดียว) หายถ้าชนกับลูกศร RS / B / X / Y (v0.3.5)
+        // action อื่นเก็บไว้ใน `others` แล้วส่งตามลำดับ (A ก่อน · ที่เหลือเข้าคิวเฟรมถัดไป)
+        let mut others: [Option<Action>; 3] = [None; 3];
+
+        // B = ย้อน 1 ระดับ (ไม่ลบ) · ไม่มีเมนู = Backspace (+ ค้าง = ซ้ำ)
+        if edges.b {
+            self.b_hold_ms = 0;
+            self.b_repeat_ms = 0;
+            self.b_hold_fired = true;
+            if !self.typing.fast_ui_hidden() && self.typing.fast_cancel() {
+                self.b_repeat_ok = false;
+            } else {
+                self.b_repeat_ok = true;
+                others[0] = Some(self.named_key(NamedKey::Backspace, pad.buttons.lb));
+            }
+        } else if pad.buttons.b {
+            self.b_hold_ms = self.b_hold_ms.saturating_add(dt_ms);
+            if self.b_repeat_ok
+                && (self.typing.fast_zone() == FastZone::Hidden || self.typing.fast_ui_hidden())
+                && self.b_hold_ms >= self.cfg.face_hold_ms
+            {
+                self.b_repeat_ms = self.b_repeat_ms.saturating_add(dt_ms);
+                if self.b_repeat_ms >= self.cfg.gesture.repeat_rate_ms {
+                    self.b_repeat_ms = 0;
+                    others[0] = Some(self.named_key(NamedKey::Backspace, false));
+                }
+            }
+        } else {
+            self.b_hold_ms = 0;
+            self.b_repeat_ms = 0;
+            self.b_repeat_ok = false;
+        }
+
+        // X/Y = Enter / Tab-Esc (ใช้ machinery เดิม โดยไม่ให้ A/B หลุดเข้าไป)
+        if edges.x || edges.y {
+            let face = Edges {
+                x: edges.x,
+                y: edges.y,
+                ..Edges::default()
+            };
+            others[1] = self.tick_face(pad, dt_ms, face);
+        }
+
+        // RS = ลูกศร (รับ Shift เมื่ออยู่ในโหมดเลือกข้อความ)
+        others[2] = self.tick_fast_arrows(pad, dt_ms);
+
+        // Fast mode ใช้ LS อย่างเดียว (owner 2026-11-17) · D-pad = เมนูโหมด (วงคำสั่ง)
+        // ทางหนี `letterPick = dpad` (0.2.5): ↑ = ถอย · ↓/→ = ช่องถัดไป
+        let classic = !self.typing.fast_push();
+        let nav = if !classic {
+            None
+        } else if edges.dpad_up {
+            Some(FastNav::Prev)
+        } else if edges.dpad_down || edges.dpad_right {
+            Some(FastNav::Next)
+        } else {
+            None
+        };
+
+        self.typing.set_layer(self.layer());
+        let typed = self
+            .typing
+            .tick_fast(
+                pad,
+                dt_ms,
+                FastInput {
+                    accept: edges.a,
+                    nav,
+                    enter: false,
+                },
+            )
+            .map(|action| self.with_shift_lock(action));
+
+        // A ตอนไม่มีช่องค้างเลือก (ปล่อย LS แล้ว / พิมพ์ไปแล้ว) = Space · ค้าง = Space ซ้ำ
+        let idle_a = edges.a
+            && typed.is_none()
+            && self.typing.fast_sector().is_none()
+            && self.typing.fast_radius() < FAST_CENTER_OUT;
+        let typed = if idle_a {
+            Some(self.named_key(NamedKey::Space, false))
+        } else {
+            typed
+        };
+
+        // A ค้าง = พิมพ์ตัวเดิมซ้ำ (owner 2026-11-17 — เหมือนกดคีย์ค้าง)
+        // A ที่ถูกเก็บไว้ (lockout/latch) แล้วพิมพ์เฟรมหลัง ๆ ก็เริ่ม repeat ได้ถ้ายังกดค้างอยู่
+        let mut a_action = typed;
+        if let Some(Action::Key(press)) = typed {
+            if pad.buttons.a {
+                self.a_repeat = Some(press);
+                self.a_hold_ms = 0;
+                self.a_repeat_ms = 0;
+            }
+        } else if pad.buttons.a {
+            if let Some(press) = self.a_repeat {
+                self.a_hold_ms = self.a_hold_ms.saturating_add(dt_ms);
+                if self.a_hold_ms >= self.cfg.face_hold_ms {
+                    self.a_repeat_ms = self.a_repeat_ms.saturating_add(dt_ms);
+                    if self.a_repeat_ms >= self.cfg.gesture.repeat_rate_ms {
+                        self.a_repeat_ms = 0;
+                        a_action = Some(self.with_shift_lock(Action::Key(press)));
+                    }
+                }
+            }
+        } else {
+            self.a_repeat = None;
+            self.a_hold_ms = 0;
+            self.a_repeat_ms = 0;
+        }
+
+        // ส่ง 1 action ต่อเฟรม: A → ที่ค้างคิว → B/X/Y → ลูกศร · ที่เหลือเข้าคิวเฟรมถัดไป
+        let mut out = a_action;
+        let mut next = None;
+        for action in std::iter::once(queued).chain(others).flatten() {
+            if out.is_none() {
+                out = Some(action);
+            } else if next.is_none() {
+                next = Some(action);
+            }
+        }
+        self.fast_queued = next;
+        out
+    }
+
+    /* ---------------- quick bar (LB) ---------------- */
     /// LB ค้าง 150 ms = เปิด quick bar (แตะสั้นไม่เปิด — ยังใช้เป็น Ctrl ได้)
     ///
     /// เปิดครั้งเดียวต่อการกด · ปล่อย LB แล้วเริ่มนับใหม่ · ดัน LS ก่อนครบเวลา = ยกเลิกการเปิด
@@ -898,6 +1265,7 @@ impl RuntimeEngine {
     fn open_quickbar(&mut self, pad: &PadState) {
         self.close_wheel();
         self.wheel = Some(WheelKind::QuickBar);
+        self.typing.fast_reset();
         self.wheel_armed = pad.rs.magnitude() < self.cfg.gesture.rs_release;
     }
 
@@ -1112,6 +1480,8 @@ impl RuntimeEngine {
         // เปิดวงขณะ RS ยังดันค้าง = ยังไม่ armed (spec §3.1 บรรทัดสุดท้าย)
         self.wheel_armed = pad.rs.magnitude() < self.cfg.gesture.rs_release;
         self.typing.cancel();
+        // Fast mode หยุดเดินขณะวงเปิด → ล้างโซน/ช่อง ไม่ให้ UI เก่าโผล่กลับตอนปิดวง
+        self.typing.fast_reset();
     }
 
     fn open_lang_wheel(&mut self, pad: &PadState) {
@@ -1120,6 +1490,7 @@ impl RuntimeEngine {
             return;
         }
         self.wheel = Some(WheelKind::Language);
+        self.typing.fast_reset();
         // เพิ่งใช้ RS เลือกช่องภาษาอื่น → ต้องปล่อย RS กลับศูนย์ก่อน (spec §3.2)
         self.wheel_armed = pad.rs.magnitude() < self.cfg.gesture.rs_release;
     }
@@ -1133,12 +1504,19 @@ impl RuntimeEngine {
         self.cmd_sector.reset();
     }
 
-    fn tick_wheel(&mut self, pad: &PadState, dt_ms: u32, a: bool, b: bool) -> Option<Action> {
+    fn tick_wheel(&mut self, pad: &PadState, dt_ms: u32, edges: Edges) -> Option<Action> {
         let cfg = self.cfg.gesture;
         let kind = self.wheel?;
+        let (a, b) = (edges.a, edges.b);
 
         // B = ยกเลิกทุกวง (spec §3.1/§3.2)
         if b {
+            self.close_wheel();
+            return None;
+        }
+
+        // D-pad ← = ย้อน/ปิดวง (ทางเลือกนอกจาก B)
+        if edges.dpad_left {
             self.close_wheel();
             return None;
         }
@@ -2409,21 +2787,35 @@ mod tests {
     }
 
     #[test]
-    fn b_hold_400ms_sends_ctrl_backspace() {
+    fn holding_a_repeats_space() {
+        let mut e = engine();
+        let held = button_press(|b| b.a = true);
+        assert_eq!(e.tick(&held, D), key(Key::Named(NamedKey::Space)));
+        assert_eq!(e.tick(&held, 300), None, "ยังไม่ครบ 400 ms");
+        assert_eq!(
+            e.tick(&held, 100),
+            key(Key::Named(NamedKey::Space)),
+            "ค้าง A = Space ซ้ำ"
+        );
+        assert_eq!(e.tick(&held, 90), key(Key::Named(NamedKey::Space)));
+        assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), D), None);
+    }
+
+    #[test]
+    fn b_hold_repeats_backspace() {
         let mut e = engine();
         let held = button_press(|b| b.b = true);
         assert_eq!(e.tick(&held, D), key(Key::Named(NamedKey::Backspace)));
         assert_eq!(e.tick(&held, 300), None, "ยังไม่ครบ 400 ms");
+        // ครบ 400 ms = เริ่มลบซ้ำ (ไม่ใช่ Ctrl+Backspace)
         assert_eq!(
             e.tick(&held, 100),
-            Some(Action::Key(KeyPress {
-                key: Key::Named(NamedKey::Backspace),
-                shift: false,
-                ctrl: true,
-                alt: false,
-            }))
+            key(Key::Named(NamedKey::Backspace)),
+            "ค้าง B = Backspace ซ้ำ"
         );
-        assert_eq!(e.tick(&held, 400), None, "ยิงครั้งเดียวต่อการกด");
+        // แล้วทุก 90 ms
+        assert_eq!(e.tick(&held, 90), key(Key::Named(NamedKey::Backspace)));
+        assert_eq!(e.tick(&held, 90), key(Key::Named(NamedKey::Backspace)));
         assert_eq!(e.tick(&p((0.0, 0.0), (0.0, 0.0)), D), None);
     }
 
@@ -2823,5 +3215,441 @@ mod tests {
 
         e.set_mode(Mode::Type);
         assert!(!e.sticky_drag());
+    }
+
+    /* ---------------- Fast mode (ADR-33 push-through) ---------------- */
+
+    /// ดัน LS ต่อเนื่อง (คืน action สุดท้ายที่เกิด — ปกติ None)
+    fn push(e: &mut RuntimeEngine, ls: (f32, f32), ms: u32) -> Option<Action> {
+        let mut out = None;
+        let mut t = 0;
+        while t < ms {
+            if let Some(action) = e.tick(&p(ls, (0.0, 0.0)), D) {
+                out = Some(action);
+            }
+            t += D;
+        }
+        out
+    }
+
+    #[test]
+    fn fast_mode_push_through_latches_then_a_types() {
+        let mut e = engine();
+        e.set_fast(true);
+        assert!(e.fast());
+
+        // เอียงกลาง ๆ 80 ms = โซนหมวด · A ยังไม่พิมพ์
+        push(&mut e, (0.0, 0.5), 80);
+        assert_eq!(e.fast_zone(), FastZone::Category);
+        assert_eq!(e.fast_group(), Some(Dir8::N));
+        assert_eq!(e.fast_sector(), None);
+        let mut hold_a = p((0.0, 0.5), (0.0, 0.0));
+        hold_a.buttons.a = true;
+        assert_eq!(e.tick(&hold_a, D), None);
+
+        // ดันสุด 240 ms = latch หมวด → โซนตัวอักษร
+        push(&mut e, (0.0, 0.9), 240);
+        assert_eq!(e.fast_zone(), FastZone::Letter);
+        assert_eq!(e.fast_sector(), Some(Dir8::N));
+
+        let mut press = p((0.0, 0.9), (0.0, 0.0));
+        press.buttons.a = true;
+        let action = e.tick(&press, D);
+        assert!(
+            matches!(
+                action,
+                Some(Action::Key(KeyPress {
+                    key: Key::Char(_),
+                    ..
+                }))
+            ),
+            "A ในโซนตัวอักษรต้องพิมพ์: {action:?}"
+        );
+
+        // ดึงกลับ = กลับไปโซนหมวด แล้วเปลี่ยนหมวดได้
+        push(&mut e, (0.0, 0.5), 120);
+        assert_eq!(e.fast_zone(), FastZone::Category);
+        push(&mut e, (0.9, 0.0), 80);
+        assert_eq!(e.fast_group(), Some(Dir8::E));
+    }
+
+    #[test]
+    fn fast_mode_b_walks_back_a_level_before_backspace() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.9), 300);
+        assert_eq!(e.fast_zone(), FastZone::Letter);
+
+        let mut hold_b = p((0.0, 0.9), (0.0, 0.0));
+        hold_b.buttons.b = true;
+
+        // B ครั้งแรก = กลับไปโซนหมวด (ไม่ลบ)
+        assert_eq!(e.tick(&hold_b, D), None);
+        assert_eq!(e.fast_zone(), FastZone::Category);
+        assert_eq!(e.fast_sector(), None);
+
+        // B อีกครั้ง = ซ่อน UI
+        e.tick(&p((0.0, 0.9), (0.0, 0.0)), D);
+        assert_eq!(e.tick(&hold_b, D), None);
+        assert_eq!(e.fast_zone(), FastZone::Hidden);
+
+        // ไม่มีเมนูแล้ว (และ LS ศูนย์) = Backspace
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        let action = e.tick(&button_press(|b| b.b = true), D);
+        assert!(
+            matches!(
+                action,
+                Some(Action::Key(KeyPress {
+                    key: Key::Named(NamedKey::Backspace),
+                    ..
+                }))
+            ),
+            "B ที่ไม่มีเมนูต้องเป็น Backspace: {action:?}"
+        );
+    }
+
+    #[test]
+    fn fast_mode_holding_a_at_rest_repeats_space() {
+        let mut e = engine();
+        e.set_fast(true);
+        let space = key(Key::Named(NamedKey::Space));
+        let mut held = p((0.0, 0.0), (0.0, 0.0));
+        held.buttons.a = true;
+        assert_eq!(e.tick(&held, D), space);
+        let mut repeats = 0;
+        for _ in 0..8 {
+            if e.tick(&held, 90) == space {
+                repeats += 1;
+            }
+        }
+        assert!(repeats >= 3, "ค้าง A ต้อง Space ซ้ำ: {repeats}");
+    }
+
+    #[test]
+    fn fast_mode_holding_a_repeats_the_character() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.9), 300);
+        assert_eq!(e.fast_zone(), FastZone::Letter);
+
+        let mut held = p((0.0, 0.9), (0.0, 0.0));
+        held.buttons.a = true;
+        let first = e.tick(&held, D);
+        assert!(
+            matches!(first, Some(Action::Key(KeyPress { key: Key::Char(_), .. }))),
+            "A ต้องพิมพ์ตัวอักษร: {first:?}"
+        );
+
+        let mut repeats = 0;
+        for _ in 0..8 {
+            if matches!(
+                e.tick(&held, 90),
+                Some(Action::Key(KeyPress { key: Key::Char(_), .. }))
+            ) {
+                repeats += 1;
+            }
+        }
+        assert!(repeats >= 2, "ค้าง A ต้องพิมพ์ซ้ำ (ได้ {repeats})");
+    }
+
+    #[test]
+    fn fast_mode_dpad_behaves_like_the_normal_mode() {
+        let mut e = engine();
+        e.set_fast(true);
+
+        // D-pad ← = วงคำสั่ง (เหมือน Mode ปกติ)
+        e.tick(&button_press(|b| b.dpad_left = true), D);
+        assert_eq!(e.wheel(), Some(WheelKind::Command));
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        e.tick(&button_press(|b| b.dpad_left = true), D);
+        assert_eq!(e.wheel(), None);
+
+        // เปิดเมนู Fast ด้วย LS — D-pad ↑/↓/→ ต้องไม่เปลี่ยนโซน/ช่อง
+        push(&mut e, (0.0, 0.5), 80);
+        assert_eq!(e.fast_zone(), FastZone::Category);
+        let group = e.fast_group();
+        e.tick(&button_press(|b| b.dpad_down = true), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        e.tick(&button_press(|b| b.dpad_right = true), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        assert_eq!(e.fast_zone(), FastZone::Category);
+        assert_eq!(e.fast_group(), group, "D-pad ต้องไม่เลือกเมนูแทน LS");
+
+        // ← ยังเปิดวงคำสั่งได้แม้เมนู Fast เปิดอยู่ (พฤติกรรม Mode ปกติ)
+        e.tick(&button_press(|b| b.dpad_left = true), D);
+        assert_eq!(e.wheel(), Some(WheelKind::Command));
+    }
+
+    #[test]
+    fn fast_mode_dpad_fallback_uses_right_arrow_to_step() {
+        let mut e = engine();
+        e.set_fast(true);
+        e.set_fast_push(false);
+
+        e.tick(&p((0.9, 0.0), (0.0, 0.0)), D);
+        assert_eq!(e.fast_group(), Some(Dir8::E));
+        assert_eq!(e.fast_sector(), Some(Dir8::E));
+
+        // โหมด 0.2.5: D-pad → = ช่องถัดไป
+        e.tick(&button_press(|b| b.dpad_right = true), D);
+        assert_eq!(e.fast_sector(), Some(Dir8::SE));
+    }
+
+    #[test]
+    fn fast_mode_release_keeps_a_printing_and_b_backspaces() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.9), 300);
+        assert_eq!(e.fast_zone(), FastZone::Letter);
+
+        // ปล่อย LS 300 ms → UI ซ่อน แต่ A ยังพิมพ์ตัวที่เลือก
+        for _ in 0..75 {
+            e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        }
+        assert!(e.fast_ui_hidden());
+        assert!(
+            matches!(
+                e.tick(&button_press(|b| b.a = true), D),
+                Some(Action::Key(KeyPress {
+                    key: Key::Char(_),
+                    ..
+                }))
+            ),
+            "A ต้องพิมพ์ได้แม้ปล่อยจอยแล้ว"
+        );
+
+        // ปล่อย A แล้วกด B → เมนูซ่อนอยู่ = Backspace ทันที
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        assert!(
+            matches!(
+                e.tick(&button_press(|b| b.b = true), D),
+                Some(Action::Key(KeyPress {
+                    key: Key::Named(NamedKey::Backspace),
+                    ..
+                }))
+            ),
+            "B ตอนเมนูซ่อนต้องเป็น Backspace"
+        );
+    }
+
+    /// Analog จริงเด้งกลับศูนย์ผ่านช่วงกลางหลายเฟรม (ไม่ใช่ 0.9 → 0 ในเฟรมเดียว)
+    fn release_ls(e: &mut RuntimeEngine) {
+        for ls in [
+            (0.0, 0.8),
+            (0.1, 0.6),
+            (0.2, 0.4),
+            (0.2, 0.15),
+            (0.1, 0.05),
+            (0.0, 0.0),
+        ] {
+            e.tick(&p(ls, (0.0, 0.0)), D);
+        }
+    }
+
+    fn is_char(action: Option<Action>) -> bool {
+        matches!(
+            action,
+            Some(Action::Key(KeyPress {
+                key: Key::Char(_),
+                ..
+            }))
+        )
+    }
+
+    fn press_a(e: &mut RuntimeEngine, ls: (f32, f32)) -> Option<Action> {
+        let action = e.tick(&with(p(ls, (0.0, 0.0)), |b| b.a = true), D);
+        e.tick(&p(ls, (0.0, 0.0)), D); // ปล่อย A
+        action
+    }
+
+    fn select_mode_on(e: &mut RuntimeEngine) {
+        e.tick(&button_press(|b| b.rs_click = true), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        e.tick(&button_press(|b| b.rs_click = true), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        assert!(e.fast_selecting());
+    }
+
+    #[test]
+    fn fast_mode_a_types_right_after_releasing_ls_and_after_120ms() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.9), 300);
+        release_ls(&mut e);
+        assert_eq!(e.fast_zone(), FastZone::Letter, "เด้งกลับห้ามตกโซน");
+        assert_eq!(e.fast_sector(), Some(Dir8::N), "เด้งกลับห้ามล้างช่อง");
+
+        // ทันทีหลังปล่อย (UI ยังไม่ซ่อน)
+        assert!(is_char(press_a(&mut e, (0.0, 0.0))), "A ทันทีหลังปล่อย LS ต้องพิมพ์");
+
+        // หลัง 120 ms (UI ซ่อนแล้ว) — A = Space ทุกครั้ง (ไม่พิมพ์ตัวเดิมซ้ำ)
+        push(&mut e, (0.0, 0.0), 200);
+        assert!(e.fast_ui_hidden());
+        for _ in 0..3 {
+            assert_eq!(
+                press_a(&mut e, (0.0, 0.0)),
+                key(Key::Named(NamedKey::Space)),
+                "A หลัง UI ซ่อนต้องเป็น Space"
+            );
+            push(&mut e, (0.0, 0.0), 200);
+        }
+    }
+
+    #[test]
+    fn fast_mode_first_a_right_after_latch_is_not_swallowed() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.5), 80);
+        let mut guard = 0;
+        while e.fast_zone() != FastZone::Letter && guard < 100 {
+            e.tick(&p((0.0, 0.9), (0.0, 0.0)), D);
+            guard += 1;
+        }
+        assert_eq!(e.fast_zone(), FastZone::Letter);
+
+        // แตะ A ทันทีที่ latch (ติด lockout 100 ms) แล้วปล่อย — ต้องพิมพ์ 1 ครั้งหลัง lockout
+        assert!(press_a(&mut e, (0.0, 0.9)).is_none());
+        let typed = (0..40)
+            .filter(|_| is_char(e.tick(&p((0.0, 0.9), (0.0, 0.0)), D)))
+            .count();
+        assert_eq!(typed, 1, "A ตอน latch ต้องพิมพ์ครั้งเดียว ไม่หาย ไม่ซ้ำ");
+    }
+
+    #[test]
+    fn fast_mode_a_pressed_while_latching_is_not_swallowed() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.5), 80);
+        e.tick(&p((0.0, 0.9), (0.0, 0.0)), D);
+        // กด A ระหว่างรอ latch 60 ms
+        assert!(press_a(&mut e, (0.0, 0.9)).is_none());
+        let typed = (0..60)
+            .filter(|_| is_char(e.tick(&p((0.0, 0.9), (0.0, 0.0)), D)))
+            .count();
+        assert_eq!(e.fast_zone(), FastZone::Letter);
+        assert_eq!(typed, 1);
+    }
+
+    #[test]
+    fn fast_mode_a_edge_reaches_typing_even_when_a_right_stick_arrow_fires() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.9), 300);
+
+        // เฟรมเดียวกัน: RS ดันครั้งแรก (ลูกศรยิง) + A edge → A ต้องพิมพ์ ลูกศรเข้าคิวเฟรมถัดไป
+        let mut both = p((0.0, 0.9), (0.9, 0.0));
+        both.buttons.a = true;
+        assert!(is_char(e.tick(&both, D)), "A ห้ามถูกลูกศร RS กลืน");
+        let queued = e.tick(&p((0.0, 0.9), (0.9, 0.0)), D);
+        assert!(
+            matches!(
+                queued,
+                Some(Action::Key(KeyPress {
+                    key: Key::Named(NamedKey::Right),
+                    ..
+                }))
+            ),
+            "ลูกศรที่ชนกับ A ต้องไม่หาย: {queued:?}"
+        );
+    }
+
+    #[test]
+    fn fast_mode_a_types_in_select_mode_before_and_after_releasing_ls() {
+        let mut e = engine();
+        e.set_fast(true);
+        select_mode_on(&mut e);
+
+        push(&mut e, (0.0, 0.9), 300);
+        assert!(is_char(press_a(&mut e, (0.0, 0.9))), "Select mode ต้องไม่บล็อก A");
+        release_ls(&mut e);
+        assert!(is_char(press_a(&mut e, (0.0, 0.0))));
+        push(&mut e, (0.0, 0.0), 200);
+        assert!(e.fast_selecting(), "ปล่อย LS ไม่ปิด Select mode");
+        assert_eq!(press_a(&mut e, (0.0, 0.0)), key(Key::Named(NamedKey::Space)));
+    }
+
+    #[test]
+    fn fast_mode_a_survives_a_layer_change_after_releasing_ls() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.9), 300);
+        release_ls(&mut e);
+        e.tick(&button_press(|b| b.rb = true), D); // แตะ RB = ชั้น 2
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        assert_eq!(e.fast_sector(), Some(Dir8::N), "เปลี่ยนชั้นห้ามล้างช่อง");
+        assert!(
+            press_a(&mut e, (0.0, 0.0)).is_some(),
+            "A หลังเปลี่ยนชั้นต้องพิมพ์ (คีย์ตามชั้นปัจจุบัน)"
+        );
+    }
+
+    #[test]
+    fn fast_mode_ui_state_returns_to_idle_after_releasing_ls_and_rs() {
+        for select in [false, true] {
+            let mut e = engine();
+            e.set_fast(true);
+            if select {
+                select_mode_on(&mut e);
+            }
+
+            // LS: เอียงเต็ม = มี UI → ปล่อย 120 ms = UI ซ่อน (A ยังพิมพ์ได้)
+            push(&mut e, (0.0, 0.9), 300);
+            assert!(!e.fast_ui_hidden());
+            release_ls(&mut e);
+            push(&mut e, (0.0, 0.0), 120);
+            assert!(e.fast_ui_hidden(), "select={select}: ปล่อย LS 120 ms ต้องซ่อน UI");
+
+            // RS: ดัน = ลูกศรทำงาน (วงโชว์) → ปล่อย = หายทันทีเฟรมถัดไป
+            e.tick(&p((0.0, 0.0), (0.9, 0.0)), D);
+            assert!(e.fast_arrows_active());
+            e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+            assert!(!e.fast_arrows_active(), "select={select}: ปล่อย RS ต้องหาย");
+        }
+    }
+
+    #[test]
+    fn fast_mode_ls_resting_in_the_old_dead_band_still_hides_the_ui() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.9), 300);
+        // หยุดค้างที่ 0.25 (เดิมอยู่ใน dead band 0.20–0.30 → ไม่เคยนับว่าปล่อย)
+        push(&mut e, (0.0, 0.25), 200);
+        assert!(e.fast_ui_hidden());
+    }
+
+    #[test]
+    fn fast_mode_opening_the_command_wheel_clears_the_fast_ui() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.9), 300);
+        assert_eq!(e.fast_zone(), FastZone::Letter);
+        e.tick(&button_press(|b| b.dpad_left = true), D);
+        assert_eq!(e.wheel(), Some(WheelKind::Command));
+        assert_eq!(e.fast_zone(), FastZone::Hidden);
+        assert_eq!(e.fast_sector(), None);
+    }
+
+    #[test]
+    fn fast_mode_r3_twice_turns_the_right_stick_into_shift_arrows() {
+        let mut e = engine();
+        e.set_fast(true);
+
+        // R3 สองครั้งติดกัน = โหมดเลือกข้อความ
+        e.tick(&button_press(|b| b.rs_click = true), D);
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+        assert!(!e.fast_selecting());
+        e.tick(&button_press(|b| b.rs_click = true), D);
+        assert!(e.fast_selecting());
+        e.tick(&p((0.0, 0.0), (0.0, 0.0)), D);
+
+        // RS → = Shift+Right (highlight)
+        let action = e.tick(&p((0.0, 0.0), (0.9, 0.0)), D);
+        match action {
+            Some(Action::Key(press)) => {
+                assert_eq!(press.key, Key::Named(NamedKey::Right));
+                assert!(press.shift, "โหมดเลือกข้อความต้องกด Shift ค้าง");
+            }
+            other => panic!("ต้องได้ Shift+Right: {other:?}"),
+        }
     }
 }

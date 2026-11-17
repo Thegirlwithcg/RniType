@@ -17,7 +17,10 @@ pub mod runtime;
 pub mod typing;
 
 pub use action::{Action, Command, Key, KeyPress, Mode, MouseButton, NamedKey, QuickAction};
-pub use gesture::{Commit, GestureConfig, GestureEngine, GestureState};
+pub use gesture::{
+    Commit, FastCommit, FastGesture, FastInput, FastNav, FastOwner, FastPhase, FastZone,
+    GestureConfig, GestureEngine, GestureState,
+};
 pub use keymap::Lang;
 pub use normalizer::{Dir8, Normalizer, NormalizerConfig, SectorTracker};
 pub use pad::{Buttons, PadState, Vec2};

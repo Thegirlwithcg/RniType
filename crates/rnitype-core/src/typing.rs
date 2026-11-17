@@ -3,7 +3,10 @@
 use std::collections::BTreeMap;
 
 use crate::action::{Action, Key, KeyPress};
-use crate::gesture::{Commit, GestureConfig, GestureEngine, GestureState};
+use crate::gesture::{
+    Commit, FastCommit, FastGesture, FastInput, FastPhase, FastZone, GestureConfig, GestureEngine,
+    GestureState,
+};
 use crate::keymap::{Keymap, Lang, lang_code, lookup_layer};
 use crate::normalizer::Dir8;
 use crate::pad::PadState;
@@ -11,6 +14,9 @@ use crate::pad::PadState;
 #[derive(Clone, Debug)]
 pub struct TypingPipeline {
     engine: GestureEngine,
+    /// Fast mode (Feature 1): LS เลือกกลุ่ม → ล็อก → LS เลือกตัวอักษร → A พิมพ์
+    fast: FastGesture,
+    fast_on: bool,
     lang: Lang,
     /// รหัสภาษาที่ใช้ lookup override (`en`, `th`, `ru`, …)
     code: String,
@@ -29,6 +35,8 @@ impl TypingPipeline {
     pub fn new(lang: Lang, cfg: GestureConfig) -> Self {
         Self {
             engine: GestureEngine::new(cfg),
+            fast: FastGesture::new(cfg),
+            fast_on: false,
             lang,
             code: lang_code(lang).to_string(),
             label: lang.label().to_string(),
@@ -94,14 +102,7 @@ impl TypingPipeline {
     }
 
     /// ตั้ง override 1 ช่อง (`None` = ทำให้ช่องว่าง เฉพาะ layer 2)
-    pub fn set_override(
-        &mut self,
-        code: &str,
-        layer: u8,
-        group: u8,
-        sector: u8,
-        key: Option<Key>,
-    ) {
+    pub fn set_override(&mut self, code: &str, layer: u8, group: u8, sector: u8, key: Option<Key>) {
         if layer < 1 || group > 7 || sector > 7 {
             return;
         }
@@ -152,6 +153,94 @@ impl TypingPipeline {
     /// ชั้น 2 มีช่องว่าง (ไทย) → คืน `None` = commit แล้วไม่ส่งคีย์
     pub fn tick(&mut self, pad: &PadState, dt_ms: u32) -> Option<Action> {
         let Commit { group, sector } = self.engine.tick(pad, dt_ms)?;
+        let key = self.key_at(group, sector)?;
+        Some(Action::Key(KeyPress {
+            key,
+            shift: pad.buttons.lt,
+            ctrl: pad.buttons.lb,
+            alt: false,
+        }))
+    }
+
+    /* ---------------- Fast mode (Feature 1) ---------------- */
+
+    /// เปิด/ปิด Fast mode — ปิดแล้วล้างไฮไลต์ที่ค้าง
+    pub fn set_fast(&mut self, on: bool) {
+        if self.fast_on == on {
+            return;
+        }
+        self.fast_on = on;
+        self.fast.reset();
+    }
+
+    pub fn fast(&self) -> bool {
+        self.fast_on
+    }
+
+    pub fn fast_phase(&self) -> FastPhase {
+        self.fast.phase()
+    }
+
+    /// โซนปัจจุบัน (ซ่อน / เลือกหมวด / เลือกตัวอักษร)
+    pub fn fast_zone(&self) -> FastZone {
+        self.fast.zone()
+    }
+
+    /// ระยะเอียงของ LS ล่าสุด (0.0–1.0) — HUD ใช้แสดง gauge
+    pub fn fast_radius(&self) -> f32 {
+        self.fast.radius()
+    }
+
+    /// UI ถูกซ่อนเพราะปล่อย Analog แล้ว (แต่ยังพิมพ์ตัวที่เลือกไว้ได้)
+    pub fn fast_ui_hidden(&self) -> bool {
+        self.fast.ui_hidden()
+    }
+
+    /// สลับโหมดเลือกตัวอักษร (`letterPick: "push" | "dpad"`)
+    pub fn set_fast_push(&mut self, push: bool) {
+        self.fast.set_push(push);
+    }
+
+    /// `true` = push-through (D-pad ไม่ใช้เลือกเมนู) · `false` = fallback 0.2.5
+    pub fn fast_push(&self) -> bool {
+        self.fast.push()
+    }
+
+    /// ย้อน 1 ระดับ (B / D-pad ←) — `true` = ใช้ B เป็น cancel แล้ว (ไม่ต้อง Backspace)
+    pub fn fast_cancel(&mut self) -> bool {
+        self.fast.cancel()
+    }
+
+    pub fn fast_group(&self) -> Option<Dir8> {
+        self.fast.group()
+    }
+
+    pub fn fast_sector(&self) -> Option<Dir8> {
+        self.fast.sector()
+    }
+
+    pub fn fast_repeat_count(&self) -> u32 {
+        self.fast.repeat_count()
+    }
+
+    /// กลับไปเลือกกลุ่ม (L3)
+    pub fn fast_unlock(&mut self) {
+        self.fast.unlock();
+    }
+
+    /// ล้างไฮไลต์ตัวอักษร (B) — `true` = มีไฮไลต์ให้ล้าง
+    pub fn fast_clear_sector(&mut self) -> bool {
+        self.fast.clear_sector()
+    }
+
+    /// ล้างสถานะ Fast mode ทั้งหมด (สลับ mode / guard / ปิดแอป)
+    pub fn fast_reset(&mut self) {
+        self.fast.reset();
+    }
+
+    /// 1 เฟรมของ Fast mode — คืน action เฉพาะตอนกด A ยืนยัน (`accept`)
+    pub fn tick_fast(&mut self, pad: &PadState, dt_ms: u32, input: FastInput) -> Option<Action> {
+        let FastCommit { group, sector } = self.fast.tick(pad, dt_ms, input)?;
         let key = self.key_at(group, sector)?;
         Some(Action::Key(KeyPress {
             key,
@@ -309,7 +398,13 @@ mod tests {
         // override ยังชนะตาราง custom
         pipe.set_override("ru", 1, 0, 0, Some(Key::Char('z')));
         let action = press(&mut pipe, (0.0, 0.9), (0.0, 0.9)).expect("commit");
-        assert!(matches!(action, Action::Key(KeyPress { key: Key::Char('z'), .. })));
+        assert!(matches!(
+            action,
+            Action::Key(KeyPress {
+                key: Key::Char('z'),
+                ..
+            })
+        ));
     }
 
     #[test]
