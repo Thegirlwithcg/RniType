@@ -436,6 +436,8 @@ pub struct FastGesture {
     band_ms: u32,
     /// A ที่กดตอนยังติด lockout / ตอนกำลัง latch — พิมพ์ทันทีเมื่อพร้อม (ไม่ถูกทิ้ง)
     pending_accept: bool,
+    /// ช่องที่ไฮไลต์ถูกพิมพ์ไปแล้ว (ยังดัน LS ค้างเลยคงไฮไลต์ไว้) — พอปล่อย LS A ต้องเป็น Space
+    consumed: bool,
     radius: f32,
     /// ซ่อน UI แล้ว (อยู่ศูนย์ ≥ 120 ms) แต่ยังพิมพ์ตัวที่เลือกไว้ได้
     ui_hidden: bool,
@@ -462,6 +464,7 @@ impl FastGesture {
             quiet_ms: 0,
             band_ms: 0,
             pending_accept: false,
+            consumed: false,
             radius: 0.0,
             ui_hidden: false,
         }
@@ -600,6 +603,7 @@ impl FastGesture {
         if Some(dir) != self.sector {
             self.prev_sector = self.sector;
             self.sector = Some(dir);
+            self.consumed = false;
             self.sector_age_ms = 0;
             if let Some(group) = self.group {
                 self.last_pick = Some((group, dir));
@@ -808,6 +812,14 @@ impl FastGesture {
                             return None;
                         }
                         self.pending_accept = false;
+                        // พิมพ์ช่องนี้ไปแล้วและปล่อย LS แล้ว → ไม่พิมพ์ซ้ำ (runtime ส่ง Space)
+                        if self.consumed && r < FAST_CENTER_OUT {
+                            self.sector = None;
+                            self.prev_sector = None;
+                            self.sector_age_ms = u32::MAX;
+                            self.consumed = false;
+                            return None;
+                        }
                         let sector = if self.sector_age_ms < FAST_LOOKBACK_MS {
                             self.prev_sector.unwrap_or(sector)
                         } else {
@@ -822,6 +834,7 @@ impl FastGesture {
                         }
                         // พิมพ์แล้ว = ใช้ช่องหมดแล้ว → A ครั้งต่อไปตอนปล่อยจอยต้องเป็น Space (ไม่พิมพ์ซ้ำ)
                         self.last_pick = None;
+                        self.consumed = true;
                         return Some(FastCommit { group, sector });
                     }
                     self.pending_accept = false;
@@ -1321,11 +1334,12 @@ mod tests {
             step(&mut f, (0.0, 0.0));
         }
         assert!(f.ui_hidden());
-        assert!(
-            f.tick(&pad((0.0, 0.0), (0.0, 0.0)), 4, accept()).is_some(),
-            "ปล่อยจอยแล้ว A ต้องพิมพ์ได้"
+        assert_eq!(
+            f.tick(&pad((0.0, 0.0), (0.0, 0.0)), 4, accept()),
+            None,
+            "พิมพ์ช่องนี้ไปแล้ว ปล่อยจอยแล้ว A ห้ามซ้ำ (= Space)"
         );
-        assert_eq!(f.sector(), None, "หลังพิมพ์ตอนไม่โยกจอย = ไฮไลต์ว่าง");
+        assert_eq!(f.sector(), None, "ปล่อยจอยหลังพิมพ์ = ไฮไลต์ว่าง");
 
         // ขยับไปทิศอื่น = ได้ไฮไลต์ใหม่ (รอพ้น ignore หลังออกจากศูนย์)
         for _ in 0..25 {

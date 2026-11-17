@@ -3309,6 +3309,20 @@ mod tests {
     }
 
     #[test]
+    fn fast_mode_a_while_pushing_then_a_after_release_is_space() {
+        let mut e = engine();
+        e.set_fast(true);
+        push(&mut e, (0.0, 0.9), 300);
+        assert!(is_char(press_a(&mut e, (0.0, 0.9))), "A ตอนดันอยู่ = ตัวอักษร");
+        release_ls(&mut e);
+        assert_eq!(
+            press_a(&mut e, (0.0, 0.0)),
+            key(Key::Named(NamedKey::Space)),
+            "ปล่อย LS แล้วกด A ห้ามซ้ำตัวเดิม"
+        );
+    }
+
+    #[test]
     fn fast_mode_holding_a_at_rest_repeats_space() {
         let mut e = engine();
         e.set_fast(true);
@@ -3562,7 +3576,7 @@ mod tests {
         push(&mut e, (0.0, 0.9), 300);
         assert!(is_char(press_a(&mut e, (0.0, 0.9))), "Select mode ต้องไม่บล็อก A");
         release_ls(&mut e);
-        assert!(is_char(press_a(&mut e, (0.0, 0.0))));
+        assert_eq!(press_a(&mut e, (0.0, 0.0)), key(Key::Named(NamedKey::Space)));
         push(&mut e, (0.0, 0.0), 200);
         assert!(e.fast_selecting(), "ปล่อย LS ไม่ปิด Select mode");
         assert_eq!(press_a(&mut e, (0.0, 0.0)), key(Key::Named(NamedKey::Space)));
