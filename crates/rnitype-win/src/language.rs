@@ -171,6 +171,9 @@ pub fn build_keymap(klid: &str) -> Option<rnitype_core::keymap::Keymap> {
     use rnitype_core::Key;
 
     let target = load_layout(klid)?;
+    // ADR (รอบ 4): layout ที่เราโหลดเองต้องถูก unload กลับ — ไม่งั้นมันค้างใน Win+Space
+    // (เช่น RU 0419 ที่ผู้ใช้ไม่ได้เพิ่มเอง) · guard ทำงานทุกเส้นทางออก
+    let _guard = LayoutGuard(target);
     let reference = load_layout("00000409")?;
     // กัน Windows ที่ยอมโหลด KLID แปลก ๆ แล้วคืน layout อื่น: lang id ต้องตรง
     if let Some(expected) = klid_lang_id(klid) {
@@ -203,6 +206,21 @@ pub fn build_keymap(klid: &str) -> Option<rnitype_core::keymap::Keymap> {
 #[cfg(not(windows))]
 pub fn build_keymap(_klid: &str) -> Option<rnitype_core::keymap::Keymap> {
     None
+}
+
+/// Unload layout ที่ `load_layout` โหลดมา (best-effort) เมื่อออกจาก `build_keymap`
+#[cfg(windows)]
+struct LayoutGuard(HKL);
+
+#[cfg(windows)]
+impl Drop for LayoutGuard {
+    fn drop(&mut self) {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::UnloadKeyboardLayout;
+        // SAFETY: hkl มาจาก LoadKeyboardLayoutW และยังไม่ถูก unload ที่อื่น
+        unsafe {
+            UnloadKeyboardLayout(self.0);
+        }
+    }
 }
 
 /// 4 หลักท้ายของ KLID = language id (`0000041E` → `0x041E`)

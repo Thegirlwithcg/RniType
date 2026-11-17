@@ -16,8 +16,8 @@ pub trait PadSource: Send {
 }
 
 /* ============================================================
-   จอยจริง
-   ============================================================ */
+จอยจริง
+============================================================ */
 
 pub struct GilrsSource {
     gilrs: Gilrs,
@@ -125,8 +125,8 @@ fn read_pad(pad: &Gamepad) -> PadState {
 }
 
 /* ============================================================
-   สคริปต์ (--fake-pad / test)
-   ============================================================ */
+สคริปต์ (--fake-pad / test)
+============================================================ */
 
 /// จอยปลอมที่เล่นตามสคริปต์ (วินาที → PadState) วนซ้ำ
 pub struct ScriptSource {
@@ -146,7 +146,71 @@ impl ScriptSource {
         }
     }
 
-    /// ท่าพิมพ์: LS ไปกลุ่ม → RS เลือกช่อง → ปล่อย RS (commit) → ปล่อย LS
+    /// ท่าพิมพ์ Fast mode: LS เลือกกลุ่ม → ปล่อย (ล็อก) → LS เลือกตัวอักษร → A พิมพ์
+    ///
+    /// 1 ตัวอักษร = 700 ms · ใช้กับ `--fake-pad` เมื่อเปิด Fast mode
+    pub fn fast_typing_script(chars: &[(f32, f32)]) -> Self {
+        const STEP_MS: u64 = 700;
+        let mut steps = Vec::new();
+        for (index, (x, y)) in chars.iter().enumerate() {
+            let base = index as u64 * STEP_MS;
+            let group = PadState {
+                ls: Vec2::new(*x, *y),
+                ..PadState::default()
+            };
+            let pick = PadState {
+                ls: Vec2::new(*x, *y),
+                buttons: Buttons {
+                    a: true,
+                    ..Buttons::default()
+                },
+                ..PadState::default()
+            };
+            steps.push((base, PadState::default()));
+            steps.push((base + 100, group)); // ดัน LS เลือกกลุ่ม
+            steps.push((base + 220, PadState::default())); // ปล่อย = ล็อกกลุ่ม
+            steps.push((base + 300, group)); // LS เลือกตัวอักษร
+            steps.push((base + 420, pick)); // A = พิมพ์
+            steps.push((base + 520, PadState::default()));
+        }
+        Self::new(chars.len() as u64 * STEP_MS + 400, steps)
+    }
+
+    /// ท่าพิมพ์ Fast mode v2 (push-through): เอียงกลาง = หมวด → ดันสุด = latch → A พิมพ์
+    ///
+    /// 1 ตัวอักษร = 700 ms · ใช้กับ `--fake-pad` เมื่อ `letterPick = push`
+    pub fn push_typing_script(chars: &[(f32, f32)]) -> Self {
+        const STEP_MS: u64 = 700;
+        let mut steps = Vec::new();
+        for (index, (x, y)) in chars.iter().enumerate() {
+            let base = index as u64 * STEP_MS;
+            let mid = PadState {
+                ls: Vec2::new(x * 0.55, y * 0.55),
+                ..PadState::default()
+            };
+            let full = PadState {
+                ls: Vec2::new(*x, *y),
+                ..PadState::default()
+            };
+            let pick = PadState {
+                ls: Vec2::new(*x, *y),
+                buttons: Buttons {
+                    a: true,
+                    ..Buttons::default()
+                },
+                ..PadState::default()
+            };
+            steps.push((base, PadState::default()));
+            steps.push((base + 80, mid)); // เอียงกลาง = เลือกหมวด
+            steps.push((base + 200, full)); // ดันสุด = latch หมวด
+            steps.push((base + 400, pick)); // A = พิมพ์
+            steps.push((base + 480, full));
+            steps.push((base + 560, PadState::default()));
+        }
+        Self::new(chars.len() as u64 * STEP_MS + 400, steps)
+    }
+
+    /// ท่าพิมพ์ Fast mode เดิม (D-pad เลือกตัวอักษร): LS ไปกลุ่ม → RS เลือกช่อง → ปล่อย RS (commit) → ปล่อย LS
     ///
     /// 1 ตัวอักษร = 600 ms · ใช้กับ `--fake-pad` เพื่อดูทั้งท่อโดยไม่ต้องมีจอย
     pub fn typing_script(chars: &[(f32, f32)]) -> Self {
@@ -213,5 +277,29 @@ mod tests {
     fn script_has_a_stable_name() {
         let source = ScriptSource::typing_script(&[(0.0, 0.9)]);
         assert_eq!(source.name(), "script");
+    }
+
+    #[test]
+    fn push_script_pushes_to_the_edge_before_pressing_a() {
+        let mut source = ScriptSource::push_typing_script(&[(0.0, 0.9)]);
+        // 80 ms = เอียงกลาง (โซนหมวด)
+        let mid = source.sample(100).unwrap().ls.magnitude();
+        assert!(mid > 0.4 && mid < 0.7, "mid={mid}");
+        // 200 ms = ดันสุด (โซนตัวอักษร)
+        assert!(source.sample(220).unwrap().ls.magnitude() > 0.85);
+        // 400 ms = A ถูกกด
+        assert!(source.sample(420).unwrap().buttons.a);
+    }
+
+    #[test]
+    fn fast_script_locks_the_group_then_presses_a() {
+        let mut source = ScriptSource::fast_typing_script(&[(0.0, 0.9)]);
+        // 100 ms = ดัน LS เลือกกลุ่ม
+        assert!(source.sample(150).unwrap().ls.y > 0.5);
+        // 220 ms = ปล่อย LS (ล็อกกลุ่ม)
+        let released = source.sample(250).unwrap();
+        assert!(released.ls.y.abs() < 0.1 && !released.buttons.a);
+        // 420 ms = A ถูกกด (พิมพ์ตัวอักษร)
+        assert!(source.sample(450).unwrap().buttons.a);
     }
 }

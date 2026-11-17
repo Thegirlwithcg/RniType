@@ -15,8 +15,8 @@ use rnitype_core::keymap::{group_names_for, label_of};
 use rnitype_core::normalizer::Dir8;
 use rnitype_core::runtime::{LangSlot, RuntimeEngine, WheelKind};
 use rnitype_core::{
-    Action, Command, GestureState, Key, KeyPress, Lang, Mode, MouseButton, NamedKey, PadState,
-    QuickAction,
+    Action, Command, FastZone, GestureState, Key, KeyPress, Lang, Mode, MouseButton,
+    NamedKey, PadState, QuickAction,
 };
 use rnitype_win::Injector;
 use rnitype_win::target::BlockReason;
@@ -112,6 +112,21 @@ impl Session {
 
     pub fn engine(&self) -> &RuntimeEngine {
         &self.engine
+    }
+
+    /// เปิด/ปิด Fast mode จาก config (`defaults.typing.fastMode`) — มีผลทันที
+    pub fn set_fast(&mut self, on: bool) {
+        self.engine.set_fast(on);
+    }
+
+    /// สลับวิธีเลือกตัวอักษร (`defaults.typing.letterPick`)
+    pub fn set_fast_push(&mut self, push: bool) {
+        self.engine.set_fast_push(push);
+    }
+
+    /// ย้าย pivot ของ HUD (Fast mode ใช้เกาะตำแหน่ง caret) — ผ่าน clamp เดิมเสมอ
+    pub fn set_pivot(&mut self, point: (f32, f32)) {
+        self.pivot = self.clamp_pivot(point);
     }
 
     pub fn sent(&self) -> u32 {
@@ -217,8 +232,7 @@ impl Session {
     pub fn unpause(&mut self) {
         if let Some(mode) = self.paused_mode.take() {
             self.engine.set_mode(mode);
-        } else if self.engine.mode() == Mode::Disabled && self.engine.disabled_remaining_ms() == 0
-        {
+        } else if self.engine.mode() == Mode::Disabled && self.engine.disabled_remaining_ms() == 0 {
             self.engine.set_mode(Mode::Type);
         }
     }
@@ -292,10 +306,7 @@ impl Session {
     }
 
     /// ตั้ง override ของ keymap (จาก config) — ล้างของเดิมแล้วใส่ชุดใหม่
-    pub fn set_keymap_overrides(
-        &mut self,
-        overrides: &[(String, u8, u8, u8, Option<Key>)],
-    ) {
+    pub fn set_keymap_overrides(&mut self, overrides: &[(String, u8, u8, u8, Option<Key>)]) {
         self.engine.clear_keymap_overrides();
         for (code, layer, group, sector, key) in overrides {
             self.engine
@@ -410,12 +421,44 @@ impl Session {
             hud_mode(engine.mode(), engine.wheel(), lang, caret)
         };
 
-        let group = engine.typing_group();
-        let sector = engine.typing_sector();
         let typing = engine.mode() == Mode::Type && engine.wheel().is_none() && !caret && !blocked;
         let shift_lock = engine.shift_lock();
         let layer = engine.layer();
         let repeating = engine.gesture_state() == GestureState::Repeating;
+        let fast = engine.fast();
+        let fast_radius = (engine.fast_radius() * 100.0).round() / 100.0;
+        let fast_select = engine.fast_selecting();
+        let fast_arrows = engine.fast_arrows_active();
+        // UI ของ LS (วงล้อ + gauge) = โซนเปิดอยู่ **และ** ยังไม่ปล่อย Analog (ui_hidden)
+        // ปล่อยแล้วต้องหายแน่นอนไม่ว่าโหมด Select จะเปิดอยู่ (owner 2026-11-17, v0.3.5)
+        // — เครื่องยนต์ยังเก็บช่องที่เลือกไว้ให้ A พิมพ์ต่อได้ แต่ไม่รายงานให้ HUD เห็น
+        let fast_ls_ui = fast && !engine.fast_ui_hidden() && engine.fast_zone() != FastZone::Hidden;
+        // RS ลูกศร: วงล้อโชว์ตราบที่ดัน RS อยู่ (ไม่ขึ้นกับ LS) · ปล่อย RS = หายทันที
+        let fast_rings = fast_arrows || fast_ls_ui;
+        let fast_zone = if fast_ls_ui {
+            engine.fast_zone()
+        } else {
+            FastZone::Hidden
+        };
+        let fast_zone_name = match fast_zone {
+            FastZone::Hidden => "hidden",
+            FastZone::Category => "category",
+            FastZone::Letter => "letter",
+        };
+        let fast_phase = match fast_zone {
+            FastZone::Letter => "char",
+            _ => "group",
+        };
+        let (group, sector) = if fast && !fast_ls_ui {
+            (None, None)
+        } else {
+            (engine.typing_group(), engine.typing_sector())
+        };
+        let hud_state = if fast {
+            if fast_rings { fast_phase } else { "idle" }
+        } else {
+            hud_state_name(engine.gesture_state())
+        };
 
         let (inner, outer) = if blocked {
             (
@@ -439,11 +482,19 @@ impl Session {
         // ADR-13: ล็อกตัวใหญ่แล้ว pill ต้องบอก (HUD แสดงเป็นข้อความใน pill)
         let status_text = if let Some(reason) = self.guard {
             guard_text(reason)
+        } else if fast_select {
+            "เลือกข้อความ"
         } else if caret {
             if engine.caret_selecting() {
                 "เลือกข้อความ"
             } else {
                 "ลูกศร"
+            }
+        } else if fast && typing {
+            match fast_zone {
+                FastZone::Letter => "A พิมพ์",
+                FastZone::Category => "LS หมวด · ดันสุดเพื่อพิมพ์",
+                FastZone::Hidden => "",
             }
         } else if shift_lock && typing {
             "ตัวใหญ่"
@@ -471,7 +522,7 @@ impl Session {
             },
             "layer": layer,
             "shiftLock": engine.shift_lock(),
-            "state": hud_state_name(engine.gesture_state()),
+            "state": hud_state,
             "group": group.map_or(-1, |dir| dir.index() as i32),
             "sector": sector.map_or(-1, |dir| dir.index() as i32),
             "language": {
@@ -488,6 +539,13 @@ impl Session {
                 "visible": engine.mode() == Mode::Mouse && !blocked,
             },
             "status": { "text": status_text, "badges": badges },
+            "fast": {
+                "on": fast,
+                "phase": fast_phase,
+                "select": fast_select,
+                "zone": fast_zone_name,
+                "r": fast_radius,
+            },
         })
     }
 
@@ -530,10 +588,7 @@ impl Session {
                 json!({ "kind": "language", "active": active, "labels": labels })
             }
             Some(WheelKind::QuickBar) => {
-                let labels: Vec<Value> = Dir8::ALL
-                    .iter()
-                    .map(|dir| quickbar_label(*dir))
-                    .collect();
+                let labels: Vec<Value> = Dir8::ALL.iter().map(|dir| quickbar_label(*dir)).collect();
                 json!({ "kind": "command", "active": direction, "labels": labels })
             }
             None if typing => {
@@ -865,6 +920,167 @@ mod tests {
         assert_eq!(labels[4]["sub"], "Ctrl+C");
     }
 
+    fn push_for(session: &mut Session, ls: (f32, f32), ms: u32) {
+        let mut t = 0;
+        while t < ms {
+            session.step(&pad(ls, (0.0, 0.0)), 4);
+            t += 4;
+        }
+    }
+
+    #[test]
+    fn fast_mode_state_is_reported_and_a_types_without_space() {
+        let (mut session, _) = session();
+        session.set_fast(true);
+
+        // เอียงกลาง ๆ = โซนหมวด · วงนอกยังไม่ไฮไลต์
+        push_for(&mut session, (0.0, 0.5), 100);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["fast"]["on"], true);
+        assert_eq!(hud["fast"]["phase"], "group");
+        assert_eq!(hud["fast"]["zone"], "category");
+        assert_eq!(hud["group"], 0, "หมวด N");
+        assert_eq!(hud["sector"], -1);
+
+        // ดันสุด = latch หมวด → โซนตัวอักษร
+        push_for(&mut session, (0.0, 0.9), 300);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["fast"]["phase"], "char");
+        assert_eq!(hud["fast"]["zone"], "letter");
+        assert!(hud["fast"]["r"].as_f64().unwrap() > 0.85);
+        assert_eq!(hud["sector"], 0, "ช่อง N");
+
+        // A = พิมพ์ (ไม่ใช่ Space)
+        let mut press = pad((0.0, 0.9), (0.0, 0.0));
+        press.buttons.a = true;
+        let out = session.step(&press, 4);
+        assert!(
+            matches!(
+                out.first(),
+                Some(Action::Key(KeyPress {
+                    key: Key::Char(_),
+                    ..
+                }))
+            ),
+            "A ในโซนตัวอักษรต้องพิมพ์: {out:?}"
+        );
+    }
+
+    #[test]
+    fn fast_mode_shows_the_wheel_when_the_right_stick_moves() {
+        let (mut session, _) = session();
+        session.set_fast(true);
+
+        // idle ใน Fast mode = ไม่มีวง (เหลือ pill)
+        let idle = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(idle["state"], "idle");
+        assert_eq!(idle["inner"]["kind"], "group");
+
+        // ดัน Analog ขวา = ลูกศรทำงาน + วงล้อโชว์ (Feature 3 feedback)
+        session.step(&pad((0.0, 0.0), (0.9, 0.0)), 4);
+        let pushed = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(pushed["state"], "group", "ดัน RS ต้องเห็นวงล้อ");
+        assert_eq!(pushed["inner"]["labels"].as_array().unwrap().len(), 8);
+
+        // ปล่อย RS = วงกลับไปซ่อน
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+        assert_eq!(
+            session.hud_state(HudStyle::default(), (0, 0))["state"],
+            "idle"
+        );
+    }
+
+    #[test]
+    fn fast_mode_keeps_the_wheel_and_lets_ls_change_group() {
+        let (mut session, _) = session();
+        session.set_fast(true);
+
+        // ดันสุดไปทางขวา = หมวด E + ช่อง E
+        push_for(&mut session, (0.9, 0.0), 300);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["state"], "char");
+        assert_eq!(hud["group"], 2);
+        assert_eq!(hud["sector"], 2);
+
+        // เปลี่ยนทิศในโซนตัวอักษร = เปลี่ยนช่อง ไม่เปลี่ยนหมวดที่ latch
+        push_for(&mut session, (0.0, 0.9), 20);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["state"], "char", "ยังอยู่ในโซนตัวอักษร");
+        assert_eq!(hud["group"], 2, "หมวดที่ latch ต้องไม่เปลี่ยน");
+        assert_eq!(hud["sector"], 0);
+
+        // ดึงกลับ = กลับไปโซนหมวด แล้วเปลี่ยนหมวดได้
+        push_for(&mut session, (0.0, 0.5), 120);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["state"], "group");
+        assert_eq!(hud["sector"], -1);
+    }
+
+    #[test]
+    fn fast_mode_hud_goes_idle_after_ls_release_even_in_select_mode() {
+        for select in [false, true] {
+            let (mut session, _) = session();
+            session.set_fast(true);
+            if select {
+                let mut click = pad((0.0, 0.0), (0.0, 0.0));
+                click.buttons.rs_click = true;
+                for _ in 0..2 {
+                    session.step(&click, 4);
+                    session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+                }
+                let hud = session.hud_state(HudStyle::default(), (0, 0));
+                assert_eq!(hud["fast"]["select"], true);
+            }
+
+            push_for(&mut session, (0.0, 0.9), 300);
+            let hud = session.hud_state(HudStyle::default(), (0, 0));
+            assert_eq!(hud["state"], "char", "select={select}");
+            assert_eq!(hud["fast"]["zone"], "letter");
+
+            // ปล่อย Analog จริง (ไล่ผ่านช่วงกลาง) แล้วรอ 120 ms → วงล้อ + gauge ต้องหายหมด
+            for ls in [(0.0, 0.8), (0.1, 0.6), (0.2, 0.4), (0.2, 0.15), (0.1, 0.05)] {
+                session.step(&pad(ls, (0.0, 0.0)), 4);
+            }
+            push_for(&mut session, (0.0, 0.0), 124);
+            let hud = session.hud_state(HudStyle::default(), (0, 0));
+            assert_eq!(hud["state"], "idle", "select={select}: วงล้อต้องหาย");
+            assert_eq!(hud["fast"]["zone"], "hidden", "select={select}: gauge ต้องหาย");
+            assert_eq!(hud["group"], -1);
+            assert_eq!(hud["sector"], -1);
+
+            // UI หายแล้ว แต่ A ยังพิมพ์ตัวที่เลือกไว้ได้
+            let mut a = pad((0.0, 0.0), (0.0, 0.0));
+            a.buttons.a = true;
+            let out = session.step(&a, 4);
+            assert!(
+                matches!(
+                    out.first(),
+                    Some(Action::Key(KeyPress {
+                        key: Key::Char(_),
+                        ..
+                    }))
+                ),
+                "select={select}: A หลังปล่อย LS ต้องพิมพ์: {out:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn fast_mode_right_stick_wheel_shows_after_ls_idle_and_hides_on_release() {
+        let (mut session, _) = session();
+        session.set_fast(true);
+        push_for(&mut session, (0.0, 0.0), 300);
+
+        session.step(&pad((0.0, 0.0), (0.9, 0.0)), 4);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["state"], "group", "LS ว่างนานแล้ว ดัน RS ก็ต้องเห็นวงล้อ");
+        assert_eq!(hud["fast"]["zone"], "hidden", "ไม่มี gauge ของ LS");
+
+        session.step(&pad((0.0, 0.0), (0.0, 0.0)), 4);
+        let hud = session.hud_state(HudStyle::default(), (0, 0));
+        assert_eq!(hud["state"], "idle", "ปล่อย RS ต้องหายทันที");
+    }
+
     #[test]
     fn switching_language_updates_the_wheel_slots() {
         let (mut session, _) = session();
@@ -1172,11 +1388,13 @@ mod tests {
         assert!(session.engine().sticky_drag());
 
         let hud = session.hud_state(HudStyle::default(), (0, 0));
-        assert!(hud["status"]["badges"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|badge| badge == "Drag"));
+        assert!(
+            hud["status"]["badges"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|badge| badge == "Drag")
+        );
 
         // สลับกลับ Type ผ่านวงคำสั่ง: session ต้องปล่อยปุ่มซ้ายให้ด้วย
         let mut open = pad((0.0, 0.0), (0.0, 0.0));

@@ -225,6 +225,46 @@ html, body {
 }
 .hud[data-rings="on"] .hud__ring { opacity: 1; }
 
+/* Fast mode gauge (ADR-33): ระดับการเอียง LS + จุดตำแหน่งปัจจุบัน */
+.hud__fast {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-fast) var(--ease-out);
+}
+.hud__fast[data-on="true"] { opacity: 1; }
+.fast__track {
+  fill: none;
+  stroke: var(--ink-dim);
+  stroke-width: 2;
+  opacity: 0.22;
+}
+.fast__value {
+  fill: none;
+  stroke: var(--mode-color);
+  stroke-width: 3;
+  stroke-linecap: round;
+  /* ADR-33: ต้องหมุนรอบจุดศูนย์กลางของวงเอง — `view-box` ทำให้ Chrome หมุนรอบมุม
+     แล้ววงไปโผล่ใต้ล้อ (owner 2026-11-17) */
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: rotate(-90deg);
+}
+.fast__marker { fill: var(--mode-color); }
+.hud[data-fast-zone="letter"] .fast__value { stroke-width: 4; }
+
+/* Fast mode: กลางวงโปร่งใส ไม่มีจุด/ตัวอักษรกลาง (owner 2026-11-17) */
+.hud[data-fast="on"] .hud__center { display: none; }
+.hud[data-fast="on"] .hud__preview { display: none; }
+.hud[data-fast="on"] .hud__glass {
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 0 28px, #000 29px);
+  mask: radial-gradient(circle at 50% 50%, transparent 0 28px, #000 29px);
+}
+
 /* ---------------- sectors ---------------- */
 
 /* ADR-19: ไม่ขยาย sector ด้วย transform — การ scale wedge 45° ทำให้แต่ละชิ้น
@@ -411,6 +451,36 @@ html, body {
   transition: opacity var(--t-slow) var(--ease-out);
 }
 .hud[data-idle="true"] .hud__status { opacity: 0.6; }
+
+/* Fast mode: ไม่แสดง pill เลย (owner 2026-11-17 — UI ต้องโล่ง) */
+.hud[data-fast="on"] .hud__status { display: none; }
+
+/* Fast mode: pill เล็กลง (owner 2026-11-17 — HUD เกาะ caret ไม่ให้บังข้อความ) */
+.hud[data-fast="on"] .hud__status {
+  bottom: -24px;
+  font-size: 10px;
+}
+.hud[data-fast="on"] .chip {
+  gap: 4px;
+  padding: 0 8px;
+  block-size: 20px;
+  font-size: 10px;
+}
+.hud[data-fast="on"] .chip--status::before {
+  inline-size: 5px;
+  block-size: 5px;
+}
+.hud[data-fast="on"] .pill__part:not(:empty)::before,
+.hud[data-fast="on"] .pill__badges:not(:empty)::before {
+  margin: 0 3px;
+}
+.hud[data-fast="on"] .pill-badge {
+  padding: 0 4px;
+  font-size: 9px;
+}
+.hud[data-fast="on"][data-rings="off"] .hud__status {
+  transform: translate(-50%, 10px);
+}
 
 /* ไม่มีวง (idle / mouse / nav / disabled) → pill ย้ายมากลางจุดยึด */
 .hud[data-rings="off"] .hud__status {

@@ -8,6 +8,7 @@
 
 use rnitype_core::Action;
 
+pub mod caret;
 pub mod language;
 pub mod plan;
 pub mod target;

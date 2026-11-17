@@ -19,7 +19,9 @@
             "commitDwellMs": { "type": "integer", "minimum": 40, "maximum": 120 },
             "hud": { "type": "boolean" },
             "ringAlways": { "type": "boolean", "default": false },
-            "layer": { "type": "integer", "minimum": 1, "maximum": 2, "default": 1 }
+            "layer": { "type": "integer", "minimum": 1, "maximum": 2, "default": 1 },
+            "fastMode": { "type": "boolean", "default": true, "description": "Fast mode (ticket 02): LS เลือกกลุ่ม → ล็อก → LS เลือกตัวอักษร → A พิมพ์" },
+            "letterPick": { "enum": ["push", "dpad"], "default": "push", "description": "Fast mode: push = ดัน LS สุดเข้าโซนตัวอักษร (ADR-33) · dpad = D-pad เลือกตัวอักษร (0.2.5)" }
           },
           "additionalProperties": false
         },

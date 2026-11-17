@@ -130,7 +130,10 @@ tags: [plan, execution, parallel, agents]
 > **slice 1 ✅ `ce7d027`** — วงคำสั่ง · วงภาษา · mode arbiter · emergency
 > **slice 2 ✅ `2084e26`** — Shift toggle (LT) · ปุ่มหน้า A/B/X/Y แตะ · B ยกเลิก gesture (50 core tests)
 > **slice 3 ✅ 2026-11-16** — mouse math/accel · Nav pivot · auto-repeat · layer 2 · double-tap/hold
-> เหลือ: quickbar (LB) · caret nav (R3) · sticky drag · pivot clamp/DPI
+> **slice 4 ✅ 2026-11-16** — quickbar (LB) · caret nav (R3) · sticky drag · pivot clamp
+> **slice 5 ✅ 2026-11-17 (0.2.5)** — **Fast mode**: LS = หมวด · D-pad = ตัวอักษร · A พิมพ์ · วงคำสั่งรับ D-pad + A · RS ลูกศร · R3×2 highlight · HUD เกาะ caret — [[32-fast-mode]]
+> **slice 6 ✅ 2026-11-17 (0.3.0)** — **Fast mode v2 (push-through)**: Analog ซ้ายตัวเดียว · โซนระยะเอียง + latch · D-pad/A/B สำหรับเมนู · HUD arc · `letterPick` fallback — [[33-fast-mode-v2-push-through]]
+> เหลือ: pivot clamp per-monitor/mixed-DPI
 
 | งาน | เกณฑ์ผ่าน |
 | --- | --- |

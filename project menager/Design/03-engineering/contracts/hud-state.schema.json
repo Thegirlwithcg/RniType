@@ -122,6 +122,19 @@
         }
       },
       "additionalProperties": false
+    },
+    "fast": {
+      "type": "object",
+      "description": "Fast mode (ticket 02) — LS เลือกกลุ่ม → ล็อก → LS เลือกตัวอักษร → A พิมพ์",
+      "required": ["on", "phase", "select", "zone", "r"],
+      "properties": {
+        "on": { "type": "boolean" },
+        "phase": { "enum": ["group", "char"] },
+        "select": { "type": "boolean", "description": "R3 สองครั้ง = ลูกศร + Shift (highlight)" },
+        "zone": { "enum": ["hidden", "category", "letter"], "description": "โซน Fast mode (ADR-33)" },
+        "r": { "type": "number", "minimum": 0, "maximum": 1, "description": "ระยะเอียง LS (0–1)" }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,

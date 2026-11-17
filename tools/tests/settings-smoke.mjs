@@ -69,6 +69,33 @@ try {
   check('pause toggle flips typing status', paused === true);
   await browser.evaluate(`document.getElementById('pauseToggle').click()`);
 
+  const fastToggle = await browser.evaluate(`({
+    exists: !!document.getElementById('fastModeToggle'),
+    on: document.getElementById('fastModeToggle')?.checked === true,
+    label: document.querySelector('label[for="fastModeToggle"]')?.textContent || ''
+  })`);
+  check('Fast mode toggle exists and is on by default',
+    fastToggle.exists && fastToggle.on && fastToggle.label === 'Fast mode',
+    JSON.stringify(fastToggle));
+
+  await browser.evaluate(`document.getElementById('fastModeToggle').click()`);
+  await sleep(80);
+  const fastOff = await browser.evaluate(`document.getElementById('fastModeToggle').checked === false`);
+  check('Fast mode toggle flips off', fastOff === true);
+  await browser.evaluate(`document.getElementById('fastModeToggle').click()`);
+
+  const pick = await browser.evaluate(`({
+    exists: !!document.getElementById('letterPick'),
+    on: document.querySelector('#letterPick .is-on')?.dataset.pick
+  })`);
+  check('Letter pick defaults to stick (push)', pick.exists && pick.on === 'push', JSON.stringify(pick));
+
+  await browser.evaluate(`document.querySelector('#letterPick [data-pick="dpad"]').click()`);
+  await sleep(60);
+  const pickDpad = await browser.evaluate(`document.querySelector('#letterPick .is-on')?.dataset.pick`);
+  check('Letter pick switches to D-pad', pickDpad === 'dpad', pickDpad);
+  await browser.evaluate(`document.querySelector('#letterPick [data-pick="push"]').click()`);
+
   await browser.evaluate(`
     document.getElementById('exclusionInput').value = 'game.exe';
     document.getElementById('exclusionForm').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));

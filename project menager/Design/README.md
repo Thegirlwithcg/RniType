@@ -73,6 +73,8 @@ updated: 2026-11-15
 | [[29-stats-cpu-memory-corrections]] | ADR: CPU/RAM ของโปรเซส + corrections proxy |
 | [[30-practice-error-rate]] | ADR: แท็บ Practice · error rate จริง (Levenshtein) + bench.jsonl |
 | [[31-installer-beta]] | ADR: NSIS installer (current user) + portable zip · console feature |
+| [[32-fast-mode]] | ADR: Fast mode (Ticket 02) — LS = หมวด · D-pad = ตัวอักษร · A พิมพ์ · HUD เกาะ caret · R3×2 + RS highlight |
+| [[33-fast-mode-v2-push-through]] | ADR: Fast mode v2 — Analog ซ้ายตัวเดียว + push-through (ระยะเอียง) · D-pad/A/B สำหรับเมนู · ลงโค้ด 0.3.0 |
 | [[ime-passthrough-deferred]] | IME (JA/ZH/KO) เลื่อนไป v0.2 — บันทึกแผนงานแล้ว |
 | [[hud-v0.9]] | บันทึก HUD: ภาพเทียบ A/B (v0.9) + สรุป v0.10 |
 | `05-mockup/hud-prototype/` | ม็อกอัป HUD v0.11 (เน้น EN+TH, หลายภาษา, Settings window, Keymap editor, pivot) |

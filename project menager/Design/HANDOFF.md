@@ -15,7 +15,7 @@ tags: [handoff]
 | --- | --- |
 | ผลิตภัณฑ์ | Windows background utility: จอย Xbox/DualSense ใช้ **พิมพ์แทนคีย์บอร์ด** และ **แทนเมาส์** มีหน้าตั้งค่าแบบ Logi Options+ |
 | ช่องทางขาย | Steam + itch.io (ทั้งคู่รับ .exe/.zip — ไม่ต้องใช้เอนจิน) |
-| สถานะ | **P0/P1 ปิด · P2 slice 4 · P3 slice 2 · P4/P5 slice 1–4 · P6 slice 1–3 (WPM/CPU/error rate) · installer beta — 219 tests** |
+| สถานะ | **P0/P1 ปิด · P2 slice 5 · P3 slice 2 · P4/P5 slice 1–4 · P6 slice 1–3 · installer beta · Fast mode 0.3.0 (push-through) — 245 tests** |
 | สแตก | **Rust** (core) + **Tauri v2** (UI/tray) + **gilrs** (จอย, XInput) + `SendInput` (auto scancode/Unicode) |
 | แผนสำรอง | C# .NET 8 + WPF/WinUI (ถอยได้ทุกเมื่อ เอกสารใช้ร่วมกันได้) |
 | งานถัดไป | **IME passthrough (v0.2)** หรือ **code-sign + publish** หรือ **owner testing** |
@@ -53,6 +53,8 @@ tags: [handoff]
 29. **P6 slice 3 (ADR-30)**: **แท็บ Practice = error rate จริง** — พิมพ์ประโยคอ้างอิงด้วยจอยใน textarea ของ Settings · Levenshtein distance → errors/error%/WPM · `record_bench` เขียน `%APPDATA%\RniType\bench.jsonl` + log `[bench]` — [[30-practice-error-rate]]
 30. **IME passthrough = เลื่อนไป v0.2** (owner 2026-11-16) — JA/ZH/KO ยังปิด toggle · บันทึกแผนงาน/สิ่งที่ต้องทำไว้แล้ว — [[ime-passthrough-deferred]]
 31. **Installer beta**: Tauri NSIS (current user) + portable zip · build ด้วย `installer/build-installer.ps1` · feature `console` เปิด log ไว้ทดสอบ · ยังไม่ code-sign — [[31-installer-beta]]
+32. **Fast mode 0.2.5 (Ticket 02)**: **LS = หมวด** (เปลี่ยนได้ตลอด) · **D-pad = เลือกช่องตัวอักษร** (`↑` ถอย · `↓/→` ไปข้างหน้า) · **A = พิมพ์** (A ไม่เป็น Space) · `D-pad ←` = วงคำสั่ง/เมนูโหมด · วงคำสั่งรับ D-pad + A · L3 = ล้างช่อง · **RS = ลูกศร** · **R3×2 = Shift+ลูกศร (highlight)** · HUD เกาะ caret (ไม่มีมาร์กเกอร์) · `defaults.typing.fastMode` ค่าเริ่มต้นเปิด — [[32-fast-mode]] · [[Handoff Feature]]
+33. **Fast mode v2 — push-through 0.3.x**: **Analog ซ้ายตัวเดียว**: เอียง `0.30–0.75` = หมวด · **ดันสุด ≥ 0.85 (นิ่ง 60 ms) = latch แล้วเลือกตัวอักษร** · **A = พิมพ์** · ดึงกลับ `< 0.70` = เปลี่ยนหมวดโดยไม่ผ่านศูนย์ · ศูนย์ 250 ms = ซ่อน UI + ล้างหมวด · **D-pad = วงคำสั่ง/เมนูโหมดเท่านั้น** (↑/↓/→ เลื่อน · A ยืนยัน · B/← ปิด) · **B = ย้อน 1 ระดับ** · A lockout 100 / lookback 40 ms · HUD arc ระดับเอียง · ทางหนี `letterPick: "dpad"` = พฤติกรรม 0.2.5 — [[33-fast-mode-v2-push-through]]
 
 ## 3. โครงสร้างไฟล์
 
@@ -148,6 +150,9 @@ project menager/
 
 ### 4.3 ขั้นถัดไป (เรียง)
 
+> **0.3.0 (2026-11-17)** — Fast mode v2 ตาม [[33-fast-mode-v2-push-through]]: LS เอียง = หมวด · ดันสุด = โซนตัวอักษร · A พิมพ์ · D-pad ↑/↓/→ + A/B · HUD arc · 245 tests · installer 0.3.0
+> รายละเอียด/ข้อจำกัด/ผล smoke อยู่ที่ [[Handoff Feature]]
+
 1. **IME passthrough (v0.2)** — ตาม [[ime-passthrough-deferred]]: ส่ง physical key ให้ Windows IME, HUD QWERTY + badge IME, ทดสอบ JA/ZH/KO
 2. **Owner testing รอบถัดไป** — รัน installer จริง + Practice กับจอย: วัด WPM/error rate ไทย/อังกฤษเทียบเป้า 12/20 และ error < 1.5%
 3. **Code-sign + publish** — ลด SmartScreen · itch/Steam upload · auto-update (Tauri updater)
@@ -174,7 +179,7 @@ node tools/tests/settings-smoke.mjs         # 33/33 + screenshot Settings
 ```powershell
 # installer + portable zip (ต้องมี tauri-cli v2)
 .\installer\build-installer.ps1
-# → dist\RniType_0.1.0_x64-setup.exe · dist\RniType-portable-0.1.0.zip
+# → dist\RniType_0.3.0_x64-setup.exe · dist\RniType-portable-0.3.0.zip
 ```
 
 - Tray: **คลิกซ้าย = Settings** · คลิกขวา = Pause typing / Settings… / Quit
@@ -240,7 +245,7 @@ node tools/tests/settings-smoke.mjs         # 33/33 + screenshot Settings
 19. **Universal layout (ADR-28)**: ติดตั้งภาษา RU/EL ใน Windows → Settings → Languages เปิด RU → วงภาษามี `RU` · พิมพ์ด้วยจอยต้องได้ `ф`/`α` ตามตำแหน่ง QWERTY (a→ф, q→й) · แท็บ Keymap เลือก RU แล้วเห็นตารางที่สร้างมาและแก้ได้
 20. **CPU/RAM (ADR-29)**: เปิด `--pad-log`/Settings → Footprint ต้องเห็น CPU ~0–5% ตอน idle, Memory ~30–80 MB · `[stats]` มี `cpu=…% rss=… MB corrections=…`
 21. **Practice error rate (ADR-30)**: Settings → Practice → Start → พิมพ์ประโยคด้วยจอยจนครบ → errors/error%/WPM ต้องแสดง · log มี `[bench]` · `%APPDATA%\RniType\bench.jsonl` มีผลบันทึก
-22. **Installer (ADR-31)**: รัน `dist\RniType_0.1.0_x64-setup.exe` → ติดตั้งแบบ current user → เปิดจาก Start Menu → tray + Settings ทำงาน · ถอนจาก Apps & Features ได้ · portable zip เปิดได้เช่นกัน
+22. **Installer (ADR-31)**: รัน `dist\RniType_0.3.0_x64-setup.exe` → ติดตั้งแบบ current user → เปิดจาก Start Menu → tray + Settings ทำงาน · ถอนจาก Apps & Features ได้ · portable zip เปิดได้เช่นกัน
 
 ### 4.9 P2 slice 4 (2026-11-16) — ✅ ปิดแล้ว (ADR-23)
 
@@ -332,7 +337,7 @@ node tools/tests/settings-smoke.mjs         # 33/33 + screenshot Settings
 | เรื่อง | ผล |
 | --- | --- |
 | NSIS | `bundle.targets = ["nsis"]` · `installMode: currentUser` (ไม่ต้อง admin) · ภาษา English |
-| Portable | `dist\RniType-portable-0.1.0.zip` (exe + README-beta) |
+| Portable | `dist\RniType-portable-0.3.0.zip` (exe + README-beta) |
 | Build | `.\installer\build-installer.ps1` → `cargo tauri build --features console --bundles nsis` |
 | Console | feature `console` เปิด log ไว้สำหรับ beta (รุ่นขายปิดได้) |
 | ตรวจแล้ว | `setup /S` → `%LOCALAPPDATA%\RniType\RniType.exe` · Start Menu + Apps & Features ครบ · รันได้ (overlay/tray/HUD/settings) · `uninstall /S` ลบหมด |
@@ -356,8 +361,8 @@ hud-smoke 54/54 · typography 36/36 · settings-smoke **33/33** · installer ต
 
 **ไฟล์ให้ owner ทดสอบ**
 ```
-dist\RniType_0.1.0_x64-setup.exe      ← installer (current user)
-dist\RniType-portable-0.1.0.zip       ← portable + README-beta
+dist\RniType_0.3.0_x64-setup.exe      ← installer (current user)
+dist\RniType-portable-0.3.0.zip       ← portable + README-beta
 ```
 
 **งานต่อจากนี้ (เรียงตาม §4.3)**: IME passthrough v0.2 → owner testing (WPM/error/installer) →

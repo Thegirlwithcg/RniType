@@ -7,10 +7,10 @@
 
 use std::path::PathBuf;
 
-use rnitype_core::keymap::Lang;
 use rnitype_core::Key;
+use rnitype_core::keymap::Lang;
 use rnitype_win::language::{LanguageInfo, LanguageKind};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// ฟอนต์ที่ HUD รองรับ (ตรงกับ ui/shared/fonts.css)
 pub const FONTS: [&str; 3] = ["ibm-plex-sans-thai", "noto-sans-thai", "system"];
@@ -36,7 +36,7 @@ pub fn default_config() -> Value {
     json!({
         "version": 1,
         "defaults": {
-            "typing": { "mode": "th", "commitDwellMs": 60, "hud": true, "ringAlways": false, "layer": 1 },
+            "typing": { "mode": "en", "commitDwellMs": 60, "hud": true, "ringAlways": false, "layer": 1, "fastMode": true, "letterPick": "push" },
             "mouse": { "vmax": 1600, "gamma": 1.7, "deadzone": 0.15 },
             "hotkeys": { "emergency": "LB+RB", "hudToggle": "LT+RT" }
         },
@@ -61,7 +61,13 @@ pub fn load() -> Value {
     };
     match std::fs::read_to_string(&path) {
         Ok(text) => match serde_json::from_str::<Value>(&text) {
-            Ok(value) if value.is_object() => value,
+            Ok(mut value) if value.is_object() => {
+                // ภาษาที่แอปถอดออก (RU) — ไม่โหลดกลับเข้า runtime
+                if strip_retired_languages(&mut value) {
+                    println!("[config] ตัดภาษาที่ถอดออก (ru) ออกจาก config");
+                }
+                value
+            }
             Ok(_) => {
                 eprintln!("[config] {} ไม่ใช่ object — ใช้ค่าเริ่มต้น", path.display());
                 default_config()
@@ -92,6 +98,39 @@ pub fn ui_style(config: &Value) -> Value {
     json!({ "textScale": text_scale, "font": font })
 }
 
+/// Fast mode (`defaults.typing.fastMode`) — LS เลือกกลุ่ม → ล็อก → LS เลือกตัวอักษร → A พิมพ์
+///
+/// ค่าเริ่มต้น = เปิด (ticket 02) · ค่าที่ไม่ใช่ boolean หรือไม่มี key = เปิด
+pub fn fast_mode(config: &Value) -> bool {
+    config
+        .get("defaults")
+        .and_then(|defaults| defaults.get("typing"))
+        .and_then(|typing| typing.get("fastMode"))
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+}
+
+/// Fast mode: วิธีเลือกตัวอักษร (`defaults.typing.letterPick`)
+///
+/// - `"push"` (ค่าเริ่มต้น) = ดัน LS สุดเพื่อเข้าโซนตัวอักษร (ADR-33)
+/// - `"dpad"` = D-pad เลือกตัวอักษร (พฤติกรรม 0.2.5 — ทางหนี)
+pub fn letter_pick(config: &Value) -> &'static str {
+    match config
+        .get("defaults")
+        .and_then(|defaults| defaults.get("typing"))
+        .and_then(|typing| typing.get("letterPick"))
+        .and_then(Value::as_str)
+    {
+        Some("dpad") => "dpad",
+        _ => "push",
+    }
+}
+
+/// `true` = ใช้ push-through (ดัน Analog สุด)
+pub fn letter_pick_is_push(config: &Value) -> bool {
+    letter_pick(config) == "push"
+}
+
 /// ขนาดวง (`ui.hudScale`) — แอปประทับลง `HudState.scale` ทุกเฟรม
 pub fn hud_scale(config: &Value) -> f64 {
     config
@@ -114,6 +153,28 @@ pub fn hud_opacity(config: &Value) -> f64 {
 
 /// ภาษาที่เปิดได้สูงสุด (ADR-14 §2)
 pub const MAX_ENABLED_LANGUAGES: usize = 8;
+
+/// ภาษาที่ "ถอดออก" จากตัวเลือกของแอป (owner 2026-11-17: ไม่ใช้รัสเซีย)
+///
+/// ไม่ได้ลบตาราง/keymap ใน core — แค่ไม่แสดงใน Settings และไม่โหลดเข้า runtime
+pub fn is_retired_language(code: &str) -> bool {
+    code.eq_ignore_ascii_case("ru")
+}
+
+/// ลบ entry ของภาษาที่ถอดออกจาก `config.languages` (คืน `true` เมื่อมีอะไรถูกลบ)
+pub fn strip_retired_languages(config: &mut Value) -> bool {
+    let Some(list) = config.get_mut("languages").and_then(Value::as_array_mut) else {
+        return false;
+    };
+    let before = list.len();
+    list.retain(|entry| {
+        !entry
+            .get("code")
+            .and_then(Value::as_str)
+            .is_some_and(is_retired_language)
+    });
+    before != list.len()
+}
 
 /// รวม layout ที่ Windows ตรวจพบกับ `config.languages` → แถวสำหรับ Settings
 ///
@@ -142,6 +203,7 @@ pub fn language_rows(config: &Value, detected: &[LanguageInfo]) -> Vec<Value> {
 
     let mut rows: Vec<Value> = detected
         .iter()
+        .filter(|info| !is_retired_language(&info.code))
         .map(|info| {
             let enabled = enabled_of(&info.code, &info.klid);
             json!({
@@ -159,7 +221,10 @@ pub fn language_rows(config: &Value, detected: &[LanguageInfo]) -> Vec<Value> {
 
     // EN/TH มีตาราง 8×8 ในแอป — แสดงเสมอแม้ Windows ไม่ได้ติดตั้ง layout นั้น
     for (code, label) in [("en", "English"), ("th", "Thai")] {
-        if rows.iter().any(|row| row.get("code").and_then(Value::as_str) == Some(code)) {
+        if rows
+            .iter()
+            .any(|row| row.get("code").and_then(Value::as_str) == Some(code))
+        {
             continue;
         }
         rows.push(json!({
@@ -177,7 +242,12 @@ pub fn language_rows(config: &Value, detected: &[LanguageInfo]) -> Vec<Value> {
     // layout ที่ config เคยมีแต่เครื่องนี้ไม่มีแล้ว — แสดงไว้ให้ปิด/ลบ
     for entry in &configured {
         let code = entry.get("code").and_then(Value::as_str).unwrap_or("");
-        if code.is_empty() || rows.iter().any(|row| row.get("code").and_then(Value::as_str) == Some(code)) {
+        if code.is_empty()
+            || is_retired_language(code)
+            || rows
+                .iter()
+                .any(|row| row.get("code").and_then(Value::as_str) == Some(code))
+        {
             continue;
         }
         rows.push(json!({
@@ -231,14 +301,20 @@ pub fn set_language_enabled(config: &mut Value, code: &str, enabled: bool) -> bo
 
     let enabled_now = list
         .iter()
-        .filter(|entry| entry.get("enabled").and_then(Value::as_bool).unwrap_or(false))
+        .filter(|entry| {
+            entry
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        })
         .count();
-    let already_on = list
-        .iter()
-        .any(|entry| {
-            entry.get("code").and_then(Value::as_str) == Some(code)
-                && entry.get("enabled").and_then(Value::as_bool).unwrap_or(false)
-        });
+    let already_on = list.iter().any(|entry| {
+        entry.get("code").and_then(Value::as_str) == Some(code)
+            && entry
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+    });
     if enabled && !already_on && enabled_now >= MAX_ENABLED_LANGUAGES {
         return false;
     }
@@ -278,9 +354,7 @@ pub fn validate_languages(config: &Value) -> Result<(), String> {
         }
     }
     if enabled > MAX_ENABLED_LANGUAGES {
-        return Err(format!(
-            "languages: เปิดได้สูงสุด {MAX_ENABLED_LANGUAGES} ภาษา"
-        ));
+        return Err(format!("languages: เปิดได้สูงสุด {MAX_ENABLED_LANGUAGES} ภาษา"));
     }
     Ok(())
 }
@@ -325,7 +399,10 @@ pub fn reset_section(config: &mut Value, section: &str) -> bool {
             let root = config.as_object_mut().expect("object");
             root.insert(
                 "defaults".to_string(),
-                defaults.get("defaults").cloned().unwrap_or_else(|| json!({})),
+                defaults
+                    .get("defaults")
+                    .cloned()
+                    .unwrap_or_else(|| json!({})),
             );
             let system = root.entry("system").or_insert_with(|| json!({}));
             if !system.is_object() {
@@ -356,7 +433,11 @@ pub fn keymap_lang(code: &str) -> Option<Lang> {
 fn parse_override_key(key: &str) -> Option<(u8, u8, u8)> {
     let parts: Vec<&str> = key.split('-').collect();
     let (layer, group, sector) = match parts.as_slice() {
-        [layer, group, sector] => (layer.parse().ok()?, group.parse().ok()?, sector.parse().ok()?),
+        [layer, group, sector] => (
+            layer.parse().ok()?,
+            group.parse().ok()?,
+            sector.parse().ok()?,
+        ),
         [group, sector] => (1, group.parse().ok()?, sector.parse().ok()?),
         _ => return None,
     };
@@ -491,9 +572,8 @@ pub fn reset_keymap(config: &mut Value, code: &str, group: Option<u8>) -> bool {
     };
     match group {
         None => overrides.clear(),
-        Some(group) => overrides.retain(|key, _| {
-            parse_override_key(key).is_none_or(|(_, target, _)| target != group)
-        }),
+        Some(group) => overrides
+            .retain(|key, _| parse_override_key(key).is_none_or(|(_, target, _)| target != group)),
     }
     true
 }
@@ -509,7 +589,9 @@ pub fn validate_keymaps(config: &Value) -> Result<(), String> {
         };
         for (key, value) in overrides {
             if parse_override_key(key).is_none() {
-                return Err(format!("overrides: key \"{key}\" ต้องเป็น layer-group-sector"));
+                return Err(format!(
+                    "overrides: key \"{key}\" ต้องเป็น layer-group-sector"
+                ));
             }
             let text = value
                 .as_str()
@@ -617,7 +699,8 @@ pub fn validate_ui(config: &Value) -> Result<(), String> {
 pub fn save(config: &Value) -> Result<(), String> {
     let path = config_path().ok_or_else(|| "ไม่พบ %APPDATA%".to_string())?;
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|err| format!("สร้าง {} ไม่ได้: {err}", dir.display()))?;
+        std::fs::create_dir_all(dir)
+            .map_err(|err| format!("สร้าง {} ไม่ได้: {err}", dir.display()))?;
     }
     let text = serde_json::to_string_pretty(config).map_err(|err| err.to_string())?;
     std::fs::write(&path, text).map_err(|err| format!("เขียน {} ไม่ได้: {err}", path.display()))
@@ -643,7 +726,29 @@ mod tests {
     fn hud_scale_reads_and_clamps() {
         assert_eq!(hud_scale(&json!({})), HUD_SCALE_DEFAULT);
         assert_eq!(hud_scale(&json!({ "ui": { "hudScale": 1.6 } })), 1.6);
-        assert_eq!(hud_scale(&json!({ "ui": { "hudScale": 9.0 } })), HUD_SCALE_DEFAULT);
+        assert_eq!(
+            hud_scale(&json!({ "ui": { "hudScale": 9.0 } })),
+            HUD_SCALE_DEFAULT
+        );
+    }
+
+    #[test]
+    fn default_config_starts_in_english() {
+        // owner 2026-11-17: เปิดแอปแล้วเริ่มที่ EN เสมอ
+        assert_eq!(default_config()["defaults"]["typing"]["mode"], "en");
+    }
+
+    #[test]
+    fn fast_mode_defaults_to_on_and_reads_the_config_flag() {
+        assert!(fast_mode(&json!({})));
+        assert!(fast_mode(&default_config()));
+        assert!(!fast_mode(&json!({
+            "defaults": { "typing": { "fastMode": false } }
+        })));
+        // ค่าที่ผิดชนิด = ใช้ค่าเริ่มต้น (เปิด)
+        assert!(fast_mode(&json!({
+            "defaults": { "typing": { "fastMode": "yes" } }
+        })));
     }
 
     #[test]
@@ -680,7 +785,14 @@ mod tests {
     #[test]
     fn default_config_matches_contract_shape() {
         let config = default_config();
-        for key in ["version", "defaults", "languages", "keymaps", "profiles", "ui"] {
+        for key in [
+            "version",
+            "defaults",
+            "languages",
+            "keymaps",
+            "profiles",
+            "ui",
+        ] {
             assert!(config.get(key).is_some(), "ขาด key {key}");
         }
         assert_eq!(config["version"], 1);
@@ -743,7 +855,7 @@ mod tests {
     }
 
     #[test]
-    fn language_rows_respect_config_and_show_removed_layouts() {
+    fn language_rows_respect_config_and_hide_retired_russian() {
         let config = json!({
             "languages": [
                 { "code": "en", "enabled": false },
@@ -754,13 +866,33 @@ mod tests {
         let en = rows.iter().find(|row| row["code"] == "en").unwrap();
         assert_eq!(en["enabled"], true, "EN เป็น base — config ปิดไม่ได้");
         assert_eq!(en["locked"], true);
-        let ru = rows.iter().find(|row| row["code"] == "ru").unwrap();
-        assert_eq!(ru["detected"], false);
-        assert_eq!(ru["label"], "Russian");
-        assert_eq!(ru["enabled"], true);
+        // owner 2026-11-17: รัสเซียถูกถอดออกจากตัวเลือกของแอป
+        assert!(
+            rows.iter().all(|row| row["code"] != "ru"),
+            "RU ต้องไม่แสดงใน Settings"
+        );
         // TH ไม่มีใน config → เปิดตามค่าเริ่มต้น (มีตารางในแอป)
         let th = rows.iter().find(|row| row["code"] == "th").unwrap();
         assert_eq!(th["enabled"], true);
+    }
+
+    #[test]
+    fn retired_russian_is_stripped_from_config() {
+        let mut config = json!({
+            "languages": [
+                { "code": "th", "enabled": true },
+                { "code": "ru", "enabled": true }
+            ]
+        });
+        assert!(strip_retired_languages(&mut config));
+        let codes: Vec<&str> = config["languages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry["code"].as_str().unwrap())
+            .collect();
+        assert_eq!(codes, vec!["th"]);
+        assert!(!strip_retired_languages(&mut config), "ครั้งที่สองไม่มีอะไรให้ลบ");
     }
 
     #[test]
@@ -778,7 +910,11 @@ mod tests {
     fn set_language_enabled_stops_at_eight() {
         let mut config = default_config();
         for index in 0..MAX_ENABLED_LANGUAGES {
-            assert!(set_language_enabled(&mut config, &format!("x{index}"), true));
+            assert!(set_language_enabled(
+                &mut config,
+                &format!("x{index}"),
+                true
+            ));
         }
         assert!(!set_language_enabled(&mut config, "overflow", true));
         // ปิดซ้ำ/เปิดตัวที่มีอยู่แล้วไม่นับเพิ่ม
@@ -834,8 +970,13 @@ mod tests {
         set_keymap_cell(&mut config, "th", 1, 2, 5, "ฬ").unwrap();
         // เขียนรูปเก่าแล้วต้องอ่านได้
         config["languages"][0]["overrides"] = json!({ "2-5": "ฬ" });
-        assert!(all_keymap_overrides(&config)
-            .contains(&("th".to_string(), 1, 2, 5, Some(Key::Char('ฬ')))));
+        assert!(all_keymap_overrides(&config).contains(&(
+            "th".to_string(),
+            1,
+            2,
+            5,
+            Some(Key::Char('ฬ'))
+        )));
     }
 
     #[test]
@@ -870,7 +1011,8 @@ mod tests {
     }
 
     #[test]
-    fn reset_section_touches_only_its_own_part() {        let mut config = default_config();
+    fn reset_section_touches_only_its_own_part() {
+        let mut config = default_config();
         config["ui"]["hudTextScale"] = json!(2.0);
         config["ui"]["hudFontFamily"] = json!("system");
         config["ui"]["language"] = json!("th");

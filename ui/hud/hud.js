@@ -31,6 +31,9 @@
     pillBadges: document.getElementById('pillBadges'),
     pointer: document.getElementById('pointer'),
     pivot: document.getElementById('pivot'),
+    fastArc: document.getElementById('fastArc'),
+    fastArcValue: document.getElementById('fastArcValue'),
+    fastArcMarker: document.getElementById('fastArcMarker'),
   };
 
   // รัศมีวง (หน่วยเดียวกับ viewBox -170..170)
@@ -397,6 +400,8 @@
 
     const statusBadges = s.status && Array.isArray(s.status.badges) ? s.status.badges : [];
     statusBadges.forEach(push);
+    if (s.fast && s.fast.on === true) push('Fast');
+    if (s.fast && s.fast.select === true) push('Select');
     if (num(s.layer, 1, 1, 2) > 1) push(`layer ${s.layer}`);
     if (s.shiftLock === true) push('shift');
 
@@ -433,6 +438,7 @@
     dom.hud.dataset.state = text(next.state) || 'idle';
     dom.hud.dataset.visible = String(visible);
     dom.hud.dataset.rings = ringsOn ? 'on' : 'off';
+    dom.hud.dataset.fast = next.fast && next.fast.on === true ? 'on' : 'off';
     dom.hud.style.setProperty('--hud-opacity', opacity.toFixed(3));
     dom.hud.style.setProperty('--hud-scale', scale.toFixed(3));
 
@@ -501,6 +507,35 @@
     dom.pivot.dataset.visible = String(mode === 'nav' && visible);
     dom.pivot.style.left = `${pivot.x.toFixed(1)}px`;
     dom.pivot.style.top = `${pivot.y.toFixed(1)}px`;
+
+    // Fast mode gauge (ADR-33): ระดับการเอียง LS + จุด latch
+    const fast = next.fast && typeof next.fast === 'object' ? next.fast : null;
+    const fastZone = fast ? text(fast.zone) : '';
+    // gauge ต้องตามวงล้อเสมอ: วงล้อซ่อน (idle / ปล่อย Analog แล้ว) = gauge ซ่อนด้วย (v0.3.5)
+    const fastOn = !!(
+      fast &&
+      fast.on === true &&
+      visible &&
+      ringsOn &&
+      fastZone !== '' &&
+      fastZone !== 'hidden'
+    );
+    dom.hud.dataset.fastZone = fastZone || 'hidden';
+    if (dom.fastArc) {
+      dom.fastArc.dataset.on = String(fastOn);
+      if (fastOn) {
+        const r = num(fast.r, 0, 0, 1);
+        const circumference = 2 * Math.PI * 158;
+        if (dom.fastArcValue) {
+          dom.fastArcValue.style.strokeDasharray = `${(r * circumference).toFixed(1)} ${circumference.toFixed(1)}`;
+        }
+        if (dom.fastArcMarker) {
+          const angle = -Math.PI / 2 + r * Math.PI * 2;
+          dom.fastArcMarker.setAttribute('cx', (Math.cos(angle) * 158).toFixed(1));
+          dom.fastArcMarker.setAttribute('cy', (Math.sin(angle) * 158).toFixed(1));
+        }
+      }
+    }
 
     document.title = `RniType HUD — ${mode}/${dom.hud.dataset.state}`;
   }

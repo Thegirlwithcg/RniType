@@ -29,6 +29,13 @@
         <text class="hud__repeat" id="previewCount" x="0" y="16" text-anchor="middle" dominant-baseline="central"></text>
       </svg>
 
+      <!-- Fast mode gauge (ADR-33) — ระดับเอียง LS + จุด latch -->
+      <svg class="hud__fast" id="fastArc" viewBox="-170 -170 340 340" aria-hidden="true" data-on="false">
+        <circle class="fast__track" r="158" />
+        <circle class="fast__value" id="fastArcValue" r="158" />
+        <circle class="fast__marker" id="fastArcMarker" r="3.5" />
+      </svg>
+
       <!-- caret nav (R3) — ซ่อนวงพิมพ์ เหลือกากบาท 4 ทิศ (ADR-23) -->
       <div class="hud__caret" id="caretPad" aria-hidden="true">
         <span class="caret__arm caret__arm--n">↑</span>

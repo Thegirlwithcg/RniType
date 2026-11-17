@@ -91,6 +91,8 @@
     statusTyping: $('statusTyping'),
     statusVersion: $('statusVersion'),
     pauseToggle: $('pauseToggle'),
+    fastToggle: $('fastModeToggle'),
+    letterPick: $('letterPick'),
     statChars: $('statChars'),
     statWpm: $('statWpm'),
     statLatency: $('statLatency'),
@@ -240,6 +242,44 @@
     dom.pauseToggle.checked = Boolean(status.paused);
   }
 
+  function fastMode() {
+    const value = config && config.defaults && config.defaults.typing
+      ? config.defaults.typing.fastMode
+      : undefined;
+    return typeof value === 'boolean' ? value : true;
+  }
+
+  function setFastMode(on) {
+    if (!config || typeof config !== 'object') config = { version: 1 };
+    if (!config.defaults || typeof config.defaults !== 'object') config.defaults = {};
+    if (!config.defaults.typing || typeof config.defaults.typing !== 'object') config.defaults.typing = {};
+    config.defaults.typing.fastMode = Boolean(on);
+  }
+
+  function renderFast() {
+    if (dom.fastToggle) dom.fastToggle.checked = fastMode();
+    if (dom.letterPick) {
+      const pick = letterPick();
+      dom.letterPick.querySelectorAll('[data-pick]').forEach((button) => {
+        button.classList.toggle('is-on', button.dataset.pick === pick);
+      });
+    }
+  }
+
+  function letterPick() {
+    const value = config && config.defaults && config.defaults.typing
+      ? config.defaults.typing.letterPick
+      : undefined;
+    return value === 'dpad' ? 'dpad' : 'push';
+  }
+
+  function setLetterPick(value) {
+    if (!config || typeof config !== 'object') config = { version: 1 };
+    if (!config.defaults || typeof config.defaults !== 'object') config.defaults = {};
+    if (!config.defaults.typing || typeof config.defaults.typing !== 'object') config.defaults.typing = {};
+    config.defaults.typing.letterPick = value === 'dpad' ? 'dpad' : 'push';
+  }
+
   function formatMs(micros) {
     if (!Number.isFinite(micros)) return '—';
     const ms = micros / 1000;
@@ -359,8 +399,22 @@
     }
   });
 
-  /* ---------------- Languages ---------------- */
+  dom.fastToggle.addEventListener('change', () => {
+    setFastMode(dom.fastToggle.checked);
+    scheduleSave();
+  });
 
+  if (dom.letterPick) {
+    dom.letterPick.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-pick]');
+      if (!button) return;
+      setLetterPick(button.dataset.pick);
+      renderFast();
+      scheduleSave();
+    });
+  }
+
+  /* ---------------- Languages ---------------- */
   function renderLanguages() {
     const detected = langs.filter((row) => row.detected);
     const names = detected.map((row) => row.label.split(' (')[0]);
@@ -710,7 +764,6 @@
   const PHRASES = {
     en: 'the quick brown fox jumps over the lazy dog',
     th: 'การพิมพ์ด้วยจอยต้องใช้ความคุ้นเคยและฝึกฝนอย่างสม่ำเสมอ',
-    ru: 'быстрая коричневая лиса прыгает через ленивую собаку',
     el: 'η γρήγορη καφέ αλεπού πηδάει πάνω από τον τεμπέλη σκύλο',
   };
 
@@ -921,6 +974,8 @@
         if (section === 'general' || section === 'all') {
           if (!config.system || typeof config.system !== 'object') config.system = {};
           config.system.exclusion = [];
+          setFastMode(true);
+          setLetterPick('push');
         }
         renderAll();
       }
@@ -949,6 +1004,7 @@
 
   function renderAll() {
     renderHud();
+    renderFast();
     renderExclusions();
     renderStatus();
     if (languagesLoaded) renderLanguages();
@@ -958,7 +1014,7 @@
 
   async function boot() {
     if (!invoke) {
-      status = { device: 'Xbox Wireless Controller', connected: true, paused: false, admin: false, version: '0.1.0 (preview)' };
+      status = { device: 'Xbox Wireless Controller', connected: true, paused: false, admin: false, version: '0.3.2 (preview)' };
       renderAll();
       setStatus('Preview only — open in the app to save');
       return;

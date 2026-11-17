@@ -5,31 +5,64 @@
     "mode": "type-en",
     "ringAlways": false,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": false,
     "state": "idle",
     "group": -1,
     "sector": -1,
-    "language": { "code": "en", "kind": "layout", "enabled": ["en", "th"] },
+    "language": {
+      "code": "en",
+      "kind": "layout",
+      "enabled": [
+        "en",
+        "th"
+      ]
+    },
     "inner": {
       "kind": "group",
       "active": -1,
       "labels": [
-        { "text": "AEIOU" },
-        { "text": "B" },
-        { "text": "C" },
-        { "text": "D" },
-        { "text": "1" },
-        { "text": "2" },
-        { "text": "3" },
-        { "text": "4" }
+        {
+          "text": "AEIOU"
+        },
+        {
+          "text": "B"
+        },
+        {
+          "text": "C"
+        },
+        {
+          "text": "D"
+        },
+        {
+          "text": "1"
+        },
+        {
+          "text": "2"
+        },
+        {
+          "text": "3"
+        },
+        {
+          "text": "4"
+        }
       ]
     },
-    "outer": { "kind": "char", "active": -1, "labels": [] },
-    "preview": { "char": "", "count": 0 }
+    "outer": {
+      "kind": "char",
+      "active": -1,
+      "labels": []
+    },
+    "preview": {
+      "char": "",
+      "count": 0
+    }
   },
   {
     "version": 1,
@@ -37,31 +70,64 @@
     "mode": "type-en",
     "ringAlways": false,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": false,
     "state": "group",
     "group": 2,
     "sector": -1,
-    "language": { "code": "en", "kind": "layout", "enabled": ["en", "th"] },
+    "language": {
+      "code": "en",
+      "kind": "layout",
+      "enabled": [
+        "en",
+        "th"
+      ]
+    },
     "inner": {
       "kind": "group",
       "active": 2,
       "labels": [
-        { "text": "AEIOU" },
-        { "text": "B" },
-        { "text": "C" },
-        { "text": "D" },
-        { "text": "1" },
-        { "text": "2" },
-        { "text": "3" },
-        { "text": "4" }
+        {
+          "text": "AEIOU"
+        },
+        {
+          "text": "B"
+        },
+        {
+          "text": "C"
+        },
+        {
+          "text": "D"
+        },
+        {
+          "text": "1"
+        },
+        {
+          "text": "2"
+        },
+        {
+          "text": "3"
+        },
+        {
+          "text": "4"
+        }
       ]
     },
-    "outer": { "kind": "char", "active": -1, "labels": [] },
-    "preview": { "char": "", "count": 0 }
+    "outer": {
+      "kind": "char",
+      "active": -1,
+      "labels": []
+    },
+    "preview": {
+      "char": "",
+      "count": 0
+    }
   },
   {
     "version": 1,
@@ -69,45 +135,96 @@
     "mode": "type-en",
     "ringAlways": false,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": true,
     "state": "char",
     "group": 2,
     "sector": 4,
-    "language": { "code": "en", "kind": "layout", "enabled": ["en", "th"] },
+    "language": {
+      "code": "en",
+      "kind": "layout",
+      "enabled": [
+        "en",
+        "th"
+      ]
+    },
     "inner": {
       "kind": "group",
       "active": 2,
       "labels": [
-        { "text": "AEIOU" },
-        { "text": "B" },
-        { "text": "C" },
-        { "text": "D" },
-        { "text": "1" },
-        { "text": "2" },
-        { "text": "3" },
-        { "text": "4" }
+        {
+          "text": "AEIOU"
+        },
+        {
+          "text": "B"
+        },
+        {
+          "text": "C"
+        },
+        {
+          "text": "D"
+        },
+        {
+          "text": "1"
+        },
+        {
+          "text": "2"
+        },
+        {
+          "text": "3"
+        },
+        {
+          "text": "4"
+        }
       ]
     },
     "outer": {
       "kind": "char",
       "active": 4,
       "labels": [
-        { "text": "G" },
-        { "text": "P" },
-        { "text": "B" },
-        { "text": "V" },
-        { "text": "K" },
-        { "text": "X" },
-        { "text": "Y" },
-        { "text": "J" }
+        {
+          "text": "G"
+        },
+        {
+          "text": "P"
+        },
+        {
+          "text": "B"
+        },
+        {
+          "text": "V"
+        },
+        {
+          "text": "K"
+        },
+        {
+          "text": "X"
+        },
+        {
+          "text": "Y"
+        },
+        {
+          "text": "J"
+        }
       ]
     },
-    "preview": { "char": "K", "count": 0 },
-    "status": { "text": "ตัวใหญ่", "badges": ["shift", "en"] }
+    "preview": {
+      "char": "K",
+      "count": 0
+    },
+    "status": {
+      "text": "ตัวใหญ่",
+      "badges": [
+        "shift",
+        "en"
+      ]
+    }
   },
   {
     "version": 1,
@@ -115,45 +232,96 @@
     "mode": "type-th",
     "ringAlways": false,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": false,
     "state": "repeat",
     "group": 1,
     "sector": 6,
-    "language": { "code": "th", "kind": "layout", "enabled": ["en", "th"] },
+    "language": {
+      "code": "th",
+      "kind": "layout",
+      "enabled": [
+        "en",
+        "th"
+      ]
+    },
     "inner": {
       "kind": "group",
       "active": 1,
       "labels": [
-        { "text": "พยัญชนะ" },
-        { "text": "สระ" },
-        { "text": "สระนำ" },
-        { "text": "วรรณยุกต์" },
-        { "text": "กลาง" },
-        { "text": "กึ่งกลาง" },
-        { "text": "หายาก" },
-        { "text": "เหลือ" }
+        {
+          "text": "พยัญชนะ"
+        },
+        {
+          "text": "สระ"
+        },
+        {
+          "text": "สระนำ"
+        },
+        {
+          "text": "วรรณยุกต์"
+        },
+        {
+          "text": "กลาง"
+        },
+        {
+          "text": "กึ่งกลาง"
+        },
+        {
+          "text": "หายาก"
+        },
+        {
+          "text": "เหลือ"
+        }
       ]
     },
     "outer": {
       "kind": "char",
       "active": 6,
       "labels": [
-        { "text": "า" },
-        { "text": "ะ" },
-        { "text": "ิ" },
-        { "text": "ี" },
-        { "text": "ื" },
-        { "text": "ึ" },
-        { "text": "ุ" },
-        { "text": "ู" }
+        {
+          "text": "า"
+        },
+        {
+          "text": "ะ"
+        },
+        {
+          "text": "ิ"
+        },
+        {
+          "text": "ี"
+        },
+        {
+          "text": "ื"
+        },
+        {
+          "text": "ึ"
+        },
+        {
+          "text": "ุ"
+        },
+        {
+          "text": "ู"
+        }
       ]
     },
-    "preview": { "char": "ุ", "count": 3 },
-    "status": { "text": "TH", "badges": ["th", "repeat"] }
+    "preview": {
+      "char": "ุ",
+      "count": 3
+    },
+    "status": {
+      "text": "TH",
+      "badges": [
+        "th",
+        "repeat"
+      ]
+    }
   },
   {
     "version": 1,
@@ -161,31 +329,72 @@
     "mode": "cmd",
     "ringAlways": true,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": false,
     "state": "idle",
     "group": -1,
     "sector": -1,
-    "language": { "code": "en", "kind": "layout", "enabled": ["en", "th"] },
+    "language": {
+      "code": "en",
+      "kind": "layout",
+      "enabled": [
+        "en",
+        "th"
+      ]
+    },
     "inner": {
       "kind": "command",
       "active": 6,
       "labels": [
-        { "text": "EN", "sub": "English" },
-        { "text": "TH", "sub": "Language" },
-        { "text": "Mouse", "sub": "Move pointer" },
-        { "text": "UI", "sub": "Place UI" },
-        { "text": "Copy", "sub": "Ctrl+C" },
-        { "text": "Paste", "sub": "Ctrl+V" },
-        { "text": "Undo", "sub": "Ctrl+Z" },
-        { "text": "Redo", "sub": "Ctrl+Y" }
+        {
+          "text": "EN",
+          "sub": "English"
+        },
+        {
+          "text": "TH",
+          "sub": "Language"
+        },
+        {
+          "text": "Mouse",
+          "sub": "Move pointer"
+        },
+        {
+          "text": "UI",
+          "sub": "Place UI"
+        },
+        {
+          "text": "Copy",
+          "sub": "Ctrl+C"
+        },
+        {
+          "text": "Paste",
+          "sub": "Ctrl+V"
+        },
+        {
+          "text": "Undo",
+          "sub": "Ctrl+Z"
+        },
+        {
+          "text": "Redo",
+          "sub": "Ctrl+Y"
+        }
       ]
     },
-    "outer": { "kind": "none", "active": -1, "labels": [] },
-    "preview": { "char": "", "count": 0 }
+    "outer": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "preview": {
+      "char": "",
+      "count": 0
+    }
   },
   {
     "version": 1,
@@ -193,27 +402,58 @@
     "mode": "lang",
     "ringAlways": true,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": false,
     "state": "idle",
     "group": -1,
     "sector": -1,
-    "language": { "code": "th", "kind": "layout", "enabled": ["en", "th", "ru", "el"] },
+    "language": {
+      "code": "th",
+      "kind": "layout",
+      "enabled": [
+        "en",
+        "th",
+        "ru",
+        "el"
+      ]
+    },
     "inner": {
       "kind": "language",
       "active": 1,
       "labels": [
-        { "text": "EN", "sub": "English" },
-        { "text": "TH", "sub": "ไทย" },
-        { "text": "RU", "sub": "Русский" },
-        { "text": "EL", "sub": "Ελληνικά" }
+        {
+          "text": "EN",
+          "sub": "English"
+        },
+        {
+          "text": "TH",
+          "sub": "ไทย"
+        },
+        {
+          "text": "RU",
+          "sub": "Русский"
+        },
+        {
+          "text": "EL",
+          "sub": "Ελληνικά"
+        }
       ]
     },
-    "outer": { "kind": "none", "active": -1, "labels": [] },
-    "preview": { "char": "", "count": 0 }
+    "outer": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "preview": {
+      "char": "",
+      "count": 0
+    }
   },
   {
     "version": 1,
@@ -221,20 +461,49 @@
     "mode": "mouse",
     "ringAlways": false,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": false,
     "state": "idle",
     "group": -1,
     "sector": -1,
-    "language": { "code": "en", "kind": "layout", "enabled": ["en"] },
-    "inner": { "kind": "none", "active": -1, "labels": [] },
-    "outer": { "kind": "none", "active": -1, "labels": [] },
-    "preview": { "char": "", "count": 0 },
-    "pointer": { "x": 1234, "y": 678, "visible": true },
-    "status": { "text": "Mouse", "badges": ["1600 px/s"] }
+    "language": {
+      "code": "en",
+      "kind": "layout",
+      "enabled": [
+        "en"
+      ]
+    },
+    "inner": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "outer": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "preview": {
+      "char": "",
+      "count": 0
+    },
+    "pointer": {
+      "x": 1234,
+      "y": 678,
+      "visible": true
+    },
+    "status": {
+      "text": "Mouse",
+      "badges": [
+        "1600 px/s"
+      ]
+    }
   },
   {
     "version": 1,
@@ -242,19 +511,46 @@
     "mode": "nav",
     "ringAlways": false,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": false,
     "state": "idle",
     "group": -1,
     "sector": -1,
-    "language": { "code": "en", "kind": "layout", "enabled": ["en"] },
-    "inner": { "kind": "none", "active": -1, "labels": [] },
-    "outer": { "kind": "none", "active": -1, "labels": [] },
-    "preview": { "char": "", "count": 0 },
-    "status": { "text": "Place UI", "badges": ["LS หยาบ", "RS ละเอียด", "R3 reset"] }
+    "language": {
+      "code": "en",
+      "kind": "layout",
+      "enabled": [
+        "en"
+      ]
+    },
+    "inner": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "outer": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "preview": {
+      "char": "",
+      "count": 0
+    },
+    "status": {
+      "text": "Place UI",
+      "badges": [
+        "LS หยาบ",
+        "RS ละเอียด",
+        "R3 reset"
+      ]
+    }
   },
   {
     "version": 1,
@@ -262,19 +558,45 @@
     "mode": "disabled",
     "ringAlways": false,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": false,
     "state": "idle",
     "group": -1,
     "sector": -1,
-    "language": { "code": "en", "kind": "layout", "enabled": ["en", "th"] },
-    "inner": { "kind": "none", "active": -1, "labels": [] },
-    "outer": { "kind": "none", "active": -1, "labels": [] },
-    "preview": { "char": "", "count": 0 },
-    "status": { "text": "พักอยู่", "badges": ["กด 8 เพื่อกลับ"] }
+    "language": {
+      "code": "en",
+      "kind": "layout",
+      "enabled": [
+        "en",
+        "th"
+      ]
+    },
+    "inner": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "outer": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "preview": {
+      "char": "",
+      "count": 0
+    },
+    "status": {
+      "text": "พักอยู่",
+      "badges": [
+        "กด 8 เพื่อกลับ"
+      ]
+    }
   },
   {
     "version": 1,
@@ -282,32 +604,76 @@
     "mode": "quickbar",
     "ringAlways": false,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": false,
     "state": "idle",
     "group": -1,
     "sector": -1,
-    "language": { "code": "en", "kind": "layout", "enabled": ["en", "th"] },
+    "language": {
+      "code": "en",
+      "kind": "layout",
+      "enabled": [
+        "en",
+        "th"
+      ]
+    },
     "inner": {
       "kind": "command",
       "active": 0,
       "labels": [
-        { "text": "Copy", "sub": "Ctrl+C" },
-        { "text": "Paste", "sub": "Ctrl+V" },
-        { "text": "Cut", "sub": "Ctrl+X" },
-        { "text": "Undo", "sub": "Ctrl+Z" },
-        { "text": "Redo", "sub": "Ctrl+Y" },
-        { "text": "All", "sub": "Ctrl+A" },
-        { "text": "Save", "sub": "Ctrl+S" },
-        { "text": "Switch", "sub": "Alt+Tab" }
+        {
+          "text": "Copy",
+          "sub": "Ctrl+C"
+        },
+        {
+          "text": "Paste",
+          "sub": "Ctrl+V"
+        },
+        {
+          "text": "Cut",
+          "sub": "Ctrl+X"
+        },
+        {
+          "text": "Undo",
+          "sub": "Ctrl+Z"
+        },
+        {
+          "text": "Redo",
+          "sub": "Ctrl+Y"
+        },
+        {
+          "text": "All",
+          "sub": "Ctrl+A"
+        },
+        {
+          "text": "Save",
+          "sub": "Ctrl+S"
+        },
+        {
+          "text": "Switch",
+          "sub": "Alt+Tab"
+        }
       ]
     },
-    "outer": { "kind": "none", "active": -1, "labels": [] },
-    "preview": { "char": "", "count": 0 },
-    "status": { "text": "LB", "badges": [] }
+    "outer": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "preview": {
+      "char": "",
+      "count": 0
+    },
+    "status": {
+      "text": "LB",
+      "badges": []
+    }
   },
   {
     "version": 1,
@@ -315,18 +681,145 @@
     "mode": "caret",
     "ringAlways": false,
     "hudHidden": false,
-    "scale": 1.0,
+    "scale": 1,
     "opacity": 0.92,
-    "pivot": { "x": 960, "y": 540 },
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
     "layer": 1,
     "shiftLock": false,
     "state": "idle",
     "group": -1,
     "sector": -1,
-    "language": { "code": "en", "kind": "layout", "enabled": ["en", "th"] },
-    "inner": { "kind": "none", "active": -1, "labels": [] },
-    "outer": { "kind": "none", "active": -1, "labels": [] },
-    "preview": { "char": "", "count": 0 },
-    "status": { "text": "เลือกข้อความ", "badges": [] }
+    "language": {
+      "code": "en",
+      "kind": "layout",
+      "enabled": [
+        "en",
+        "th"
+      ]
+    },
+    "inner": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "outer": {
+      "kind": "none",
+      "active": -1,
+      "labels": []
+    },
+    "preview": {
+      "char": "",
+      "count": 0
+    },
+    "status": {
+      "text": "เลือกข้อความ",
+      "badges": []
+    }
+  },
+  {
+    "version": 1,
+    "visible": true,
+    "mode": "type-th",
+    "ringAlways": false,
+    "hudHidden": false,
+    "scale": 1,
+    "opacity": 0.92,
+    "pivot": {
+      "x": 960,
+      "y": 540
+    },
+    "layer": 1,
+    "shiftLock": false,
+    "state": "char",
+    "group": 0,
+    "sector": 2,
+    "language": {
+      "code": "th",
+      "kind": "layout",
+      "enabled": [
+        "en",
+        "th"
+      ]
+    },
+    "inner": {
+      "kind": "group",
+      "active": 0,
+      "labels": [
+        {
+          "text": "พยัญชนะ"
+        },
+        {
+          "text": "สระ"
+        },
+        {
+          "text": "สระนำ"
+        },
+        {
+          "text": "วรรณยุกต์"
+        },
+        {
+          "text": "กลาง"
+        },
+        {
+          "text": "กึ่งกลาง"
+        },
+        {
+          "text": "หายาก"
+        },
+        {
+          "text": "เหลือ"
+        }
+      ]
+    },
+    "outer": {
+      "kind": "char",
+      "active": 2,
+      "labels": [
+        {
+          "text": "า"
+        },
+        {
+          "text": "ะ"
+        },
+        {
+          "text": "ิ"
+        },
+        {
+          "text": "ี"
+        },
+        {
+          "text": "ื"
+        },
+        {
+          "text": "ึ"
+        },
+        {
+          "text": "ุ"
+        },
+        {
+          "text": "ู"
+        }
+      ]
+    },
+    "preview": {
+      "char": "ิ",
+      "count": 0
+    },
+    "status": {
+      "text": "Fast",
+      "badges": [
+        "Fast"
+      ]
+    },
+    "fast": {
+      "on": true,
+      "phase": "char",
+      "select": false,
+      "zone": "letter",
+      "r": 0.92
+    }
   }
 ]

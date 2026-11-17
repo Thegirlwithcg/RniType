@@ -2531,7 +2531,7 @@ dependencies = [
 
 [[package]]
 name = "rnitype-app"
-version = "0.1.0"
+version = "0.3.7"
 dependencies = [
  "gilrs",
  "rnitype-core",
@@ -2545,11 +2545,11 @@ dependencies = [
 
 [[package]]
 name = "rnitype-core"
-version = "0.1.0"
+version = "0.3.7"
 
 [[package]]
 name = "rnitype-probe"
-version = "0.1.0"
+version = "0.3.7"
 dependencies = [
  "gilrs",
  "rnitype-core",
@@ -2557,7 +2557,7 @@ dependencies = [
 
 [[package]]
 name = "rnitype-win"
-version = "0.1.0"
+version = "0.3.7"
 dependencies = [
  "rnitype-core",
  "windows-sys 0.59.0",

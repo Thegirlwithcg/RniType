@@ -76,6 +76,7 @@ tags: [plan, testing]
 | 2026-11-16 | P6 slice 2 | — | — | — | cpu 3.1% · rss 32 MB | ADR-29: CPU/RAM ของโปรเซส + corrections (Backspace proxy) · Footprint cards · log `cpu=3.1% rss=32 MB` |
 | 2026-11-16 | P6 slice 3 | — | — | **วัดได้ (Levenshtein)** | — | ADR-30: แท็บ Practice · error rate จริง + WPM · `record_bench` → `bench.jsonl` · settings-smoke **33/33** |
 | 2026-11-16 | Installer beta | — | — | — | — | ADR-31: NSIS current-user + portable zip · `installer/build-installer.ps1` · feature `console` · ยังไม่ code-sign |
+| 2026-11-17 | **0.3.0 Fast mode v2** | — | — | — | — | ADR-33: Analog ซ้ายตัวเดียว + push-through (โซน 0.30/0.85, latch 60 ms) · D-pad ↑/↓/→ + A/B · B ย้อนชั้น · A lockout/lookback · HUD arc · `letterPick` fallback · **245 tests** · contracts 13/13 · settings 37/37 |
 
 ## 5. ความเสี่ยงและทางถอย
 

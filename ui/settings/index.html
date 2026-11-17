@@ -63,6 +63,26 @@
               <span class="switch__track" aria-hidden="true"></span>
             </label>
           </div>
+          <div class="row">
+            <div class="row__body">
+              <label for="fastModeToggle">Fast mode</label>
+              <p class="hint">Left stick picks the group and locks it when you let go, then the same stick picks the letter — A types. Right stick is the arrow keys; tap R3 twice for highlight selection.</p>
+            </div>
+            <label class="switch">
+              <input id="fastModeToggle" type="checkbox" />
+              <span class="switch__track" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="row">
+            <div class="row__body">
+              <label>Pick letters with</label>
+              <p class="hint">Push the left stick to the edge (fast), or use the D-pad. D-pad keeps the previous 0.2.5 behaviour.</p>
+            </div>
+            <div class="segmented" id="letterPick" role="group" aria-label="Pick letters with">
+              <button type="button" data-pick="push" class="is-on">Stick</button>
+              <button type="button" data-pick="dpad">D-pad</button>
+            </div>
+          </div>
         </section>
 
         <section class="group" aria-labelledby="usageTitle">

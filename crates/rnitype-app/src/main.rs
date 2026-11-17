@@ -30,14 +30,14 @@ mod stats;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize};
 
 use input::{GilrsSource, PadSource, ScriptSource};
+use rnitype_core::keymap::{group_names_for, label_of};
 use rnitype_core::pad::PadState;
 use rnitype_core::runtime::RuntimeConfig;
-use rnitype_core::keymap::{group_names_for, label_of};
-use rnitype_core::{Lang, RuntimeEngine};
+use rnitype_core::{Lang, Mode, RuntimeEngine};
 use rnitype_win::Injector;
 use session::{HudStyle, Session};
 
@@ -179,8 +179,8 @@ fn main() {
 }
 
 /* ============================================================
-   ตัวเลือกบรรทัดคำสั่ง
-   ============================================================ */
+ตัวเลือกบรรทัดคำสั่ง
+============================================================ */
 
 /// มี RniType รันอยู่แล้วหรือไม่ (named mutex ต่อ session)
 ///
@@ -296,10 +296,9 @@ fn snapshot_for_hud(app: &tauri::AppHandle, scale: f64) -> Option<Value> {
     Some(payload)
 }
 
-
 /* ============================================================
-   หน้าต่าง overlay
-   ============================================================ */
+หน้าต่าง overlay
+============================================================ */
 
 fn setup_overlay(
     app: &tauri::App,
@@ -421,9 +420,9 @@ fn setup_overlay(
                         let mode = state.get("mode").and_then(Value::as_str).unwrap_or("?");
                         let st = state.get("state").and_then(Value::as_str).unwrap_or("?");
                         match source.handle.emit_to("hud", "hud:state", &state) {
-                            Ok(()) => println!(
-                                "[demo] hud:state #{index} → hud (mode={mode} state={st})"
-                            ),
+                            Ok(()) => {
+                                println!("[demo] hud:state #{index} → hud (mode={mode} state={st})")
+                            }
                             Err(err) => eprintln!("[demo] ส่ง hud:state ไม่สำเร็จ: {err}"),
                         }
                         source.current = (index + 1) % source.states.len();
@@ -453,15 +452,11 @@ fn setup_overlay(
 }
 
 /* ============================================================
-   Runtime loop — จอย → core → injector → hud:state
-   ============================================================ */
+Runtime loop — จอย → core → injector → hud:state
+============================================================ */
 
 /// เริ่ม thread ที่อ่านจอย 250 Hz และส่ง `hud:state` ≤ 60 Hz (เฉพาะเมื่อเปลี่ยน)
-fn spawn_runtime(
-    app: &tauri::AppHandle,
-    options: &Options,
-    desktop: (i32, i32, u32, u32),
-) {
+fn spawn_runtime(app: &tauri::AppHandle, options: &Options, desktop: (i32, i32, u32, u32)) {
     let handle = app.clone();
     let fake_pad = options.fake_pad;
     let pad_log = options.pad_log;
@@ -471,18 +466,34 @@ fn spawn_runtime(
         let timer = rnitype_win::timer::TimerResolution::new(1);
         println!(
             "[timer] 1 ms resolution: {}",
-            if timer.is_active() { "เปิด" } else { "ไม่สำเร็จ (loop จะหยาบขึ้น)" }
+            if timer.is_active() {
+                "เปิด"
+            } else {
+                "ไม่สำเร็จ (loop จะหยาบขึ้น)"
+            }
         );
         let _timer = timer;
+        let config = handle.state::<AppState>().config.lock().unwrap().clone();
+        let fast = config::fast_mode(&config);
+        let pick = config::letter_pick(&config);
         let source: Box<dyn PadSource> = if fake_pad {
-            println!("[pad] ใช้จอยปลอม (--fake-pad) — ⚠ จะพิมพ์ลงหน้าต่างที่ focus อยู่ตอนนี้");
-            Box::new(ScriptSource::typing_script(&[
+            println!(
+                "[pad] ใช้จอยปลอม (--fake-pad) — ⚠ จะพิมพ์ลงหน้าต่างที่ focus อยู่ตอนนี้ (fast={fast} pick={pick})"
+            );
+            let chars = [
                 (0.0, 0.9),  // ↑
                 (0.7, 0.7),  // ↗
                 (0.9, 0.0),  // →
                 (0.7, -0.7), // ↘
                 (0.0, -0.9), // ↓
-            ]))
+            ];
+            if !fast {
+                Box::new(ScriptSource::typing_script(&chars))
+            } else if pick == "push" {
+                Box::new(ScriptSource::push_typing_script(&chars))
+            } else {
+                Box::new(ScriptSource::fast_typing_script(&chars))
+            }
         } else {
             match GilrsSource::open() {
                 Ok(source) => Box::new(source),
@@ -493,7 +504,6 @@ fn spawn_runtime(
             }
         };
 
-        let config = handle.state::<AppState>().config.lock().unwrap().clone();
         let mut session = build_session(&config, desktop, no_scancode);
         println!(
             "[inject] key path: {}",
@@ -505,12 +515,22 @@ fn spawn_runtime(
         );
         println!(
             "[pad] พร้อม: {} · language={:?} · languages={:?}",
-            if source.name().is_empty() { "ยังไม่พบจอย" } else { "ต่อแล้ว" },
+            if source.name().is_empty() {
+                "ยังไม่พบจอย"
+            } else {
+                "ต่อแล้ว"
+            },
             session.engine().lang(),
             session.engine().languages().len()
         );
 
-        run_loop(&handle, source, &mut session, (desktop.0, desktop.1), pad_log);
+        run_loop(
+            &handle,
+            source,
+            &mut session,
+            (desktop.0, desktop.1),
+            pad_log,
+        );
     });
 }
 
@@ -522,7 +542,9 @@ fn build_session(config: &Value, desktop: (i32, i32, u32, u32), no_scancode: boo
         .and_then(Value::as_u64)
         .unwrap_or(60)
         .clamp(40, 120) as u32;
-    let mode = typing
+    // owner 2026-11-17: เปิดแอปแล้วต้องเริ่มที่ภาษาอังกฤษเสมอ (ไม่ใช้ `typing.mode` ตอนบูต)
+    // — ผู้ใช้ยังสลับภาษาด้วยวง Lang/เมนูโหมดได้ตามปกติ
+    let _configured_mode = typing
         .and_then(|t| t.get("mode"))
         .and_then(Value::as_str)
         .unwrap_or("en");
@@ -543,11 +565,6 @@ fn build_session(config: &Value, desktop: (i32, i32, u32, u32), no_scancode: boo
         (px, py),
     );
     session.set_language_slots(slots.clone());
-    if mode != "en"
-        && let Some(slot) = slots.iter().find(|slot| slot.code == mode)
-    {
-        session.activate_language(slot);
-    }
     // HUD เริ่มที่ตำแหน่ง pointer จริง ไม่ใช่กลางจอ (กันจุด pointer เพี้ยนทั้ง session)
     if let Some(position) = rnitype_win::cursor_position() {
         session.set_pointer(position);
@@ -555,6 +572,14 @@ fn build_session(config: &Value, desktop: (i32, i32, u32, u32), no_scancode: boo
     // pivot ต้องไม่ล้นจอ: เว้นรัศมีวง HUD (340px × scale / 2 ≈ 172px) จากขอบ virtual desktop
     apply_pivot_clamp(&mut session, config, desktop);
     session.set_keymap_overrides(&config::all_keymap_overrides(config));
+    let fast = config::fast_mode(config);
+    session.set_fast(fast);
+    session.set_fast_push(config::letter_pick_is_push(config));
+    println!(
+        "[config] fast mode = {} · letterPick = {}",
+        if fast { "on" } else { "off" },
+        config::letter_pick(config)
+    );
     session
 }
 
@@ -620,6 +645,10 @@ fn language_slots(config: &Value) -> Vec<rnitype_core::runtime::LangSlot> {
         if !enabled || code.is_empty() || code == "en" {
             continue;
         }
+        if config::is_retired_language(code) {
+            println!("[languages] {code}: ปิดใช้แล้ว (ถอดออกจากตัวเลือก) — ข้าม");
+            continue;
+        }
 
         if code == "th" {
             slots.push(LangSlot::new(next_index, Lang::Th));
@@ -662,7 +691,10 @@ fn language_slots(config: &Value) -> Vec<rnitype_core::runtime::LangSlot> {
 }
 
 /// หาตาราง keymap ของภาษา — EN/TH built-in · อื่น ๆ สร้างจาก layout ในเครื่อง
-fn resolve_keymap(config: &Value, code: &str) -> Result<(Lang, rnitype_core::keymap::Keymap, String), String> {
+fn resolve_keymap(
+    config: &Value,
+    code: &str,
+) -> Result<(Lang, rnitype_core::keymap::Keymap, String), String> {
     use rnitype_core::keymap::Keymap;
 
     if let Some(lang) = config::keymap_lang(code) {
@@ -716,7 +748,9 @@ fn keymap_payload(config: &Value, code: &str) -> Result<Value, String> {
                 let default = table.key_at(layer, group, sector);
                 let key = overrides
                     .iter()
-                    .find(|(l, g, s, _)| *l == layer && *g as usize == group && *s as usize == sector)
+                    .find(|(l, g, s, _)| {
+                        *l == layer && *g as usize == group && *s as usize == sector
+                    })
                     .map_or(default, |(_, _, _, key)| *key);
                 defaults.push(default.map(label_of).unwrap_or_default());
                 cells.push(key.map(label_of).unwrap_or_default());
@@ -750,7 +784,8 @@ fn keymap_payload(config: &Value, code: &str) -> Result<Value, String> {
 }
 
 #[cfg(windows)]
-fn make_injector(no_scancode: bool) -> Box<dyn Injector + Send> {    Box::new(rnitype_win::SendInputInjector::new().with_scancode(!no_scancode))
+fn make_injector(no_scancode: bool) -> Box<dyn Injector + Send> {
+    Box::new(rnitype_win::SendInputInjector::new().with_scancode(!no_scancode))
 }
 
 #[cfg(not(windows))]
@@ -780,7 +815,10 @@ fn run_loop(
     let mut was_paused = false;
     let own_elevated = rnitype_win::target::own_elevated();
     let mut last_guard_ms = 0u64;
-    let mut last_config_rev = handle.state::<AppState>().config_rev.load(Ordering::Relaxed);
+    let mut last_config_rev = handle
+        .state::<AppState>()
+        .config_rev
+        .load(Ordering::Relaxed);
     let mut last_stats_push_ms = 0u64;
     let mut last_stats_log_ms = 0u64;
     let mut step_sum_us: u128 = 0;
@@ -800,7 +838,11 @@ fn run_loop(
         if paused != was_paused {
             println!(
                 "[pad] {}",
-                if paused { "พักการพิมพ์ (tray)" } else { "กลับมาพิมพ์" }
+                if paused {
+                    "พักการพิมพ์ (tray)"
+                } else {
+                    "กลับมาพิมพ์"
+                }
             );
             if paused {
                 session.pause();
@@ -827,11 +869,15 @@ fn run_loop(
                 let config = app_state.config.lock().unwrap().clone();
                 session.set_language_slots(language_slots(&config));
                 session.set_keymap_overrides(&config::all_keymap_overrides(&config));
+                session.set_fast(config::fast_mode(&config));
+                session.set_fast_push(config::letter_pick_is_push(&config));
                 apply_pivot_clamp(session, &config, virtual_desktop());
                 println!(
-                    "[config] runtime reload: languages={:?} hudScale={:.2}",
+                    "[config] runtime reload: languages={:?} hudScale={:.2} fast={} pick={}",
                     session.engine().languages().len(),
-                    config::hud_scale(&config)
+                    config::hud_scale(&config),
+                    session.engine().fast(),
+                    config::letter_pick(&config)
                 );
             }
 
@@ -854,6 +900,17 @@ fn run_loop(
                 }
                 session.set_guard(reason);
             }
+
+            // Fast mode (ticket 02 · Feature 2): HUD เกาะตำแหน่ง caret ที่กำลังพิมพ์
+            // ไม่เจอ caret = คง pivot เดิม (ไม่เดา) · ไม่มีจุด/mาร์กเกอร์บนจอ
+            if session.guard().is_none()
+                && session.engine().fast()
+                && session.engine().mode() == Mode::Type
+            {
+                if let Some(point) = rnitype_win::caret::caret_point() {
+                    session.set_pivot(point);
+                }
+            }
         }
 
         let sample = source.sample(now);
@@ -872,8 +929,11 @@ fn run_loop(
             had_pad = has_pad;
             last_emit_ms = 0; // บังคับ emit รอบถัดไป
             let app_state = handle.state::<AppState>();
-            *app_state.device.lock().unwrap() =
-                if has_pad { source.name() } else { String::new() };
+            *app_state.device.lock().unwrap() = if has_pad {
+                source.name()
+            } else {
+                String::new()
+            };
             app_state.connected.store(has_pad, Ordering::Relaxed);
             emit_status(handle);
         }
@@ -1040,8 +1100,8 @@ fn log_action(action: &rnitype_core::Action) {
 }
 
 /* ============================================================
-   Tray
-   ============================================================ */
+Tray
+============================================================ */
 
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::image::Image;
@@ -1086,7 +1146,14 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 let state = app.state::<AppState>();
                 let paused = state.paused.fetch_xor(true, Ordering::Relaxed);
                 let paused = !paused;
-                println!("[tray] {}", if paused { "พักการพิมพ์" } else { "กลับมาพิมพ์" });
+                println!(
+                    "[tray] {}",
+                    if paused {
+                        "พักการพิมพ์"
+                    } else {
+                        "กลับมาพิมพ์"
+                    }
+                );
             }
             "settings" => {
                 println!("[tray] เลือก Settings → เปิดหน้าต่างตั้งค่า");
@@ -1134,8 +1201,8 @@ fn open_settings(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 
 /* ============================================================
-   Commands (ipc.md §3)
-   ============================================================ */
+Commands (ipc.md §3)
+============================================================ */
 
 /// HUD แจ้งว่าพร้อมรับ state (ipc.md §3) — log + ส่ง state ให้ HUD ทันทีหลัง handshake
 /// (HUD เป็น read-only จึงไม่มี command อื่นที่เปลี่ยน state ของแอป)
@@ -1146,7 +1213,11 @@ fn hud_ready(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Value 
         .swap(true, std::sync::atomic::Ordering::SeqCst);
     println!(
         "[hud] hud_ready{} — HUD โหลดแล้วและมี window.__TAURI__ (handshake สำเร็จ)",
-        if first { " (ครั้งแรก)" } else { "" }
+        if first {
+            " (ครั้งแรก)"
+        } else {
+            ""
+        }
     );
 
     // ipc.md §4 — หลัง handshake ต้องได้ state ทันที แม้ค่าจะไม่เปลี่ยนจากรอบก่อน
@@ -1190,12 +1261,14 @@ fn get_config(state: tauri::State<'_, AppState>) -> Value {
 fn save_config(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-    config: Value,
+    mut config: Value,
 ) -> Value {
     if let Err(message) = config::validate_ui(&config) {
         eprintln!("[config] ปฏิเสธการบันทึก: {message}");
         return json!({ "ok": false, "error": { "code": "CONFIG_INVALID", "message": message } });
     }
+    // ภาษาที่แอปถอดออก — ไม่เก็บกลับลงไฟล์
+    config::strip_retired_languages(&mut config);
     if let Err(message) = config::validate_keymaps(&config) {
         eprintln!("[config] ปฏิเสธ keymap: {message}");
         return json!({ "ok": false, "error": { "code": "CONFIG_INVALID", "message": message } });
@@ -1392,17 +1465,17 @@ fn get_stats(state: tauri::State<'_, AppState>) -> Value {
 
 /// General tab — พัก/กลับมาพิมพ์จาก Settings (เท่ากับเมนู tray)
 #[tauri::command]
-fn set_paused(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
-    paused: bool,
-) -> Value {
+fn set_paused(app: tauri::AppHandle, state: tauri::State<'_, AppState>, paused: bool) -> Value {
     state.paused.store(paused, Ordering::Relaxed);
     let payload = status_payload(&state);
     let _ = app.emit_to("settings", "app:status", &payload);
     println!(
         "[settings] {}",
-        if paused { "พักการพิมพ์" } else { "กลับมาพิมพ์" }
+        if paused {
+            "พักการพิมพ์"
+        } else {
+            "กลับมาพิมพ์"
+        }
     );
     json!({ "ok": true, "data": payload })
 }
@@ -1460,7 +1533,13 @@ fn set_language_enabled(
                 "error": { "code": "LANG_NOT_FOUND", "message": format!("{code}: IME ยังไม่รองรับ") }
             });
         }
-        config::set_language_meta(&mut next, &code, &info.klid, &info.label, info.kind.as_str());
+        config::set_language_meta(
+            &mut next,
+            &code,
+            &info.klid,
+            &info.label,
+            info.kind.as_str(),
+        );
     }
     if !config::set_language_enabled(&mut next, &code, enabled) {
         return json!({
@@ -1521,8 +1600,8 @@ fn reset_config(
 }
 
 /* ============================================================
-   Win32
-   ============================================================ */
+Win32
+============================================================ */
 
 /// ขอบเขต virtual desktop ของ Windows (ทุกจอ) เป็นพิกเซลจริง
 #[cfg(windows)]
@@ -1568,8 +1647,8 @@ fn primary_monitor_center() -> (f32, f32) {
 #[cfg(windows)]
 fn apply_overlay_exstyle(window: &tauri::WebviewWindow) -> isize {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, GWL_EXSTYLE, SetWindowLongPtrW, SetWindowPos, SWP_FRAMECHANGED,
-        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+        GWL_EXSTYLE, GetWindowLongPtrW, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+        SWP_NOZORDER, SetWindowLongPtrW, SetWindowPos,
     };
 
     let Ok(hwnd) = window.hwnd() else {
@@ -1680,6 +1759,18 @@ mod language_slot_tests {
     #[test]
     fn enabled_thai_is_added_after_english() {
         let config = json!({ "languages": [ { "code": "th", "enabled": true } ] });
+        assert_eq!(codes(&language_slots(&config)), vec!["en", "th"]);
+    }
+
+    #[test]
+    fn retired_russian_is_skipped_in_language_slots() {
+        let config = json!({
+            "languages": [
+                { "code": "ru", "enabled": true },
+                { "code": "th", "enabled": true }
+            ]
+        });
+        // RU ถูกถอดออกจากตัวเลือก — ต้องไม่ถูกโหลดเข้า runtime แม้ config เก่ายังเปิดไว้
         assert_eq!(codes(&language_slots(&config)), vec!["en", "th"]);
     }
 
